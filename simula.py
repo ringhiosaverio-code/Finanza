@@ -238,87 +238,108 @@ def reliability(n_indep, spread):
     return {"livello": lvl, "motivo": "; ".join(why)}
 
 
-def simulate(dates, closes, n=N_SIM, seed=19):
-    """Com'è andata davvero + Macchina del Tempo per 1 giorno, 1 settimana, 1 mese e 1 anno."""
-    if len(closes) > YEARS_MAX * 252 + 1:
-        dates, closes = dates[-(YEARS_MAX * 252 + 1):], closes[-(YEARS_MAX * 252 + 1):]
+CALENDARI = {
+    # azioni, ETF, obbligazioni: giorni di borsa
+    "borsa": {"anno": 252, "orizzonti": HORIZONS, "blocco": BLOCK, "vol": 63},
+    # crypto: si scambiano tutti i giorni, weekend compresi
+    "sempre": {"anno": 365, "orizzonti": [("1 giorno", 1), ("1 settimana", 7), ("1 mese", 30), ("3 mesi", 91),
+                                          ("1 anno", 365)], "blocco": 30, "vol": 91},
+}
+CRYPTO = "BTC-EUR ETH-EUR SOL-EUR XRP-EUR BNB-EUR ADA-EUR DOGE-EUR LTC-EUR DOT-EUR LINK-EUR AVAX-EUR TRX-EUR".split()
+
+
+def simulate(dates, closes, n=N_SIM, seed=19, cal="borsa"):
+    """Com'è andata davvero + Macchina del Tempo per 1 giorno, 1 settimana, 1 mese, 3 mesi e 1 anno.
+    cal: "borsa" (252 giorni l'anno) o "sempre" (365, per le crypto)."""
+    C = CALENDARI[cal]
+    A, B = C["anno"], C["blocco"]
+    if len(closes) > YEARS_MAX * A + 1:
+        dates, closes = dates[-(YEARS_MAX * A + 1):], closes[-(YEARS_MAX * A + 1):]
     N = len(closes) - 1
-    if N < 2 * BLOCK:
+    if N < 2 * B:
         raise SimError("storia troppo corta: %d giorni" % (N + 1))
     lr = [math.log(closes[i + 1] / closes[i]) for i in range(N)]
     S = [0.0]
     for x in lr:
         S.append(S[-1] + x)
-    years = N / 252
+    years = N / A
     mu = S[-1] / N
     sd = math.sqrt(sum((x - mu) ** 2 for x in lr) / (N - 1))
-    mu_a, sd_a = mu * 252, sd * math.sqrt(252)
+    mu_a, sd_a = mu * A, sd * math.sqrt(A)
     prior = math.log(1 + PRIOR_GROWTH)
     se = sd_a / math.sqrt(years)
     w = PRIOR_SD ** 2 / (PRIOR_SD ** 2 + se ** 2)
-    mu_prud = (prior + w * (mu_a - prior)) / 252
+    mu_prud = (prior + w * (mu_a - prior)) / A
     drift = {"zero": 0.0, "prudente": mu_prud, "passato": mu}
 
     rnd = random.Random(seed)
     out = []
     year_paths = None
-    for label, h in HORIZONS:
+    for label, h in C["orizzonti"]:
         row = {"orizzonte": label, "giorni": h, "storico": None, "scenari": {}, "affidabilita": None}
         if N >= h + 20:
             row["storico"] = summary([math.exp(S[k + h] - S[k]) - 1 for k in range(0, N - h + 1)])
             row["storico"]["indipendenti"] = N // h
         # pezzi veri, tolta la tendenza media della storia
-        if h <= BLOCK:
+        if h <= B:
             draws = []
             for _ in range(n):
                 k = rnd.randrange(0, N - h + 1)
                 draws.append(S[k + h] - S[k] - mu * h)
         else:
-            m = h // BLOCK
-            draws, year_paths = [], []
+            blocks = [B] * (h // B) + ([h % B] if h % B else [])
+            draws, paths = [], []
             for _ in range(n):
                 cum, path = 0.0, []
-                for _b in range(m):
-                    k = rnd.randrange(0, N - BLOCK + 1)
-                    cum += S[k + BLOCK] - S[k] - mu * BLOCK
+                for b in blocks:
+                    k = rnd.randrange(0, N - b + 1)
+                    cum += S[k + b] - S[k] - mu * b
                     path.append(cum)
                 draws.append(cum)
-                year_paths.append(path)
+                paths.append(path)
+            year_paths = paths
         for sid, _ in SCENARI:
             row["scenari"][sid] = summary([math.exp(x + drift[sid] * h) - 1 for x in draws])
         spread = abs(row["scenari"]["passato"]["p_gain"] - row["scenari"]["zero"]["p_gain"])
         row["affidabilita"] = reliability(N // h, spread)
         out.append(row)
 
-    # ventaglio di un anno, mese per mese, senza tendenza (l'app aggiunge quella dello scenario)
+    # ventaglio di un anno, mese per mese (blocchi interi), senza tendenza: l'app aggiunge quella dello scenario
     fan = [[1.0] * 5]
-    for mth in range(len(year_paths[0])):
+    for mth in range(min(12, len(year_paths[0]))):
         col = sorted(math.exp(p[mth]) for p in year_paths)
         fan.append([round(pct(col, q), 5) for q in (.05, .25, .5, .75, .95)])
 
-    # com'è oggi: le stesse misure che usa l'algoritmo dei consigli
-    last = len(closes) - 1
-    stato = {"sopra_media200": None, "vs_media200": None, "anno": None, "dal_massimo": None, "vol3m": None}
-    if last >= 252:
-        sma = sum(closes[last - 199:last + 1]) / 200
-        r63 = lr[-63:]
-        m63 = sum(r63) / len(r63)
-        stato = {"sopra_media200": closes[last] > sma, "vs_media200": round(closes[last] / sma - 1, 4),
-                 "anno": round(closes[last] / closes[last - 252] - 1, 4),
-                 "dal_massimo": round(closes[last] / max(closes[last - 251:last + 1]) - 1, 4),
-                 "vol3m": round(math.sqrt(sum((x - m63) ** 2 for x in r63) / (len(r63) - 1)) * math.sqrt(252), 4)}
+    # il calo più grande dal picco, nella storia usata
+    peak, dd = closes[0], 0.0
+    for c in closes:
+        peak = max(peak, c)
+        dd = min(dd, c / peak - 1)
 
-    step = 5
-    c0 = max(0, len(closes) - 5 * 252)
+    # com'è oggi: le stesse misure che usa l'algoritmo dei consigli
+    last, V = len(closes) - 1, C["vol"]
+    stato = {"sopra_media200": None, "vs_media200": None, "anno": None, "dal_massimo": None, "vol3m": None}
+    if last >= A:
+        sma = sum(closes[last - 199:last + 1]) / 200
+        rv = lr[-V:]
+        mv = sum(rv) / len(rv)
+        stato = {"sopra_media200": closes[last] > sma, "vs_media200": round(closes[last] / sma - 1, 4),
+                 "anno": round(closes[last] / closes[last - A] - 1, 4),
+                 "dal_massimo": round(closes[last] / max(closes[last - A + 1:last + 1]) - 1, 4),
+                 "vol3m": round(math.sqrt(sum((x - mv) ** 2 for x in rv) / (len(rv) - 1)) * math.sqrt(A), 4)}
+
+    step = 5 if cal == "borsa" else 7
+    c0 = max(0, len(closes) - 5 * A)
+    tail = (len(dates) - 1 - c0) % step
     return {
-        "stato": stato,
-        "da": dates[0], "a": dates[-1], "anni": round(years, 1), "prezzo": round(closes[-1], 4),
-        "volatilita": round(sd_a, 4), "crescita": {"zero": 0.0, "prudente": round(math.exp(mu_prud * 252) - 1, 4),
+        "stato": stato, "cal": cal, "blocco": B, "calo_massimo": round(dd, 4),
+        "da": dates[0], "a": dates[-1], "anni": round(years, 1), "prezzo": round(closes[-1], 6),
+        "volatilita": round(sd_a, 4), "crescita": {"zero": 0.0, "prudente": round(math.exp(mu_prud * A) - 1, 4),
                                                     "passato": round(math.exp(mu_a) - 1, 4)},
-        "drift": {k: round(v, 7) for k, v in drift.items()},
+        "drift": {k: round(v, 8) for k, v in drift.items()},
         "orizzonti": out, "ventaglio": fan,
-        "grafico": {"dates": dates[c0::step] + ([dates[-1]] if (len(dates) - 1 - c0) % step else []),
-                    "close": [round(x, 4) for x in closes[c0::step]] + ([round(closes[-1], 4)] if (len(dates) - 1 - c0) % step else [])},
+        "grafico": {"dates": dates[c0::step] + ([dates[-1]] if tail else []),
+                    "close": [round(x, 6) for x in closes[c0::step]] + ([round(closes[-1], 6)] if tail else [])},
     }
 
 
@@ -327,7 +348,8 @@ def instrument(query, text=None):
     info = resolve(query)
     text = text if text is not None else fetch_max(info["symbol"])
     meta, dates, closes = series(text)
-    sim = simulate(dates, closes)
+    cal = "sempre" if (meta.get("instrumentType") == "CRYPTOCURRENCY" or info["symbol"] in CRYPTO) else "borsa"
+    sim = simulate(dates, closes, cal=cal)
     sim["rendimento"] = settimana.div_yield(text)
     return {
         "isin": info.get("isin"), "symbol": info["symbol"],

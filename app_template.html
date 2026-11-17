@@ -223,6 +223,21 @@ footer{color:var(--muted);font-size:12.5px}
 .verdetto details > summary{font-size:13.5px}
 .verdetto details[open] > summary{margin-bottom:8px}
 
+/* portafoglio, demo, crypto, altro */
+.act{flex:none;font-family:var(--f-head);font-weight:700;font-size:15px;letter-spacing:.04em;border-radius:10px;padding:6px 12px;color:#fff;background:var(--ac,var(--muted))}
+.act-si .act,.act-mini{--ac:var(--good)}.act-no .act{--ac:var(--crit)}.act-cautela .act{--ac:var(--s1)}
+.act-mini{font-size:11.5px;padding:3px 8px;border-radius:7px;color:#fff;background:var(--good);font-weight:700;letter-spacing:.04em}
+.pick.act-no{border-left:5px solid var(--crit)}.pick.act-si{border-left:5px solid var(--good)}.pick.act-cautela{border-left:5px solid var(--s1)}
+.row-buy{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.row-buy .pv-mini{font-family:var(--f-head);font-weight:700;margin-left:auto}
+.linkb{border:0;background:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(560px,calc(100vw - 32px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.25)}
+tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
+.links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
+.lk{display:grid;gap:4px;text-decoration:none;color:var(--ink)}
+.lk span{color:var(--ink2);font-size:14px}
+.lk:hover{border-color:var(--accent)}
+
 /* oggi */
 .cat{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink2);white-space:nowrap}
 .cat::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--cc)}
@@ -249,22 +264,29 @@ footer{color:var(--muted);font-size:12.5px}
     <div class="brand"><b>Finanza</b><span id="meta"></span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
+      <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
+      <a href="#demo" data-v="demo">Esercitati</a>
+      <a href="#crypto" data-v="crypto">Crypto</a>
       <a href="#simula" data-v="simula">Cerca un titolo</a>
-      <a href="#consigli" data-v="consigli">Azioni</a>
-      <a href="#verifica" data-v="verifica">Funziona?</a>
-      <a href="#metodo" data-v="metodo">Come funziona</a>
+      <a href="#altro" data-v="altro">Altro</a>
     </nav>
   </div>
 </header>
 
 <main class="wrap">
   <section class="view" id="v-oggi"></section>
+  <section class="view" id="v-portafoglio" hidden></section>
+  <section class="view" id="v-demo" hidden></section>
+  <section class="view" id="v-crypto" hidden></section>
+  <section class="view" id="v-altro" hidden></section>
   <section class="view" id="v-consigli" hidden></section>
   <section class="view" id="v-verifica" hidden></section>
   <section class="view" id="v-simula" hidden></section>
   <section class="view" id="v-daytrade" hidden></section>
   <section class="view" id="v-metodo" hidden></section>
 </main>
+<datalist id="all-list"></datalist>
+<div id="toast" class="toast" role="status" hidden></div>
 
 <script type="application/json" id="data">__DATA__</script>
 <script>
@@ -280,7 +302,7 @@ const pc = (x, d = 1, sign = true) => { if (x == null) return 'n/d'; let v = x *
 const p100 = x => x == null ? 'n/d' : Math.round(x * 100) + ' %';
 const usd = x => x == null ? '–' : nf(x, 2) + ' $';
 const money = x => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + S.mercato.valuta;
-const tk = s => String(s).replace(/\.MI$/, '');
+const tk = s => String(s).replace(/\.MI$|-EUR$/, '');
 const dt = (s, o) => new Date(s + 'T12:00:00Z').toLocaleDateString('it-IT', Object.assign({timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'}, o || {}));
 const dtl = s => dt(s, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
@@ -302,7 +324,7 @@ if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
 if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
 /* ---------------- sezioni ---------------- */
-const VIEWS = ['oggi', 'consigli', 'italia', 'simula', 'verifica', 'daytrade', 'metodo'];
+const VIEWS = ['oggi', 'portafoglio', 'demo', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo'];
 let view = null;
 function route() {
   let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'oggi';
@@ -310,15 +332,20 @@ function route() {
   if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
-  ['oggi', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
-  document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === (v === 'italia' ? 'consigli' : v) ? 'page' : 'false'));
+  ['oggi', 'portafoglio', 'demo', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
+  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo'].includes(v) ? 'altro' : v;
+  document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === navv ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
   else if (sec === 'oggi') renderOggi();
+  else if (sec === 'portafoglio') renderPortafoglio();
+  else if (sec === 'demo') renderDemo();
+  else if (sec === 'crypto') renderCrypto();
+  else if (sec === 'altro') renderAltro();
   else if (sec === 'simula') renderSimula();
   else if (sec === 'daytrade') renderDay();
   else renderMetodo();
-  $('#meta').textContent = sec === 'oggi' ? (D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))}, ${D.aggiornato.slice(11, 16)}` : 'Consigli di oggi') : sec === 'simula' ? `${Object.keys(D.simula || {}).length} titoli da simulare` : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
+  $('#meta').textContent = !['consigli', 'verifica'].includes(sec) ? (D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))}, ${D.aggiornato.slice(11, 16)}` : '') : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
 function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
 window.addEventListener('hashchange', route);
@@ -708,7 +735,7 @@ const CAT_NOME = {usa: 'le azioni USA', italia: 'le azioni italiane', etf: 'gli 
 function giudizio(s) {
   const m = s.categoria, M = m && D.mercati[m];
   const isFund = /ETF|MUTUALFUND|ETC/i.test(s.type || '') || ['etf', 'bond', 'oro'].includes(m);
-  const hold = M ? Number(M.consigliata.key.split('|')[1]) : (isFund ? 63 : 21);
+  const hold = s.hold || (M ? Number(M.consigliata.key.split('|')[1]) : (isFund ? 63 : 21));
   const hz = s.orizzonti.find(o => o.giorni === hold) || s.orizzonti[2];
   const sim = hz.scenari.prudente, real = hz.storico, aff = hz.affidabilita, st = s.stato || {};
   const minVol = M ? M.min_vol : (isFund ? 0.05 : 0.10);
@@ -738,10 +765,11 @@ function giudizio(s) {
   // un titolo singolo contro un ETF sul mondo intero, a parità di tempo
   const w = D.simula && D.simula['SWDA.MI'];
   if (w && s.symbol !== 'SWDA.MI' && !isFund) {
-    const wh = w.orizzonti.find(o => o.giorni === hold);
+    const wh = w.orizzonti.find(o => o.orizzonte === hz.orizzonte);
     if (wh) { const wp = wh.scenari.prudente;
       if (wp.p_gain >= p + .03 || (wp.p10 || wp.p5) > p10 + .03) contro.push(`<b>Un ETF sul mondo intero ha fatto meglio</b>: SWDA (MSCI World), tenuto ${per}, in guadagno ${q(wp.p_gain)} volte su 100 e 1 volta su 10 sotto ${pc(wp.p10 || wp.p5, 0)}. Un titolo singolo concentra il rischio su una sola azienda.`); }
   }
+  if (s.calo_massimo != null && s.calo_massimo < -.5) contro.push(`<b>Ha avuto crolli molto profondi</b>: nella sua storia è sceso fino al ${pc(s.calo_massimo, 0)} dal picco.`);
   if (s.currency && s.currency !== 'EUR') contro.push(`<b>È in ${esc(s.currency)}</b>: per chi investe in euro si aggiunge il rischio del cambio, non compreso in questi numeri.`);
   const inOggi = typeof oggiItems === 'function' ? oggiItems().findIndex(x => x.c.symbol === s.symbol) : -1;
   if (inOggi >= 0) pro.push(`<b>È nei consigli di oggi</b>, al posto numero ${inOggi + 1}.`);
@@ -775,7 +803,7 @@ const SIM_LIST = Object.values(SIM).sort((a, b) => a.name.localeCompare(b.name))
 const simSt = {q: '', scen: 'prudente', cur: null};
 const SCEN = [['prudente', 'Prudente (consigliato)'], ['zero', 'Nessuna crescita'], ['passato', 'Come in passato']];
 const curSym = c => ({EUR: '€', USD: '$', GBP: '£', GBp: 'penny', CHF: 'CHF'}[c] || c || '');
-const cmoney = (x, c) => nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + curSym(c);
+const cmoney = (x, c) => nf(x, Math.abs(x) < 1 ? 4 : Math.abs(x) < 10 ? 3 : 2) + ' ' + curSym(c);
 const capf = s => s ? s[0].toUpperCase() + s.slice(1) : s;
 function isinOk(code) {
   code = String(code).trim().toUpperCase();
@@ -882,7 +910,7 @@ function renderSimResult(s) {
 }
 function drawSim(s) {
   const k = s.drift[simSt.scen], P = s.prezzo;
-  const bands = s.ventaglio.map((b, m) => b.map(x => P * x * Math.exp(k * 21 * m)));
+  const bands = s.ventaglio.map((b, m) => b.map(x => P * x * Math.exp(k * (s.blocco || 21) * m)));
   const labels = bands.map((_, m) => m ? '+' + m + (m === 1 ? ' mese' : ' mesi') : 'oggi');
   fanChart($('#sim-fan'), bands, labels, {entry: P, entryLabel: 'Oggi ', stop: null, target: null}, 'Ventaglio dei prezzi possibili tra un anno',
     {every: m => m === 0 || m % 3 === 0, tip: m => m ? `Tra ${m} ${m === 1 ? 'mese' : 'mesi'}` : 'Oggi'});
@@ -894,7 +922,7 @@ function lineChart(box, dates, vals, c) {
   const m = {l: 52, r: 10, t: 12, b: 26}, n = vals.length;
   let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * .06 || 1; lo -= pad; hi += pad;
   const x = i => m.l + (W - m.l - m.r) * i / Math.max(1, n - 1), y = v => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo);
-  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 10 ? 2 : (v < 20 ? 1 : 0)));
+  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 1 ? 3 : v < 10 ? 2 : (v < 20 ? 1 : 0)));
   xLabels(svg, n, x, H, i => dates[i].slice(0, 4), i => i > 0 && dates[i].slice(0, 4) !== dates[i - 1].slice(0, 4), 40);
   el('line', {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css('--line')}, svg);
   el('path', {d: 'M' + vals.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join('L'), fill: 'none', stroke: css('--s1'), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg);
@@ -996,6 +1024,240 @@ function renderOggi() {
   $('#o-tutti')?.addEventListener('click', () => { oggiSt.tutti = true; renderOggi(); });
 }
 
+/* ---------------- archivio personale: portafoglio e conto demo ---------------- */
+// Nell'app pubblicata i dati stanno nell'archivio privato di chi la usa (data/users/<id>/...):
+// nessun altro li vede e sopravvivono agli aggiornamenti. Aperta come file, solo in questo browser.
+const Store = {
+  mode: 'local', db: null, uid: null, docs: {}, stato: {}, queue: Promise.resolve(), cbs: {},
+  async init() {
+    try {
+      if (window.claude && window.claude.use) {
+        const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
+        const uid = user ? await user.id() : null;
+        if (db && uid) { this.db = db; this.uid = uid; this.mode = 'db'; }
+      }
+    } catch (e) { this.mode = 'local'; }
+    for (const name of ['portafoglio', 'demo']) this.watch(name);
+  },
+  watch(name) {
+    const done = (v, info) => { this.docs[name] = v; this.stato[name] = info; (this.cbs[name] || []).forEach(f => f(v, info)); };
+    if (this.mode === 'db') {
+      const ref = this.db.doc('data/users/' + this.uid + '/' + name);
+      let timer = setTimeout(() => done(this.docs[name] || null, {lento: true}), 10000);
+      ref.onSnapshot(s => { if (!s.metadata.fromCache) clearTimeout(timer); done(s.exists ? JSON.parse(JSON.stringify(s.data())) : null, {}); },
+                     e => { clearTimeout(timer); done(this.docs[name] || null, {errore: e.code}); });
+    } else {
+      let v = null; try { v = JSON.parse(localStorage.getItem('finanza-' + name) || 'null'); } catch (e) {}
+      done(v, {locale: true});
+    }
+  },
+  on(name, f) { (this.cbs[name] = this.cbs[name] || []).push(f); if (name in this.docs) f(this.docs[name], this.stato[name]); },
+  save(name, data) {
+    this.docs[name] = data;
+    if (this.mode === 'db') {
+      const ref = this.db.doc('data/users/' + this.uid + '/' + name);
+      this.queue = this.queue.then(() => ref.set(data)).catch(e => avviso('Non riesco a salvare (' + (e && e.code || 'errore') + '). Riprova tra poco.'));
+    } else { try { localStorage.setItem('finanza-' + name, JSON.stringify(data)); } catch (e) {} }
+    (this.cbs[name] || []).forEach(f => f(data, this.stato[name]));
+  },
+  nota() {
+    return this.mode === 'db' ? 'Salvato nel tuo archivio privato dell’app: lo vedi solo tu, da qualsiasi dispositivo.'
+                              : 'Salvato solo in questo browser (aperta fuori da Claude non c’è l’archivio personale).';
+  },
+};
+function avviso(msg) { const t = $('#toast'); if (!t) return; t.textContent = msg; t.hidden = false; clearTimeout(avviso.t); avviso.t = setTimeout(() => { t.hidden = true; }, 4500); }
+
+/* ---------------- strumenti comuni ---------------- */
+const dec = x => Math.abs(x) < 1 ? 4 : Math.abs(x) < 10 ? 3 : 2;
+const eur = x => x == null ? '–' : nf(x, 2) + ' €';
+const fx = s => s.currency === 'USD' && D.cambio ? D.cambio.USD : 1;                  // euro per unità di valuta
+const prezzoEur = s => s.prezzo * fx(s);
+const oggiData = () => (D.aggiornato || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+function giorniPiu(s, data, n) {
+  // la data di vendita: il giorno n contando il giorno di acquisto come primo (giorni di borsa, o di calendario per le crypto)
+  if (s.calendario === 'sempre') { const d = new Date(data + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n - 1); return d.toISOString().slice(0, 10); }
+  const cal = (D.calendari || {})[s.calendario] || [];
+  let i = cal.findIndex(x => x >= data);
+  if (i < 0) return null;
+  return cal[Math.min(cal.length - 1, i + n - 1)];
+}
+function giorniTra(s, a, b) {
+  if (s.calendario === 'sempre') return Math.round((new Date(b) - new Date(a)) / 864e5);
+  const cal = (D.calendari || {})[s.calendario] || [];
+  return cal.filter(x => x > a && x <= b).length;
+}
+const holdTxt = s => ({1: '1 giorno', 5: '1 settimana', 7: '1 settimana', 21: '1 mese', 30: '1 mese', 63: '3 mesi', 91: '3 mesi', 252: '1 anno', 365: '1 anno'})[s.hold] || s.hold + ' giorni';
+function picker(id, placeholder) {
+  return `<div class="simrow"><input id="${id}" list="all-list" placeholder="${placeholder}" spellcheck="false" autocomplete="off"></div>`;
+}
+function scelto(id) {
+  const q = ($('#' + id) || {}).value || '';
+  const r = findSim(q);
+  return r && !r.multi ? r : null;
+}
+const COSTI = s => s.categoria === 'crypto' ? {acq: 0.002, ven: 0.002} : s.categoria === 'italia' ? {acq: 0.002, ven: 0.001} : {acq: 0.001, ven: 0.001};
+
+/* ---------------- il mio portafoglio ---------------- */
+let PF = null;
+Store.on('portafoglio', v => { PF = v || {posizioni: []}; if (view === 'portafoglio') renderPortafoglio(); });
+function azione(p, s) {
+  const g = giudizio(s), uscita = giorniPiu(s, p.data, s.hold), oggi = s.a;
+  const bloccato = g.contro.some(x => x.includes('Prezzo quasi fermo'));
+  if (bloccato) return {cosa: 'VENDI', classe: 'no', perche: 'Il prezzo è quasi fermo, di solito per un’offerta di acquisto: tenerlo non rende.', uscita, g};
+  if (uscita && oggi >= uscita) {
+    if (g.livello === 'si') return {cosa: 'RINNOVA', classe: 'si', perche: `È passato il tempo consigliato (${holdTxt(s)}). Puoi venderlo, oppure tenerlo per altri ${holdTxt(s)}: oggi ha ancora buone probabilità (${g.frase.replace(/\.$/, '')}).`, uscita, g};
+    return {cosa: 'VENDI', classe: 'no', perche: `È passato il tempo consigliato (${holdTxt(s)}, scaduto ${dt(uscita)}). Oggi il giudizio è "${g.titolo.toLowerCase()}": la regola dice di vendere.`, uscita, g};
+  }
+  const mancano = uscita ? giorniTra(s, oggi, uscita) : null;
+  return {cosa: 'TIENI', classe: 'cautela', perche: `Tienilo fino alla chiusura di ${uscita ? dtl(uscita) : 'n/d'}${mancano != null ? ` (mancano ${mancano} giorni${s.calendario === 'sempre' ? '' : ' di borsa'})` : ''}. La regola: si vende alla data, senza farsi spaventare dal saliscendi, perché dal 2017 le uscite anticipate hanno ridotto le operazioni in guadagno.`, uscita, g};
+}
+function renderPortafoglio() {
+  const v = $('#v-portafoglio'); if (!v) return;
+  const pos = (PF && PF.posizioni) || [];
+  const righe = pos.map(p => ({p, s: SIM[p.sym]})).filter(x => x.s);
+  const tot = righe.reduce((t, x) => t + x.p.qty * prezzoEur(x.s), 0);
+  const costo = righe.reduce((t, x) => t + x.p.qty * x.p.prezzo * fx(x.s), 0);
+  const posseduti = new Set(righe.map(x => x.p.sym));
+  const comprare = (typeof oggiItems === 'function' ? oggiItems() : []).filter(x => x.s && !posseduti.has(x.c.symbol) && giudizio(x.s).livello === 'si').slice(0, 3);
+  v.innerHTML = `
+  <div><h1>Il mio portafoglio</h1><p class="sub" style="margin-top:4px">Scrivi cosa possiedi: ogni giorno l'app ti dice <b>una sola cosa per titolo</b>, tenere, vendere o rinnovare, con la regola dell'algoritmo e il perché. ${esc(Store.nota())}</p></div>
+  ${PF === null ? '<div class="card empty">Carico il tuo portafoglio…</div>' : ''}
+  ${righe.length ? `<div class="sum">
+      <div class="stat"><div class="k">Valore oggi</div><div class="v">${eur(tot)}</div><div class="d">prezzi di chiusura, in euro</div></div>
+      <div class="stat"><div class="k">Guadagno o perdita</div><div class="v ${tot - costo >= 0 ? 'pos' : 'neg'}">${(tot - costo >= 0 ? '+' : '') + eur(tot - costo)}</div><div class="d">${pc(costo ? tot / costo - 1 : 0)} su quanto hai speso</div></div>
+      <div class="stat"><div class="k">Da fare oggi</div><div class="v">${righe.filter(x => azione(x.p, x.s).cosa !== 'TIENI').length}</div><div class="d">titoli da vendere o rinnovare</div></div></div>` : ''}
+  <div class="picks">${righe.map(({p, s}) => { const a = azione(p, s), val = p.qty * prezzoEur(s), spesa = p.qty * p.prezzo * fx(s);
+    return `<article class="pick act-${a.classe}">
+      <div class="hd"><span class="act">${a.cosa}</span><div class="id"><span class="tk">${esc(tk(s.symbol))}</span><span class="nm">${esc(s.name)}</span></div>
+        <div class="pr"><span class="pv ${val >= spesa ? 'pos' : 'neg'}" style="font-size:22px">${pc(spesa ? val / spesa - 1 : 0)}</span><span class="pl">${eur(val - spesa)}<br>dal ${dt(p.data, {weekday: undefined})}</span></div></div>
+      <p class="why">${a.perche}</p>
+      <p class="note">${nf(p.qty, p.qty % 1 ? 4 : 0)} × ${cmoney(s.prezzo, s.currency)} = ${eur(val)} · comprato a ${cmoney(p.prezzo, s.currency)} · giudizio di oggi: ${a.g.titolo.toLowerCase()} · <button type="button" class="linkb" data-del="${p.id}">Togli dal portafoglio</button></p>
+    </article>`; }).join('')}</div>
+  ${comprare.length ? `<div class="card"><h2>Puoi comprare</h2><p class="sub" style="margin-top:4px">I primi consigli di oggi con giudizio "Sì" che non hai già.</p>
+    <div class="picks" style="margin-top:10px">${comprare.map(x => `<div class="row-buy"><span class="act act-mini">COMPRA</span><b>${esc(tk(x.c.symbol))}</b> <span class="note">${esc(x.c.name)}</span><span class="pv-mini">${p100(x.p)}</span><span class="note">tieni ${holdTxt(x.s)}</span></div>`).join('')}</div>
+    <p class="note" style="margin-top:8px">Dettagli, prezzo massimo e data di vendita in <a href="#oggi">Oggi</a>. Dividi il capitale: un solo titolo concentra il rischio.</p></div>` : ''}
+  <form class="card simf" id="pf-form" autocomplete="off"><h2>Aggiungi un titolo che possiedi</h2>
+    <label class="lab" for="pf-q">ISIN, ticker o nome</label>${picker('pf-q', 'es. IE00B4L5Y983 oppure Bitcoin')}
+    <div class="acct">
+      <label class="f" for="pf-n">Quantità<input id="pf-n" type="number" min="0" step="any" inputmode="decimal" required></label>
+      <label class="f" for="pf-p">Prezzo di acquisto (nella valuta del titolo)<input id="pf-p" type="number" min="0" step="any" inputmode="decimal" placeholder="ultimo prezzo"></label>
+      <label class="f" for="pf-d">Data di acquisto<input id="pf-d" type="date" value="${oggiData()}"></label>
+      <button type="submit" class="go">Aggiungi</button></div>
+    <p class="note" id="pf-msg">Solo strumenti presenti nell'app (${SIM_LIST.length}). Per uno nuovo chiedi a Claude di aggiungerlo.</p></form>`;
+  $('#pf-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const s = scelto('pf-q'), qty = Number($('#pf-n').value), pr = Number($('#pf-p').value) || (s && s.prezzo), d = $('#pf-d').value || oggiData();
+    if (!s) { $('#pf-msg').textContent = 'Non trovo questo titolo nell’app: scegli dai suggerimenti mentre scrivi.'; return; }
+    if (!(qty > 0)) { $('#pf-msg').textContent = 'Scrivi una quantità maggiore di zero.'; return; }
+    const nuovo = {posizioni: ((PF && PF.posizioni) || []).concat([{id: Date.now().toString(36), sym: s.symbol, qty, prezzo: pr, data: d}])};
+    Store.save('portafoglio', nuovo); avviso(`${tk(s.symbol)} aggiunto al portafoglio.`);
+  });
+  v.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.ok !== '1') { b.dataset.ok = '1'; b.textContent = 'Conferma: togli'; return; }
+    Store.save('portafoglio', {posizioni: PF.posizioni.filter(p => p.id !== b.dataset.del)});
+  }));
+}
+
+/* ---------------- esercitati: conto demo ---------------- */
+let DEMO = null, demoSnap = false;
+const DEMO_START = 10000;
+Store.on('demo', v => {
+  DEMO = v || {cassa: DEMO_START, posizioni: {}, movimenti: [], storico: [], inizio: oggiData()};
+  if (!demoSnap && v && Object.keys(v.posizioni || {}).length) {          // una fotografia del valore per ogni nuovo aggiornamento
+    demoSnap = true;
+    const d = oggiData(), st = v.storico || [];
+    if (!st.length || st[st.length - 1].d !== d) setTimeout(() => Store.save('demo', Object.assign({}, DEMO, {storico: st.concat([{d, v: Math.round(valoreDemo() * 100) / 100}]).slice(-400)})), 0);
+  }
+  if (view === 'demo') renderDemo();
+});
+function valoreDemo() { return DEMO.cassa + Object.entries(DEMO.posizioni || {}).reduce((t, [sym, p]) => t + (SIM[sym] ? p.qty * prezzoEur(SIM[sym]) : 0), 0); }
+function renderDemo() {
+  const v = $('#v-demo'); if (!v) return;
+  if (DEMO === null) { v.innerHTML = '<div class="card empty">Carico il conto demo…</div>'; return; }
+  const tot = valoreDemo(), pos = Object.entries(DEMO.posizioni || {}).filter(([sym]) => SIM[sym]);
+  v.innerHTML = `
+  <div><h1>Esercitati</h1><p class="sub" style="margin-top:4px">Un conto finto da ${eur(DEMO_START)} per fare pratica: compri e vendi ai prezzi di chiusura dell'ultimo aggiornamento, con costi realistici. Prima di comprare vedi il giudizio dell'algoritmo, quando vendi vedi com'è andata rispetto al piano. Niente soldi veri. ${esc(Store.nota())}</p></div>
+  <div class="sum">
+    <div class="stat"><div class="k">Valore del conto</div><div class="v">${eur(tot)}</div><div class="d">dal ${dt(DEMO.inizio, {weekday: undefined, year: 'numeric'})}</div></div>
+    <div class="stat"><div class="k">Guadagno o perdita</div><div class="v ${tot >= DEMO_START ? 'pos' : 'neg'}">${pc(tot / DEMO_START - 1)}</div><div class="d">${(tot >= DEMO_START ? '+' : '') + eur(tot - DEMO_START)}</div></div>
+    <div class="stat"><div class="k">Liquidità</div><div class="v">${eur(DEMO.cassa)}</div><div class="d">${pos.length} titoli in portafoglio</div></div></div>
+  <form class="card simf" id="dm-form" autocomplete="off"><h2>Compra</h2>
+    <label class="lab" for="dm-q">ISIN, ticker o nome</label>${picker('dm-q', 'es. SWDA, ENI o Bitcoin')}
+    <div id="dm-info"></div>
+    <div class="acct"><label class="f" for="dm-e">Quanto investire (€)<input id="dm-e" type="number" min="1" step="any" inputmode="decimal" value="1000"></label>
+      <button type="submit" class="go">Compra</button></div>
+    <p class="note" id="dm-msg">Costi: 0,1 % per operazione; +0,1 % di Tobin tax sugli acquisti di azioni italiane; 0,2 % sulle crypto. I titoli in dollari si convertono al cambio di ${D.cambio ? nf(1 / D.cambio.USD, 4) : 'n/d'} $ per euro.</p></form>
+  ${pos.length ? `<div class="card"><h2>I tuoi titoli finti</h2><div class="scroll" style="margin-top:8px"><table>
+    <thead><tr><th class="l">Titolo</th><th>Quantità</th><th>Pagato</th><th>Oggi</th><th>Risultato</th><th class="l">Piano</th><th></th></tr></thead>
+    <tbody>${pos.map(([sym, p]) => { const s = SIM[sym], val = p.qty * prezzoEur(s), r = val / p.speso - 1, usc = giorniPiu(s, p.data, s.hold);
+      return `<tr><td class="l"><b>${esc(tk(sym))}</b> <span class="note">${esc(s.name.slice(0, 28))}</span></td><td>${nf(p.qty, p.qty % 1 ? 4 : 0)}</td><td>${eur(p.speso)}</td><td>${eur(val)}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r)}</td><td class="l">${usc ? (s.a >= usc ? '<b>da vendere</b>' : 'vendi il ' + dt(usc)) : ''}</td><td><button type="button" class="more" data-sell="${esc(sym)}">Vendi</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
+  ${(DEMO.movimenti || []).length ? `<details class="card"><summary><b>Movimenti</b> (${DEMO.movimenti.length})</summary><div class="scroll"><table><thead><tr><th class="l">Data</th><th class="l">Operazione</th><th>Quantità</th><th>Prezzo</th><th>Euro</th><th class="l">Esito</th></tr></thead>
+    <tbody>${DEMO.movimenti.slice().reverse().map(m => `<tr><td class="l">${dt(m.d, {weekday: undefined})}</td><td class="l">${m.tipo} ${esc(tk(m.sym))}</td><td>${nf(m.qty, m.qty % 1 ? 4 : 0)}</td><td>${nf(m.prezzo, dec(m.prezzo))}</td><td>${eur(m.eur)}</td><td class="l">${m.esito ? esc(m.esito) : ''}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
+  ${(DEMO.storico || []).length > 1 ? `<div class="card"><h2>Andamento del conto</h2><div class="chart" id="dm-line"><div class="tip"></div></div></div>` : ''}
+  <p class="note"><button type="button" class="linkb" id="dm-reset">Ricomincia da ${eur(DEMO_START)}</button> · i prezzi cambiano quando l'app si aggiorna, dopo la chiusura delle borse.</p>`;
+  const info = () => { const s = scelto('dm-q'); $('#dm-info').innerHTML = s ? `<p class="note" style="margin:6px 0 2px">Prezzo ${cmoney(s.prezzo, s.currency)}${fx(s) !== 1 ? ' (' + eur(prezzoEur(s)) + ')' : ''} · chiusura di ${dt(s.a)} · tempo consigliato ${holdTxt(s)}</p>${verdettoHTML(giudizio(s), true)}` : ''; };
+  $('#dm-q').addEventListener('change', info); $('#dm-q').addEventListener('input', () => { if (scelto('dm-q')) info(); });
+  $('#dm-form').addEventListener('submit', e => {
+    e.preventDefault();
+    const s = scelto('dm-q'), budget = Number($('#dm-e').value);
+    if (!s) { $('#dm-msg').textContent = 'Scegli un titolo dai suggerimenti.'; return; }
+    const c = COSTI(s), px = prezzoEur(s);
+    let qty = s.categoria === 'crypto' ? Math.floor(budget / (px * (1 + c.acq)) * 1e6) / 1e6 : Math.floor(budget / (px * (1 + c.acq)));
+    const speso = qty * px * (1 + c.acq);
+    if (!(qty > 0)) { $('#dm-msg').textContent = `Con ${eur(budget)} non si compra nemmeno un’unità (prezzo ${eur(px)}).`; return; }
+    if (speso > DEMO.cassa + 1e-9) { $('#dm-msg').textContent = `Liquidità insufficiente: servono ${eur(speso)}, hai ${eur(DEMO.cassa)}.`; return; }
+    const pos = Object.assign({}, DEMO.posizioni), old = pos[s.symbol];
+    pos[s.symbol] = old ? {qty: old.qty + qty, speso: old.speso + speso, data: old.data} : {qty, speso, data: s.a};
+    Store.save('demo', Object.assign({}, DEMO, {cassa: DEMO.cassa - speso, posizioni: pos,
+      movimenti: (DEMO.movimenti || []).concat([{d: s.a, tipo: 'Compra', sym: s.symbol, qty, prezzo: s.prezzo, eur: Math.round(speso * 100) / 100}]).slice(-300)}));
+    avviso(`Comprato: ${nf(qty, qty % 1 ? 4 : 0)} ${tk(s.symbol)} per ${eur(speso)}. Piano: tienilo ${holdTxt(s)}.`);
+  });
+  v.querySelectorAll('[data-sell]').forEach(b => b.addEventListener('click', () => {
+    const sym = b.dataset.sell, s = SIM[sym], p = DEMO.posizioni[sym]; if (!s || !p) return;
+    const ricavo = p.qty * prezzoEur(s) * (1 - COSTI(s).ven), r = ricavo / p.speso - 1, n = giorniTra(s, p.data, s.a);
+    const esito = `${pc(r)} in ${n} giorni${s.calendario === 'sempre' ? '' : ' di borsa'} (piano: ${holdTxt(s)})`;
+    const pos = Object.assign({}, DEMO.posizioni); delete pos[sym];
+    Store.save('demo', Object.assign({}, DEMO, {cassa: DEMO.cassa + ricavo, posizioni: pos,
+      movimenti: (DEMO.movimenti || []).concat([{d: s.a, tipo: 'Vendi', sym, qty: p.qty, prezzo: s.prezzo, eur: Math.round(ricavo * 100) / 100, esito}]).slice(-300)}));
+    const lez = n < (s.hold * (s.calendario === 'sempre' ? 1 : 1)) * 0.5 ? ` Hai venduto molto prima del tempo consigliato: nei dati, uscire presto ha ridotto le operazioni in guadagno.` : '';
+    avviso(`Venduto ${tk(sym)}: ${esito}.${lez}`);
+  }));
+  $('#dm-reset').addEventListener('click', e => {
+    const b = e.target; if (b.dataset.ok !== '1') { b.dataset.ok = '1'; b.textContent = 'Sicuro? Tocca di nuovo per cancellare tutto e ricominciare'; return; }
+    Store.save('demo', {cassa: DEMO_START, posizioni: {}, movimenti: [], storico: [], inizio: oggiData()});
+  });
+  draw.demo();
+}
+
+/* ---------------- crypto ---------------- */
+function renderCrypto() {
+  const v = $('#v-crypto');
+  const list = SIM_LIST.filter(s => s.categoria === 'crypto').map(s => ({s, g: giudizio(s), h: s.orizzonti.find(o => o.giorni === s.hold)}))
+    .sort((a, b) => b.h.scenari.prudente.p_gain - a.h.scenari.prudente.p_gain);
+  const btc = SIM['BTC-EUR'], w = SIM['SWDA.MI'];
+  v.innerHTML = `
+  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno tenendole 3 mesi (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi.</p></div>
+  ${btc && w ? `<div class="alert" role="note"><div class="ic">!</div><p><b>Molto più rischiose di azioni ed ETF.</b> Bitcoin oscilla del ${pc(btc.volatilita, 0, false)} in un anno, un ETF sul mondo intero (SWDA) del ${pc(w.volatilita, 0, false)}. Nella sua storia Bitcoin ha perso fino al ${pc(-btc.calo_massimo, 0, false)} dal picco. Una crypto non è un'azienda: non ha utili né dividendi, il prezzo dipende solo da domanda e offerta. Se le compri, solo con soldi che puoi permetterti di perdere.</p></div>` : ''}
+  <div class="scroll card"><table>
+    <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno a 3 mesi</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
+    <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
+      return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
+  <p class="note">Tocca una riga per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
+  v.querySelectorAll('tr.clk').forEach(r => { const go = () => { simSt.q = r.dataset.q; location.hash = 'simula'; };
+    r.addEventListener('click', go); r.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); });
+}
+
+/* ---------------- altro ---------------- */
+function renderAltro() {
+  $('#v-altro').innerHTML = `<div><h1>Altro</h1><p class="sub" style="margin-top:4px">Gli strumenti per chi vuole andare più a fondo.</p></div>
+  <div class="links">
+    <a class="card lk" href="#consigli"><b>Azioni: scegli tu la regola</b><span>Le azioni USA e italiane, con durata e protezione a tua scelta, quante azioni comprare, grafici e simulazione.</span></a>
+    <a class="card lk" href="#verifica"><b>Funziona?</b><span>La verifica su anni che l'algoritmo non aveva visto: le probabilità dette sono quelle vere?</span></a>
+    <a class="card lk" href="#metodo"><b>Come funziona</b><span>Il metodo, cosa è stato provato e scartato, i limiti.</span></a>
+    <a class="card lk" href="#daytrade"><b>Esempio di day trade</b><span>La Macchina del Tempo su un'operazione in giornata (dati di prova).</span></a>
+  </div>`;
+}
+
 /* ---------------- come funziona ---------------- */
 function renderMetodo() {
   const R = S.rules;
@@ -1012,6 +1274,8 @@ function renderMetodo() {
     <p><b>Un modello con sei indizi</b> (forza, ultimo mese, vicinanza al massimo, calma del prezzo, distanza dalla media, mercato): sui dati che non aveva visto, quando diceva 57 % è andata bene il 46 %. Peggio del caso, quindi scartato. <b>La storia del singolo titolo</b>: chi è andato bene in passato non va meglio dopo. Scartata. <b>Il risultato:</b> con i soli prezzi, la probabilità di riuscita a poche settimane dipende pochissimo dal titolo; dipende soprattutto da quanto tieni e da come esci.</p>
     <h3>5. I consigli di oggi</h3>
     <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
+    <h3>Il mio portafoglio, Esercitati, Crypto</h3>
+    <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
     <h3>Perché sì e perché no</h3>
     <p>Per ogni strumento, nei consigli e nella ricerca per ISIN, il giudizio segue sempre le stesse regole, sul periodo consigliato per la sua categoria (3 mesi per ETF e oro, 1 mese per le azioni): <b>Sì</b> se nella simulazione prudente è finito in guadagno almeno 60 volte su 100 e nel 10 % dei casi peggiori non ha perso più del 10 %; <b>Per ora no</b> se in guadagno meno di 50 volte su 100, se nel 10 % peggiore ha perso più del 20 % o se il prezzo è bloccato; altrimenti <b>Con cautela</b>. Ogni motivo riporta i numeri da cui viene: la storia reale dello strumento, la simulazione, le cedole, l'affidabilità e il confronto con un ETF sul mondo intero.</p>
     <p><b>Il trend, verificato.</b> I consigli guardano gli strumenti in salita (sopra la media a 200 giorni), ma dal 2017 essere in salita ha aumentato le probabilità solo per gli ETF obbligazionari (58 contro 51 su 100). Per azioni ed ETF azionari non ha cambiato molto; per l'oro è andato meglio comprare in discesa. Per questo "è in discesa" diventa un motivo per non comprare solo dove i dati lo confermano, e l'app lo scrive con i numeri.</p>
@@ -1035,8 +1299,10 @@ const draw = {
   verifica: () => { const o = model().oos; if (o) { calibChart($('#cal'), o.calibrazione); yearsChart($('#yrs'), o.anni); } },
   daytrade: () => { if (D.daytrade) renderDay(); },
   simula: () => { if (simSt.cur) drawSim(simSt.cur); },
+  demo: () => { const b = $('#dm-line'); if (b && DEMO && (DEMO.storico || []).length > 1) lineChart(b, DEMO.storico.map(x => x.d), DEMO.storico.map(x => x.v), 'EUR'); },
 };
-if (!D.mercati.italia && !D.mercati.usa) document.querySelector('nav.tabs a[data-v=consigli]').hidden = true;
+$('#all-list').innerHTML = SIM_LIST.map(s => `<option value="${esc((s.isin ? s.isin + ' — ' : '') + s.name + ' (' + tk(s.symbol) + ')')}"></option>`).join('');
+Store.init();
 route();
 let rt, lastW = window.innerWidth; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; redraw(); } }, 150); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);

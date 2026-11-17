@@ -54,31 +54,43 @@ def day_trade():
             "demo": tm.get("source") == "offline"}
 
 
-def simulazioni(log=print):
-    """La simulazione per ISIN di tutti i titoli dell'app (fino a 25 anni di storia), più quelli
-    aggiunti con simula.py (simula_lista.json)."""
+def simulazioni(mercati, log=print):
+    """La simulazione per ISIN di tutti gli strumenti dell'app (fino a 25 anni di storia), crypto
+    comprese, più quelli aggiunti con simula.py (simula_lista.json). Ogni strumento porta con sé il
+    periodo consigliato (hold) della sua categoria e il calendario con cui contare i giorni."""
     rev = {v: k for k, v in simula.load_isin_map().items()}
     cat = {}
     for m in ("usa", "italia", "etf", "bond", "oro"):
         for s in settimana.MERCATI[m]["universo"]:
             cat[s] = m
-    syms = list(cat)
+    for s in simula.CRYPTO:
+        cat[s] = "crypto"
+    hold = {m: int(r["consigliata"]["key"].split("|")[1]) for m, r in mercati.items()}
+    hold["crypto"] = 91                                   # 3 mesi di calendario: le crypto non chiudono mai
+
+    def extra(s):
+        cal_mercato = "usa" if s.get("cal") == "borsa" and not s["symbol"].endswith(".MI") else "italia"
+        s["calendario"] = "sempre" if s.get("cal") == "sempre" else cal_mercato
+        return s
 
     def one(sym):
         try:
             text = simula.fetch_max(sym)
             meta, dates, closes = simula.series(text)
-            s = simula.simulate(dates, closes)
+            s = simula.simulate(dates, closes, cal="sempre" if cat[sym] == "crypto" else "borsa")
             s["rendimento"] = settimana.div_yield(text)
         except (simula.SimError, ValueError, KeyError) as e:
             log("[app] simulazione di %s saltata: %s" % (sym, e))
             return None
-        return {"isin": rev.get(sym), "symbol": sym, "categoria": cat[sym],
-                "name": meta.get("longName") or meta.get("shortName") or sym,
-                "exchange": meta.get("fullExchangeName") or meta.get("exchangeName") or "",
-                "type": meta.get("instrumentType") or "", "currency": meta.get("currency") or "", **s}
+        name = meta.get("longName") or meta.get("shortName") or sym
+        if cat[sym] == "crypto":
+            name = name.replace(" EUR", "")
+        return extra({"isin": rev.get(sym), "symbol": sym, "categoria": cat[sym], "hold": hold.get(cat[sym], 21),
+                      "name": name, "exchange": meta.get("fullExchangeName") or meta.get("exchangeName") or "",
+                      "type": meta.get("instrumentType") or "", "currency": meta.get("currency") or "", **s})
 
-    log("[app] simulazione di %d titoli per la sezione Simula..." % len(syms))
+    syms = list(cat)
+    log("[app] simulazione di %d strumenti (crypto comprese)..." % len(syms))
     with ThreadPoolExecutor(max_workers=4) as ex:
         out = {s["symbol"]: s for s in ex.map(one, syms) if s}
     for code in simula.load_list():                      # aggiunti con simula.py, prezzi aggiornati
@@ -87,8 +99,31 @@ def simulazioni(log=print):
         except (simula.SimError, settimana.FetchError, ValueError, KeyError) as e:
             log("[app] %s saltato: %s" % (code, e))
             continue
-        out[s["symbol"]] = s
+        fund = s.get("type") in ("ETF", "MUTUALFUND")
+        s["hold"] = 91 if s.get("cal") == "sempre" else (63 if fund else 21)
+        out[s["symbol"]] = extra(s)
     return out
+
+
+def calendari():
+    """I giorni di borsa dal 2024 al 2027 (NYSE e Borsa Italiana): servono all'app per contare la data
+    di vendita di un titolo comprato in un giorno qualsiasi."""
+    out = {}
+    for c, idx, cfg in (("usa", "SPY", settimana.MERCATI["usa"]), ("italia", "FTSEMIB.MI", settimana.MERCATI["italia"])):
+        meta, closes, _ = settimana.parse(settimana.fetch(idx), None, cfg["fuso"], cfg["chiusura"])
+        past = [d for d in sorted(closes) if d >= "2024-01-01"]          # i giorni in cui la borsa ha aperto davvero
+        out[c] = past + settimana.trading_days_after(past[-1], 300, c)   # poi le festività note
+    return out
+
+
+def cambio():
+    """Quanti euro vale un dollaro, all'ultima chiusura (per il conto demo)."""
+    try:
+        meta, closes, _ = settimana.parse(settimana.fetch("EURUSD=X"))
+        last = closes[max(closes)]
+        return {"USD": round(1 / last, 6), "data": max(closes)}
+    except (settimana.FetchError, ValueError, KeyError):
+        return None
 
 
 def build(data, out):
@@ -119,7 +154,8 @@ def main(argv=None):
     if not mercati:
         print("[app] nessun mercato disponibile")
         return 1
-    data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(),
+    data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
+            "calendari": calendari(), "cambio": cambio(),
             "aggiornato": settimana.now_in("Europe/Rome").strftime("%Y-%m-%d %H:%M")}
     out = build(data, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))

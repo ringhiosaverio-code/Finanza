@@ -45,8 +45,20 @@ python3 settimana.py --mercato etf                # anche: bond, oro
 python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a quella data
 ```
 
-Sezioni (Oggi, Cerca un titolo, Azioni, Funziona?, Come funziona; il day trade di prova è un link
-in Come funziona):
+Sezioni: Oggi, Il mio portafoglio, Esercitati, Crypto, Cerca un titolo, Altro (Azioni, Funziona?,
+Come funziona, esempio di day trade). L'app si aggiorna da sola nei giorni di borsa alle 18:10 e
+alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York.
+
+- **Il mio portafoglio**: scrivi cosa possiedi (quantità, prezzo e data d'acquisto) e ogni giorno
+  l'app dice una sola cosa per titolo: **TIENI** fino alla data di vendita (il periodo consigliato
+  della sua categoria, in giorni di borsa reali), **VENDI** quando la data è passata o il prezzo è
+  bloccato, **RINNOVA** se la data è passata ma il giudizio è ancora "Sì"; più qualche **COMPRA** tra
+  i "Sì" di oggi che non hai già. I dati stanno nell'archivio privato dell'app: li vedi solo tu.
+- **Esercitati**: un conto finto da 10.000 € ai prezzi di chiusura dell'ultimo aggiornamento, con i
+  costi (0,1 %, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro.
+  Prima di comprare mostra il giudizio, quando vendi confronta il risultato con il piano.
+- **Crypto**: le 12 principali in euro (Bitcoin, Ethereum, Solana…) con le stesse regole: probabilità
+  a 3 mesi di calendario, oscillazione, calo massimo storico (Bitcoin fino a -83 %) e giudizio.
 
 - **Oggi**: i consigli del giorno su cinque categorie, in ordine di probabilità di guadagno:
   ETF azionari, ETF obbligazionari (UCITS su Borsa Italiana, acquistabili dall'Italia), oro e
