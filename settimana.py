@@ -756,6 +756,23 @@ def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
                       "sma": [round(s.sma(i), 4) if i - s.first >= SMA_WIN else None for i in range(c0, last + 1)]},
         }
 
+    # verifica del filtro "in salita": la regola consigliata su chi era sopra e su chi era sotto la media
+    cons = consigliata(models)
+    sid, hold = cons["key"].split("|")
+    sty, hold = style(sid), int(hold)
+    sopra, sotto = [], []
+    for i in sched:
+        if i + hold > last:
+            break
+        for s in stocks:
+            sg = s.signal(i)
+            if sg is None or sg["frozen"]:
+                continue
+            t = trade(s, i, sty["ks"], sty["rr"], hold, cost_rt)
+            if t and t["filled"]:
+                (sopra if sg["above"] else sotto).append(t["ret"])
+    trend = {"key": cons["key"], "sopra": group_stats(sopra), "sotto": group_stats(sotto)}
+
     m_i = market.signal(last)
     regime = {"sopra_media200": m_i["above"], "vs_media200": r4(m_i["vs_sma"])} if m_i else None
     return {
@@ -765,7 +782,8 @@ def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
                   "hold_names": {str(h): n for h, n in HOLD_NAMES.items()},
                   "default": {"style": DEFAULT_STYLE, "hold": DEFAULT_HOLD}},
         "groups": GROUPS, "models": models, "candidates": cands, "details": details,
-        "consigliata": consigliata(models),
+        "consigliata": cons, "trend": trend,
+        "min_vol": stocks[0].min_vol if stocks else MIN_VOL,
     }
 
 

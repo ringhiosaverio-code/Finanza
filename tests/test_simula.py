@@ -67,12 +67,19 @@ class Simulate(unittest.TestCase):
         self.s = M.simulate(self.dates, self.closes, n=4000)
 
     def test_shape(self):
-        self.assertEqual([r["giorni"] for r in self.s["orizzonti"]], [1, 5, 21, 252])
+        self.assertEqual([r["giorni"] for r in self.s["orizzonti"]], [1, 5, 21, 63, 252])
         for r in self.s["orizzonti"]:
             self.assertEqual(set(r["scenari"]), {"zero", "prudente", "passato"})
             self.assertIn(r["affidabilita"]["livello"], ("alta", "media", "bassa"))
         self.assertEqual(len(self.s["ventaglio"]), 13)
         self.assertEqual(len(self.s["grafico"]["dates"]), len(self.s["grafico"]["close"]))
+
+    def test_today_state_matches_direct_formulas(self):
+        c, st = self.closes, self.s["stato"]
+        self.assertEqual(st["sopra_media200"], c[-1] > sum(c[-200:]) / 200)
+        self.assertAlmostEqual(st["anno"], c[-1] / c[-253] - 1, places=4)
+        self.assertAlmostEqual(st["dal_massimo"], c[-1] / max(c[-252:]) - 1, places=4)
+        self.assertTrue(0.15 < st["vol3m"] < 0.35)                     # 1,5 % al giorno ~ 24 % l'anno
 
     def test_history_counts_real_windows(self):
         one = self.s["orizzonti"][0]["storico"]

@@ -58,16 +58,23 @@ def simulazioni(log=print):
     """La simulazione per ISIN di tutti i titoli dell'app (fino a 25 anni di storia), più quelli
     aggiunti con simula.py (simula_lista.json)."""
     rev = {v: k for k, v in simula.load_isin_map().items()}
-    syms = settimana.UNIVERSE + settimana.UNIVERSE_IT
+    cat = {}
+    for m in ("usa", "italia", "etf", "bond", "oro"):
+        for s in settimana.MERCATI[m]["universo"]:
+            cat[s] = m
+    syms = list(cat)
 
     def one(sym):
         try:
-            meta, dates, closes = simula.series(simula.fetch_max(sym))
+            text = simula.fetch_max(sym)
+            meta, dates, closes = simula.series(text)
             s = simula.simulate(dates, closes)
+            s["rendimento"] = settimana.div_yield(text)
         except (simula.SimError, ValueError, KeyError) as e:
             log("[app] simulazione di %s saltata: %s" % (sym, e))
             return None
-        return {"isin": rev.get(sym), "symbol": sym, "name": meta.get("longName") or meta.get("shortName") or sym,
+        return {"isin": rev.get(sym), "symbol": sym, "categoria": cat[sym],
+                "name": meta.get("longName") or meta.get("shortName") or sym,
                 "exchange": meta.get("fullExchangeName") or meta.get("exchangeName") or "",
                 "type": meta.get("instrumentType") or "", "currency": meta.get("currency") or "", **s}
 

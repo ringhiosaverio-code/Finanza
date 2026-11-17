@@ -195,7 +195,7 @@ footer{color:var(--muted);font-size:12.5px}
 .simhd .last .k{font-size:12px;color:var(--muted)}
 .simhd .last b{font-family:var(--f-head);font-size:22px}
 .simhd .last small{color:var(--muted);font-size:12px}
-.hz{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.hz{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
 .hzc{background:var(--surface2);border-radius:12px;padding:12px 14px;display:grid;gap:6px;align-content:start;min-width:0}
 .hzc .k{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .hzc .pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
@@ -206,6 +206,22 @@ footer{color:var(--muted);font-size:12.5px}
 .hzc .meter{width:100%}
 .ask{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
 .ask code{background:var(--surface2);padding:6px 10px;border-radius:8px;font-size:14px;user-select:all}
+
+/* giudizio */
+.verdetto{border:1px solid var(--line);border-left:5px solid var(--vc);border-radius:12px;padding:12px 16px;background:var(--surface);display:grid;gap:10px}
+.verdetto.v-si{--vc:var(--good)}.verdetto.v-cautela{--vc:var(--warn)}.verdetto.v-no{--vc:var(--crit)}
+.verdetto .vh{display:flex;gap:12px;align-items:flex-start}
+.verdetto .vi{flex:none;width:26px;height:26px;border-radius:50%;background:var(--vc);color:#fff;display:grid;place-items:center;font-weight:700}
+.verdetto.v-cautela .vi{color:#10151d}
+.verdetto .vh b{font-family:var(--f-head);font-size:17px}
+.verdetto .vh p{color:var(--ink2);font-size:14px}
+.vcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(280px,100%),1fr));gap:12px 20px}
+.vcols > *{min-width:0}
+.vcols h4{font-size:13px;color:var(--ink2);margin-bottom:4px}
+.vcols ul{margin:0;padding-left:18px;display:grid;gap:5px;font-size:13.5px;color:var(--ink2)}
+.vcols b{color:var(--ink)}
+.verdetto details > summary{font-size:13.5px}
+.verdetto details[open] > summary{margin-bottom:8px}
 
 /* oggi */
 .cat{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink2);white-space:nowrap}
@@ -685,6 +701,74 @@ function renderDay() {
 
 
 
+/* ---------------- giudizio: perché sì, perché no (stesse regole ovunque) ---------------- */
+// "del 18 %" ma "dell'8 %", "dell'11 %", "dell'1 %", "dell'80 %"
+const delp = (x, d = 0) => { const s = pc(x, d, false); return (/^(8|11[ ,]|1[ ,])/.test(s) ? 'dell\u2019' : 'del ') + s; };
+const CAT_NOME = {usa: 'le azioni USA', italia: 'le azioni italiane', etf: 'gli ETF azionari', bond: 'gli ETF obbligazionari', oro: 'oro e materie prime'};
+function giudizio(s) {
+  const m = s.categoria, M = m && D.mercati[m];
+  const isFund = /ETF|MUTUALFUND|ETC/i.test(s.type || '') || ['etf', 'bond', 'oro'].includes(m);
+  const hold = M ? Number(M.consigliata.key.split('|')[1]) : (isFund ? 63 : 21);
+  const hz = s.orizzonti.find(o => o.giorni === hold) || s.orizzonti[2];
+  const sim = hz.scenari.prudente, real = hz.storico, aff = hz.affidabilita, st = s.stato || {};
+  const minVol = M ? M.min_vol : (isFund ? 0.05 : 0.10);
+  const frozen = st.vol3m != null && st.vol3m < minVol;
+  // soglie sui numeri arrotondati che si vedono: verdetto e numeri mostrati coincidono sempre
+  const per = hz.orizzonte, p = Math.round(sim.p_gain * 100) / 100, p10 = Math.round((sim.p10 != null ? sim.p10 : sim.p5) * 100) / 100;
+  const pro = [], contro = [], fatti = [];
+  const q = x => Math.round(x * 100);
+
+  if (frozen) contro.push(`<b>Prezzo quasi fermo</b>: negli ultimi 3 mesi ha oscillato del ${pc(st.vol3m, 1, false)} su base annua (normale per questa categoria: almeno ${pc(minVol, 0, false)}). Di solito c'è un'offerta di acquisto in corso: c'è poco da guadagnare.`);
+  const realTxt = real ? ` Nella sua storia reale: <b>${q(real.p_gain)} su 100</b> (${nf(real.indipendenti, 0)} periodi di ${per}).` : '';
+  if (p >= .6) pro.push(`<b>Buone probabilità</b>: tenendolo ${per}, è finito in guadagno <b>${q(p)} volte su 100</b> nella simulazione prudente.${realTxt}`);
+  else if (p >= .5) contro.push(`<b>Quasi testa o croce</b>: tenendolo ${per}, in guadagno ${q(p)} volte su 100 nella simulazione prudente.${realTxt}`);
+  else contro.push(`<b>Più probabile perdere che guadagnare</b>: tenendolo ${per}, in guadagno solo ${q(p)} volte su 100 nella simulazione prudente.${realTxt}`);
+  if (p10 >= -.10) pro.push(`<b>Rischio contenuto</b>: 1 volta su 10 si perde più ${delp(-p10)}, in ${per}.`);
+  else contro.push(`<b>Rischio ${p10 < -.2 ? 'molto ' : ''}alto</b>: 1 volta su 10 si perde più ${delp(-p10)}, in ${per}.`);
+  if (s.rendimento > 0) pro.push(`<b>Paga ${isFund && m === 'bond' ? 'cedole' : 'dividendi'}</b>: ${pc(s.rendimento, 1, false)} negli ultimi 12 mesi, sul prezzo di oggi.`);
+  if (aff.livello === 'alta') pro.push(`<b>Stima affidabile</b>: ${esc(aff.motivo)}.`);
+  else if (aff.livello === 'bassa') contro.push(`<b>Stima poco affidabile</b>: ${esc(aff.motivo)}.`);
+  // il trend: lo usa l'algoritmo dei consigli, ma conta solo dove i dati dicono che conta
+  if (M && M.trend && M.trend.sopra.n && M.trend.sotto.n && st.sopra_media200 != null) {
+    const a = M.trend.sopra.p_gain, b = M.trend.sotto.p_gain, diff = a - b;
+    const ver = `dal 2017, con la regola consigliata, ${CAT_NOME[m]} in salita sono andati in guadagno ${q(a)} volte su 100, quelli in discesa ${q(b)}`;
+    if (st.sopra_media200) (diff >= .05 ? pro : fatti).push(`<b>È in salita</b> (${pc(st.vs_media200, 0)} rispetto alla media a 200 giorni)${diff >= .05 ? ', e per questa categoria conta' : '. Per questa categoria non ha cambiato molto le cose'}: ${ver}.`);
+    else (diff >= .05 ? contro : fatti).push(`<b>È in discesa</b> (${pc(st.vs_media200, 0)} rispetto alla media a 200 giorni)${diff >= .05 ? ', e per questa categoria conta' : diff <= -.05 ? '. Per questa categoria, comprare in discesa è andato perfino meglio' : '. Per questa categoria non ha fatto molta differenza, quindi non è un motivo per evitarlo'}: ${ver}.`);
+  }
+  // un titolo singolo contro un ETF sul mondo intero, a parità di tempo
+  const w = D.simula && D.simula['SWDA.MI'];
+  if (w && s.symbol !== 'SWDA.MI' && !isFund) {
+    const wh = w.orizzonti.find(o => o.giorni === hold);
+    if (wh) { const wp = wh.scenari.prudente;
+      if (wp.p_gain >= p + .03 || (wp.p10 || wp.p5) > p10 + .03) contro.push(`<b>Un ETF sul mondo intero ha fatto meglio</b>: SWDA (MSCI World), tenuto ${per}, in guadagno ${q(wp.p_gain)} volte su 100 e 1 volta su 10 sotto ${pc(wp.p10 || wp.p5, 0)}. Un titolo singolo concentra il rischio su una sola azienda.`); }
+  }
+  if (s.currency && s.currency !== 'EUR') contro.push(`<b>È in ${esc(s.currency)}</b>: per chi investe in euro si aggiunge il rischio del cambio, non compreso in questi numeri.`);
+  const inOggi = typeof oggiItems === 'function' ? oggiItems().findIndex(x => x.c.symbol === s.symbol) : -1;
+  if (inOggi >= 0) pro.push(`<b>È nei consigli di oggi</b>, al posto numero ${inOggi + 1}.`);
+
+  let livello, titolo, frase;
+  if (frozen || p < .5 || p10 < -.2) {
+    livello = 'no'; titolo = 'Per ora no';
+    frase = frozen ? 'Il prezzo è bloccato: non c’è margine per guadagnare.' : p < .5 ? `Tenendolo ${per}, è andato in perdita più spesso che in guadagno (in guadagno ${q(p)} volte su 100).` : `Il rischio è troppo alto: 1 volta su 10 si perde più ${delp(-p10)} in ${per}.`;
+  } else if (p >= .6 && p10 >= -.1) {
+    livello = 'si'; titolo = 'Sì, ha buone probabilità';
+    frase = `Tenendolo ${per}, è finito in guadagno ${q(p)} volte su 100 (di solito ${pc(sim.median)}), e 1 volta su 10 si perdeva più ${delp(-p10)}.`;
+  } else {
+    livello = 'cautela'; titolo = 'Con cautela';
+    frase = p < .6 ? `Le probabilità sono poco sopra il testa o croce: in guadagno ${q(p)} volte su 100 tenendolo ${per} (di solito ${pc(sim.median)}).` : `Le probabilità sono buone (${q(p)} su 100 in ${per}), ma il rischio è alto: 1 volta su 10 si perde più ${delp(-p10)}.`;
+  }
+  const fonte = `Dati: ${nf(s.anni, s.anni % 1 ? 1 : 0)} anni di prezzi giornalieri di ${esc(tk(s.symbol))} (dal ${dt(s.da, {weekday: undefined, year: 'numeric'})})${M && M.trend ? `; confronto in salita e in discesa su ${nf(M.trend.sopra.n + M.trend.sotto.n, 0)} operazioni della categoria` : ''}. Regole del giudizio: "sì" con almeno 60 su 100 e non più del 10 % di perdita in 1 caso su 10; "no" sotto 50 su 100, oltre il 20 % di perdita in 1 caso su 10 o con il prezzo bloccato.`;
+  return {livello, titolo, frase, pro, contro, fatti, fonte, per};
+}
+function verdettoHTML(g, compatto) {
+  const icon = {si: '✓', cautela: '!', no: '✕'}[g.livello];
+  const lists = `<div class="vcols"><div><h4>Perché sì</h4>${g.pro.length ? `<ul>${g.pro.map(x => `<li>${x}</li>`).join('')}</ul>` : '<p class="note">Nessun motivo forte.</p>'}</div>
+      <div><h4>Perché no, o attenzione</h4>${g.contro.length ? `<ul>${g.contro.map(x => `<li>${x}</li>`).join('')}</ul>` : '<p class="note">Nessun segnale contrario forte.</p>'}</div></div>
+    ${g.fatti.length ? `<p class="note">${g.fatti.join(' ')}</p>` : ''}<p class="note">${g.fonte}</p>`;
+  return `<div class="verdetto v-${g.livello}"><div class="vh"><span class="vi" aria-hidden="true">${icon}</span><div><b>${g.titolo}</b><p>${g.frase}</p></div></div>
+    ${compatto ? `<details><summary>Perché sì e perché no</summary>${lists}</details>` : lists}</div>`;
+}
+
 /* ---------------- simula un titolo dall'ISIN ---------------- */
 const SIM = D.simula || {};
 const SIM_LIST = Object.values(SIM).sort((a, b) => a.name.localeCompare(b.name));
@@ -770,6 +854,7 @@ function renderSimResult(s) {
   out.innerHTML = `<div class="card simres">
     <div class="simhd"><div><h2>${esc(s.name)}</h2><p class="note">${esc(tk(s.symbol))}${s.exchange ? ' · ' + esc(s.exchange) : ''}${s.isin ? ' · ISIN ' + esc(s.isin) : ''}${c ? ' · prezzi in ' + esc(c) : ''}</p></div>
       <div class="last"><span class="k">Ultima chiusura</span><b>${cmoney(s.prezzo, c)}</b><small>${dt(s.a, {year: 'numeric'})}</small></div></div>
+    ${verdettoHTML(giudizio(s), false)}
     <p class="sub">Calcolato su <b>${anni} anni</b> di prezzi (dal ${dtl(s.da)}). Il prezzo oscilla in media del ${pc(s.volatilita, 0, false)} in un anno.</p>
     <div><span class="lab">Quanto crescerà, in media?</span><div class="seg" id="sim-scen">${SCEN.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === sc}">${l}</button>`).join('')}</div>
       <p class="note" style="margin-top:6px">${desc}</p></div>
@@ -892,6 +977,7 @@ function renderOggi() {
         <div><span class="k">Tieni e vendi</span><span class="big">${holdName(x.ci.hold)}</span><small>vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
         <div><span class="k">Cedole o dividendi</span><span class="big">${yv}</span><small>${ys}</small></div>
       </div>
+      ${D.simula && D.simula[c.symbol] ? verdettoHTML(giudizio(D.simula[c.symbol]), true) : ''}
       <p class="note">In passato, per ${({etf: 'gli ETF azionari', bond: 'gli ETF obbligazionari', oro: 'oro e materie prime', usa: 'le azioni USA', italia: 'le azioni italiane'})[x.m]} in salita con questa regola: di solito ${pc(x.g.median)} · 1 volta su 10 sotto ${pc(x.g.p10, 0)} · 1 volta su 10 sopra ${pc(x.g.p90, 0)} · ${nf(x.g.n, 0)} operazioni · affidabilità ${x.ci.aff}. Ultimo anno ${pc(c.info.anno, 0)}.</p>
     </article>`; }).join('') : '<div class="card empty">Nessuno strumento con questi filtri oggi.</div>'}</div>
   <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (dal 2017, prezzi corretti per dividendi e split, costi compresi, tasse escluse). Anche con il 71 % di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
@@ -915,6 +1001,9 @@ function renderMetodo() {
     <p><b>Un modello con sei indizi</b> (forza, ultimo mese, vicinanza al massimo, calma del prezzo, distanza dalla media, mercato): sui dati che non aveva visto, quando diceva 57 % è andata bene il 46 %. Peggio del caso, quindi scartato. <b>La storia del singolo titolo</b>: chi è andato bene in passato non va meglio dopo. Scartata. <b>Il risultato:</b> con i soli prezzi, la probabilità di riuscita a poche settimane dipende pochissimo dal titolo; dipende soprattutto da quanto tieni e da come esci.</p>
     <h3>5. I consigli di oggi</h3>
     <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
+    <h3>Perché sì e perché no</h3>
+    <p>Per ogni strumento, nei consigli e nella ricerca per ISIN, il giudizio segue sempre le stesse regole, sul periodo consigliato per la sua categoria (3 mesi per ETF e oro, 1 mese per le azioni): <b>Sì</b> se nella simulazione prudente è finito in guadagno almeno 60 volte su 100 e nel 10 % dei casi peggiori non ha perso più del 10 %; <b>Per ora no</b> se in guadagno meno di 50 volte su 100, se nel 10 % peggiore ha perso più del 20 % o se il prezzo è bloccato; altrimenti <b>Con cautela</b>. Ogni motivo riporta i numeri da cui viene: la storia reale dello strumento, la simulazione, le cedole, l'affidabilità e il confronto con un ETF sul mondo intero.</p>
+    <p><b>Il trend, verificato.</b> I consigli guardano gli strumenti in salita (sopra la media a 200 giorni), ma dal 2017 essere in salita ha aumentato le probabilità solo per gli ETF obbligazionari (58 contro 51 su 100). Per azioni ed ETF azionari non ha cambiato molto; per l'oro è andato meglio comprare in discesa. Per questo "è in discesa" diventa un motivo per non comprare solo dove i dati lo confermano, e l'app lo scrive con i numeri.</p>
     <h3>6. Simula un titolo dall'ISIN</h3>
     <p>Per ogni titolo usa fino a <b>25 anni</b> di prezzi giornalieri. <b>Com'è andata davvero</b>: su tutte le finestre reali della storia (ogni giorno, ogni settimana, ogni mese, ogni anno), quante volte il prezzo è salito. <b>Macchina del Tempo</b>: 10.000 futuri fatti di pezzi veri della storia; per 1 anno incolla 12 mesi veri presi a caso, così ottiene 10.000 anni possibili invece dei pochi reali. La crescita di fondo viene tolta e rimessa secondo tre scenari: <b>nessuna crescita</b>, <b>prudente</b> (la crescita passata ridotta: le vere differenze di crescita attesa tra grandi titoli sono di pochi punti l'anno, il resto è soprattutto fortuna) e <b>come in passato</b>.</p>
     <p><b>Affidabilità</b>: <b>alta</b> se ci sono almeno 100 periodi indipendenti nella storia e gli scenari di crescita cambiano il risultato di non più di 10 punti; <b>media</b> con almeno 20 periodi e non più di 20 punti; altrimenti <b>bassa</b>. A 1 anno è quasi sempre media o bassa: in 25 anni ci sono solo 25 anni indipendenti, e quanto crescerà un titolo è proprio la cosa più incerta.</p>

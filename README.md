@@ -56,6 +56,15 @@ Sezioni:
   obbligazionari 58 % (guadagno tipico +0,4 %: servono per stabilità e cedole), oro 58 %,
   azioni 55-56 % a 1 mese. Le singole obbligazioni non hanno prezzi gratuiti affidabili: ci sono
   gli ETF obbligazionari.
+- **Perché sì, perché no**: in Oggi e in Simula ogni strumento ha un giudizio (**Sì**, **Con
+  cautela**, **Per ora no**) con una frase semplice e i motivi, ognuno con il suo dato: probabilità
+  nella simulazione prudente e nella storia reale, rischio nel 10 % dei casi peggiori, cedole,
+  affidabilità, confronto con un ETF sul mondo intero, valuta, prezzo bloccato. Regole fisse: "sì"
+  con almeno 60 su 100 e non oltre -10 % in 1 caso su 10 nel periodo consigliato; "no" sotto 50 su
+  100, oltre -20 % o con il prezzo bloccato. Il trend (sopra o sotto la media a 200 giorni) diventa
+  un motivo solo dove i dati lo confermano: dal 2017 solo per gli ETF obbligazionari (58 contro 51
+  su 100); per azioni ed ETF azionari non ha cambiato molto, per l'oro è andato meglio comprare in
+  discesa.
 - **Titoli USA** e **Titoli italiani**: tre passi. (1) Scegli quanto tenere (2 settimane, 1 mese,
   3 mesi) e come uscire (Prudente, Equilibrato, Lascia correre, Solo data): su ogni bottone c'è
   quante operazioni sono finite in guadagno. (2) Per ogni titolo, **compra** il giorno indicato
@@ -117,8 +126,9 @@ scarica fino a 25 anni di prezzi giornalieri e calcola la **probabilità di guad
 - **Affidabilità** alta, media o bassa per ogni orizzonte: almeno 100 periodi indipendenti e
   scenari d'accordo entro 10 punti per "alta"; almeno 20 ed entro 20 punti per "media".
 
-Nell'app, la sezione **Simula** fa lo stesso scrivendo l'ISIN, il ticker o il nome, per i 147 titoli
-già dentro (S&P 100, FTSE MIB e quelli aggiunti). Per un ISIN nuovo, `simula.py` lo aggiunge a
+Nell'app, la sezione **Simula** fa lo stesso scrivendo l'ISIN, il ticker o il nome, per i 176 titoli
+già dentro (S&P 100, FTSE MIB, ETF azionari e obbligazionari, oro e quelli aggiunti), con orizzonti
+di 1 giorno, 1 settimana, 1 mese, 3 mesi e 1 anno. Per un ISIN nuovo, `simula.py` lo aggiunge a
 `simula_lista.json` e `python3 app.py` lo mette nell'app con prezzi aggiornati. `isin.json` contiene
 la corrispondenza ISIN → ticker dei titoli dell'app, verificata uno per uno con la ricerca di Yahoo.
 

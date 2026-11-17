@@ -48,7 +48,7 @@ LISTA = os.path.join(ROOT, "simula_lista.json")   # gli ISIN aggiunti all'app (v
 ISIN_FILE = os.path.join(ROOT, "isin.json")
 UA = settimana.UA
 
-HORIZONS = [("1 giorno", 1), ("1 settimana", 5), ("1 mese", 21), ("1 anno", 252)]
+HORIZONS = [("1 giorno", 1), ("1 settimana", 5), ("1 mese", 21), ("3 mesi", 63), ("1 anno", 252)]
 BLOCK = 21                       # la Macchina del Tempo incolla pezzi di un mese
 N_SIM = 10000
 YEARS_MAX = 25
@@ -145,7 +145,7 @@ def resolve(query):
 def fetch_max(symbol, max_age_hours=12):
     """Fino a YEARS_MAX anni di candele giornaliere (cache di 12 ore). Con range=max Yahoo
     passa a candele mensili, quindi si chiedono date di inizio e fine esplicite."""
-    path = os.path.join(CACHE_MAX, symbol.replace("/", "_") + ".json")
+    path = os.path.join(CACHE_MAX, symbol.replace("/", "_") + ".v2.json")      # v2: con i dividendi
     if os.path.exists(path) and time.time() - os.path.getmtime(path) < max_age_hours * 3600:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
@@ -153,7 +153,7 @@ def fetch_max(symbol, max_age_hours=12):
     for host in ("query2", "query1"):
         now = int(time.time())
         url = ("https://%s.finance.yahoo.com/v8/finance/chart/%s?period1=%d&period2=%d&interval=1d"
-               "&includeAdjustedClose=true" % (host, urllib.parse.quote(symbol), now - YEARS_MAX * 366 * 86400, now))
+               "&includeAdjustedClose=true&events=div" % (host, urllib.parse.quote(symbol), now - YEARS_MAX * 366 * 86400, now))
         try:
             text = _get(url, timeout=40)
             os.makedirs(CACHE_MAX, exist_ok=True)
@@ -212,8 +212,8 @@ def summary(rets):
     if not rets:
         return None
     return {"p_gain": round(sum(1 for r in rets if r > 0) / len(rets), 4), "median": round(pct(rets, .5), 4),
-            "p5": round(pct(rets, .05), 4), "p95": round(pct(rets, .95), 4), "mean": round(sum(rets) / len(rets), 4),
-            "n": len(rets)}
+            "p5": round(pct(rets, .05), 4), "p10": round(pct(rets, .10), 4), "p90": round(pct(rets, .90), 4),
+            "p95": round(pct(rets, .95), 4), "mean": round(sum(rets) / len(rets), 4), "n": len(rets)}
 
 
 def reliability(n_indep, spread):
@@ -296,9 +296,22 @@ def simulate(dates, closes, n=N_SIM, seed=19):
         col = sorted(math.exp(p[mth]) for p in year_paths)
         fan.append([round(pct(col, q), 5) for q in (.05, .25, .5, .75, .95)])
 
+    # com'è oggi: le stesse misure che usa l'algoritmo dei consigli
+    last = len(closes) - 1
+    stato = {"sopra_media200": None, "vs_media200": None, "anno": None, "dal_massimo": None, "vol3m": None}
+    if last >= 252:
+        sma = sum(closes[last - 199:last + 1]) / 200
+        r63 = lr[-63:]
+        m63 = sum(r63) / len(r63)
+        stato = {"sopra_media200": closes[last] > sma, "vs_media200": round(closes[last] / sma - 1, 4),
+                 "anno": round(closes[last] / closes[last - 252] - 1, 4),
+                 "dal_massimo": round(closes[last] / max(closes[last - 251:last + 1]) - 1, 4),
+                 "vol3m": round(math.sqrt(sum((x - m63) ** 2 for x in r63) / (len(r63) - 1)) * math.sqrt(252), 4)}
+
     step = 5
     c0 = max(0, len(closes) - 5 * 252)
     return {
+        "stato": stato,
         "da": dates[0], "a": dates[-1], "anni": round(years, 1), "prezzo": round(closes[-1], 4),
         "volatilita": round(sd_a, 4), "crescita": {"zero": 0.0, "prudente": round(math.exp(mu_prud * 252) - 1, 4),
                                                     "passato": round(math.exp(mu_a) - 1, 4)},
@@ -312,8 +325,10 @@ def simulate(dates, closes, n=N_SIM, seed=19):
 def instrument(query, text=None):
     """ISIN o ticker -> scheda completa con la simulazione."""
     info = resolve(query)
-    meta, dates, closes = series(text if text is not None else fetch_max(info["symbol"]))
+    text = text if text is not None else fetch_max(info["symbol"])
+    meta, dates, closes = series(text)
     sim = simulate(dates, closes)
+    sim["rendimento"] = settimana.div_yield(text)
     return {
         "isin": info.get("isin"), "symbol": info["symbol"],
         "name": info["name"] or meta.get("longName") or meta.get("shortName") or info["symbol"],
