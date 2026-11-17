@@ -38,49 +38,53 @@ Codici di uscita: 0 PASS, 1 BLOCK o nessun ingresso, 2 fermato dal filtro.
 ## `app.py`: tutto in un'app
 
 ```bash
-python3 app.py                       # scarica i dati, analizza, scrive trader/app.html
-python3 settimana.py                 # i 10 titoli USA, solo in testo
-python3 settimana.py --mercato italia # i 10 titoli italiani
-python3 settimana.py --asof 2025-06-30
+python3 app.py                                   # scarica i dati, stima, verifica, scrive trader/app.html
+python3 settimana.py                             # i 10 titoli USA, in testo
+python3 settimana.py --mercato italia --stile data --durata 63
+python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a quella data
 ```
 
-Un unico file HTML con cinque schede:
+Cinque sezioni:
 
-- **Titoli USA** e **Titoli italiani**: i 10 titoli della settimana dell'S&P 100 e del FTSE MIB. Per ognuno **quando entrare** (ordine limite alla
-  prossima seduta a ultima chiusura + 0,5 ATR; se non si esegue, niente operazione), **quando
-  vendere** (alla prima tra stop-loss, target e una data precisa di borsa) e **quante azioni**
-  per il tuo capitale e il tuo rischio massimo. La **probabilità di guadagno** viene da tre fonti:
-  la stessa regola rifatta sul passato del titolo in condizioni simili, su tutte le scelte passate
-  dell'algoritmo, e la **Macchina del Tempo** (10.000 simulazioni nel browser con candele vere
-  dell'ultimo anno). Stop (1,5 / 2 / 3 ATR / nessuno), target (1,5R / 2R / 3R / nessuno) e durata
-  (2 settimane / 1 mese / 3 mesi) si cambiano e tutto si ricalcola.
-- **Verifica**: la scelta rifatta ogni settimana dal 2017 con i soli dati di allora, per ciascun
-  mercato, contro il paniere e l'indice (SPY o FTSE MIB), anno per anno, con il test statistico (t) e tutte le 39 varianti della regola.
+- **Titoli USA** e **Titoli italiani**: tre passi. (1) Scegli quanto tenere (2 settimane, 1 mese,
+  3 mesi) e come uscire (Prudente, Equilibrato, Lascia correre, Solo data): su ogni bottone c'è
+  quante operazioni sono finite in guadagno. (2) Per ogni titolo, **compra** il giorno indicato
+  fino a un prezzo massimo. (3) **Vendi** al primo tra obiettivo, protezione e data. I titoli
+  sono **in ordine di probabilità di riuscita**, con il perché in parole semplici, quante azioni
+  comprare, il grafico e 10.000 simulazioni nel browser.
+- **Verifica**: tre domande. Conta di più il titolo o la regola? Le probabilità dette sono quelle
+  vere? I primi 10 hanno fatto meglio?
 - **Day trade**: l'ultimo giro di `finanza.py`.
-- **Metodo**: come funziona e i suoi limiti.
+- **Come funziona**: metodo, cosa è stato scartato e limiti.
 
-L'**algoritmo** è il momentum 12-1 (rendimento da 12 a 1 mese fa) diviso per la volatilità a
-3 mesi, solo per i titoli sopra la media a 200 giorni e con volatilità almeno del 10 % annuo
-(sotto, il prezzo è di solito bloccato da un'offerta di acquisto, come Iveco). I parametri sono
-quelli standard della letteratura e non sono adattati ai dati.
+### L'algoritmo
 
-**Titoli italiani**: FTSE MIB più qualche grande titolo vicino all'indice (43 in tutto), prezzi in
-euro, calendario di Borsa Italiana (Venerdì Santo, Pasquetta, Ferragosto, 24-26 e 31 dicembre
-inclusi, verificato sui dati), costo 0,2 % per operazione perché c'è la Tobin tax dello 0,1 %
-sugli acquisti. L'indice FTSE MIB di Yahoo è senza dividendi: il confronto giusto è con il paniere.
+1. **Candidati**: i titoli dell'S&P 100 o del FTSE MIB sopra la media a 200 giorni, esclusi quelli
+   con il prezzo quasi fermo (volatilità sotto il 10 % annuo, tipico di un'offerta di acquisto).
+2. **Probabilità di riuscita** (l'operazione chiude in guadagno, costi inclusi): la frequenza
+   storica delle operazioni su titoli *simili*, cioè dello stesso quinto per forza dell'ultimo
+   anno (momentum 12-1 diviso per la volatilità), con la stessa regola. La stima è avvicinata
+   alla media per non fidarsi dei gruppi piccoli, e non può premiare i più deboli: un effetto
+   contrario nei dati è trattato come rumore.
+3. **Verifica walk-forward**: ogni anno dal 2021 la stima usa solo gli anni precedenti e viene
+   confrontata con com'è andata davvero.
 
-Cosa dicono i dati, senza abbellimenti:
+Cosa dicono i dati:
 
-- Il vantaggio storico sul paniere **non è statisticamente significativo** (t < 2), né per gli
-  USA (+5 % l'anno, t = 0,9) né per l'Italia (+1,7 % l'anno, t = 0,4).
-- Gli stop stretti peggiorano i risultati: con 2 ATR lo stop scatta quasi una volta su due.
-  Per questo lo stop predefinito è 3 ATR, ma anche così "compra e tieni" ha una probabilità di
-  guadagno più alta. Lo stop serve a limitare le perdite grosse, non ad aumentare i guadagni.
-- L'universo è la composizione di oggi degli indici (bias di sopravvivenza): i numeri assoluti
-  sono ottimistici.
+- **Conta più la regola del titolo.** USA: dal 41 % di operazioni in guadagno ("Lascia correre",
+  3 mesi) al 59 % ("Solo data", 3 mesi). Ma "Solo data" a 3 mesi perde oltre il 13 % in 1 caso
+  su 10.
+- **Tra titoli, le differenze sono piccole.** Con le durate brevi la probabilità è la stessa per
+  tutti e l'ordine è per forza. A 3 mesi in Italia i più forti sono andati meglio (64 % contro
+  55 %). Nella verifica i primi 10 non battono la media in modo statisticamente significativo.
+- **Scartati dopo la verifica**: un modello a sei indizi (quando diceva 57 % è andata bene il
+  46 %) e la storia del singolo titolo (non predice).
+- Titoli di oggi degli indici (bias di sopravvivenza): i numeri assoluti sono un po' ottimisti.
 
-L'app è un'istantanea: per aggiornarla rilancia `python3 app.py`. I dati vengono da Yahoo Finance
-(query1/query2.finance.yahoo.com) con una cache di 12 ore in `trader/cache/daily/`.
+Titoli italiani: prezzi in euro, calendario di Borsa Italiana (verificato sui dati), costo
+0,2 % per operazione per la Tobin tax dello 0,1 % sugli acquisti. Dati Yahoo Finance
+(query1/query2.finance.yahoo.com) con cache di 12 ore in `trader/cache/daily/`. L'app è
+un'istantanea: per aggiornarla rilancia `python3 app.py`.
 
 ## Test
 

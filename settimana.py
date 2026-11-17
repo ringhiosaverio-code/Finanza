@@ -1,41 +1,46 @@
 #!/usr/bin/env python3
-"""I 10 titoli della settimana: un algoritmo trasparente, verificato sul passato, con
-quando entrare, quando vendere e la probabilità storica di guadagno.
+"""I titoli consigliati della settimana, in ordine di probabilità di riuscita.
 
 COSA FA
-  1. Scarica 10 anni di candele giornaliere (corrette per dividendi e split, Yahoo) per
-     ~100 grandi titoli USA (l'S&P 100) più SPY come riferimento di mercato.
-  2. Punteggio di ogni titolo (regola nota in letteratura, parametri standard, non ottimizzati):
-       momentum 12-1 = rendimento da 12 mesi fa a 1 mese fa (Jegadeesh e Titman, 1993)
-       diviso per la volatilità degli ultimi 3 mesi, solo sopra la media a 200 giorni e con
-     volatilità almeno del 10 % annuo (sotto, il prezzo è di solito bloccato da un'offerta di
-     acquisto). Sceglie i 10 punteggi più alti. Mercati: USA (S&P 100) e Italia (FTSE MIB).
-  3. Per ogni titolo una REGOLA precisa:
-       entrata  ordine limite per la prossima seduta a ultima chiusura + 0,5 ATR (se non si
-                esegue, niente operazione: non si insegue il prezzo)
-       uscita   la prima tra: stop-loss (entrata - 3 ATR), target (entrata + 2 volte il
-                rischio), oppure alla chiusura della 21a seduta.
-     ATR = oscillazione media giornaliera degli ultimi 14 giorni. Le date sono giorni di
-     borsa veri (festività NYSE 2026-2027).
-  4. PROBABILITÀ: la stessa regola rifatta su ogni volta che quel titolo era in condizioni
-     simili nel passato (tra il 20 % migliore del punteggio e sopra la media a 200 giorni),
-     e su tutte le scelte passate dell'algoritmo. Per 39 varianti della regola (stop, target,
-     durata, anche senza stop o senza target), così l'app può mostrarle tutte.
-  5. VERIFICA: la scelta rifatta ogni settimana degli ultimi ~9 anni con i soli dati di allora.
+  1. Scarica 10 anni di candele giornaliere (corrette per dividendi e split, Yahoo) per i
+     titoli dell'S&P 100 (USA) o del FTSE MIB (Italia) e per l'indice del mercato.
+  2. CANDIDATI: i titoli sopra la loro media a 200 giorni e con volatilità almeno del 10 %
+     annuo (sotto, il prezzo è di solito bloccato da un'offerta di acquisto).
+  3. LA REGOLA, uguale per tutti: entrata con ordine limite alla prossima seduta a ultima
+     chiusura + 0,5 ATR (se non si esegue, niente operazione); uscita alla prima tra
+     protezione (stop), obiettivo (target) e una data. Quattro stili (Prudente, Equilibrato,
+     Lascia correre, Solo data) e tre durate (2 settimane, 1 mese, 3 mesi).
+     ATR = oscillazione media giornaliera degli ultimi 14 giorni.
+  4. LA PROBABILITÀ DI RIUSCITA (= l'operazione chiude in guadagno, costi inclusi): un modello
+     lineare con sei indizi noti in letteratura, misurati come posizione in classifica tra i
+     candidati del giorno:
+       forza dell'ultimo anno (momentum 12-1 / volatilità, Jegadeesh e Titman 1993),
+       ultimo mese (inversione di breve periodo), vicinanza al massimo annuale (George e Hwang
+       2004), calma del prezzo (bassa volatilità), distanza dalla media a 200 giorni, e se il
+       mercato è sopra la sua media a 200 giorni.
+     Il modello impara dalla storia di tutti i candidati di ogni settimana degli ultimi ~9 anni.
+  5. VERIFICA WALK-FORWARD: ogni anno il modello è allenato solo sugli anni precedenti (con
+     gli esiti già noti) e giudicato su quello dopo. Si misura se le probabilità stimate
+     corrispondono a quelle osservate, e se i 10 con la probabilità più alta hanno fatto meglio
+     di tutti i candidati e del vecchio algoritmo (i 10 con il momentum più alto).
+  6. CLASSIFICA: i 10 candidati di oggi con la probabilità di riuscita più alta.
 
 COSA NON FA
-  Non prevede il futuro: le probabilità sono frequenze del passato. L'universo è l'S&P 100
-  di OGGI (bias di sopravvivenza: la verifica è ottimistica). Non è consulenza finanziaria.
+  Non prevede il futuro: le probabilità sono stime dal passato. L'universo è la composizione
+  di OGGI degli indici (bias di sopravvivenza). Non è consulenza finanziaria.
 
 Esempi:
-    python3 settimana.py                    # i 10 titoli di questa settimana
-    python3 settimana.py --asof 2025-06-30  # cosa avrebbe scelto a quella data
-    python3 app.py                          # tutto nell'app: trader/app.html
+    python3 settimana.py                     # USA
+    python3 settimana.py --mercato italia    # Italia
+    python3 settimana.py --asof 2025-06-30   # cosa avrebbe consigliato a quella data
+    python3 app.py                           # tutto nell'app: trader/app.html
 
 Solo libreria standard, Python 3.8+.
 """
 
+
 import argparse
+import bisect
 import datetime
 import importlib.util
 import json
@@ -45,6 +50,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -75,25 +81,50 @@ MERCATI = {
                "fuso": "Europe/Rome", "citta": "Milano", "chiusura": (17, 30), "borsa": "Borsa Italiana"},
 }
 
-HORIZONS = [("7 giorni", 5), ("1 mese", 21), ("1 anno", 252)]
+
 LOOKBACK = 252     # 12 mesi di borsa
 SKIP = 21          # salta l'ultimo mese (inversione di breve periodo)
 VOL_WIN = 63       # 3 mesi per la volatilità
 SMA_WIN = 200      # media mobile del filtro di trend
 ATR_WIN = 14       # oscillazione media giornaliera
-STEP = 5           # ribilanciamento settimanale
+STEP = 5           # una decisione a settimana
 TOP = 10
-TOP_PCT = 0.20     # "condizioni simili" = nel 20 % migliore del punteggio
 MIN_VOL = 0.10     # sotto il 10 % annuo il prezzo è quasi fermo: di solito un'offerta di acquisto lo blocca
 
-# la regola di entrata e uscita, con le varianti che l'app permette di provare
-LIMIT_ATR = 0.5            # entrata: limite a ultima chiusura + 0,5 ATR
-STOPS_ATR = (1.5, 2.0, 3.0, 0)     # 0 = nessuno stop (si esce solo alla data)
-TARGETS_R = (1.5, 2.0, 3.0, 0)     # 0 = nessun target (si lascia correre fino a stop o data)
-HOLDS = (10, 21, 63)               # 2 settimane, 1 mese, 3 mesi di borsa
-# Stop a 3 ATR: lo standard per operazioni di qualche settimana. Sui dati, gli stop più stretti
-# scattano spesso per rumore (con 2 ATR quasi una volta su due): l'app mostra tutte le varianti.
-DEFAULT_RULE = (3.0, 2.0, 21)
+# la regola di entrata e uscita
+LIMIT_ATR = 0.5    # entrata: limite a ultima chiusura + 0,5 ATR
+STYLES = [
+    {"id": "prudente", "nome": "Prudente", "ks": 2.0, "rr": 1.5,
+     "desc": "Protezione e obiettivo vicini: si esce presto, in guadagno o in perdita."},
+    {"id": "equilibrato", "nome": "Equilibrato", "ks": 3.0, "rr": 2.0,
+     "desc": "Protezione a 3 oscillazioni giornaliere sotto l'entrata, obiettivo al doppio di quanto rischi."},
+    {"id": "corsa", "nome": "Lascia correre", "ks": 3.0, "rr": 0,
+     "desc": "Stessa protezione, nessun obiettivo: se non scatta la protezione, vendi alla data."},
+    {"id": "data", "nome": "Solo data", "ks": 0, "rr": 0,
+     "desc": "Niente protezione né obiettivo: vendi alla data, qualunque cosa succeda."},
+]
+HOLDS = (10, 21, 63)
+HOLD_NAMES = {10: "2 settimane", 21: "1 mese", 63: "3 mesi"}
+DEFAULT_STYLE, DEFAULT_HOLD = "equilibrato", 21
+
+# gli indizi del modello di probabilità (misurati come posizione in classifica tra i candidati)
+FEATURES = [
+    {"id": "forza", "nome": "Forza dell'ultimo anno", "alto": "tra i più forti dell'ultimo anno",
+     "basso": "tra i meno forti dell'ultimo anno"},
+    {"id": "mese", "nome": "Ultimo mese", "alto": "salito molto nell'ultimo mese",
+     "basso": "fermo o in calo nell'ultimo mese"},
+    {"id": "massimo", "nome": "Vicinanza al massimo dell'anno", "alto": "vicino al massimo dell'anno",
+     "basso": "lontano dal massimo dell'anno"},
+    {"id": "calma", "nome": "Calma del prezzo", "alto": "prezzo più calmo degli altri",
+     "basso": "prezzo più nervoso degli altri"},
+    {"id": "trend", "nome": "Distanza dalla media a 200 giorni", "alto": "molto sopra la media a 200 giorni",
+     "basso": "appena sopra la media a 200 giorni"},
+    {"id": "mercato", "nome": "Mercato in salita", "alto": "mercato sopra la sua media a 200 giorni",
+     "basso": "mercato sotto la sua media a 200 giorni"},
+]
+GROUPS = 5                 # quinti di forza ("titoli simili")
+K_SHRINK = 100             # quanto restringere ogni quinto verso la media
+MIN_TRAIN_WEEKS = 104      # almeno 2 anni di storia prima di giudicare un anno
 MC_BARS = 252              # candele usate dalla Macchina del Tempo dell'app
 
 
@@ -101,14 +132,16 @@ class FetchError(Exception):
     pass
 
 
-def rule_key(ks, rr, hold):
-    return "%g|%g|%d" % (ks, rr, hold)
+def vkey(style_id, hold):
+    return "%s|%d" % (style_id, hold)
 
 
-def all_rules():
-    """Tutte le varianti: senza stop non c'è un rischio su cui misurare il target, quindi
-    'nessuno stop' va solo con 'nessun target' (uscita alla data)."""
-    return [(ks, rr, h) for h in HOLDS for ks in STOPS_ATR for rr in TARGETS_R if ks or not rr]
+def style(style_id):
+    return next(s for s in STYLES if s["id"] == style_id)
+
+
+def variants():
+    return [(s["id"], h) for h in HOLDS for s in STYLES]
 
 
 # ------------------------------------------------------------------ calendario
@@ -279,6 +312,21 @@ def align_ohlc(series, calendar):
 
 # ------------------------------------------------------------------ indicatori
 
+def rolling_max(prices, w):
+    """Massimo mobile su w giorni (deque monotona, O(n))."""
+    out, dq = [None] * len(prices), deque()
+    for i, x in enumerate(prices):
+        if x is None:
+            continue
+        while dq and prices[dq[-1]] <= x:
+            dq.pop()
+        dq.append(i)
+        while dq[0] <= i - w:
+            dq.popleft()
+        out[i] = prices[dq[0]]
+    return out
+
+
 class Stock:
     """Prezzi allineati + somme prefisse per media mobile e volatilità in O(1)."""
 
@@ -291,6 +339,8 @@ class Stock:
         self.h = [b[1] if b else None for b in ohlc]
         self.l = [b[2] if b else None for b in ohlc]
         self.first = next((i for i, x in enumerate(prices) if x is not None), n)
+        self.hi = rolling_max(prices, LOOKBACK)
+        self._atr = {}
         self.P = [0.0] * (n + 1)             # somme prefisse dei prezzi
         self.S1 = [0.0] * (n + 1)            # dei rendimenti log
         self.S2 = [0.0] * (n + 1)            # dei loro quadrati
@@ -319,13 +369,17 @@ class Stock:
 
     def atr(self, i):
         """Media del true range degli ultimi ATR_WIN giorni fino a i compreso."""
-        if i - self.first < ATR_WIN:
-            return None
-        tot = 0.0
-        for k in range(i - ATR_WIN + 1, i + 1):
-            pc = self.p[k - 1]
-            tot += max(self.h[k] - self.l[k], abs(self.h[k] - pc), abs(self.l[k] - pc))
-        return tot / ATR_WIN
+        if i in self._atr:
+            return self._atr[i]
+        v = None
+        if i - self.first >= ATR_WIN:
+            tot = 0.0
+            for k in range(i - ATR_WIN + 1, i + 1):
+                pc = self.p[k - 1]
+                tot += max(self.h[k] - self.l[k], abs(self.h[k] - pc), abs(self.l[k] - pc))
+            v = tot / ATR_WIN
+        self._atr[i] = v
+        return v
 
     def fwd(self, i, h):
         if i + h >= len(self.p):
@@ -333,7 +387,7 @@ class Stock:
         return self.p[i + h] / self.p[i] - 1
 
     def signal(self, i):
-        """Il punteggio al giorno i, usando SOLO prezzi fino al giorno i."""
+        """Gli indicatori del giorno i, usando SOLO prezzi fino al giorno i."""
         if not self.ok(i):
             return None
         v = self.vol(i)
@@ -345,19 +399,80 @@ class Stock:
                 "vs_sma": self.p[i] / sma - 1, "frozen": v < MIN_VOL}
 
 
-def rank_day(stocks, i, top=TOP):
-    """Classifica del giorno i: (scelti, insieme 'condizioni simili', segnali)."""
-    sig = {}
+def raw_features(s, i):
+    """Gli indizi grezzi del giorno i (solo prezzi fino a i), o None se il titolo non è candidato.
+    Ordine come FEATURES, senza il mercato: più alto = più 'alto' nella descrizione."""
+    sg = s.signal(i)
+    if sg is None or not sg["above"] or sg["frozen"]:
+        return None, sg
+    return [sg["score"], s.p[i] / s.p[i - 21] - 1, s.p[i] / s.hi[i] - 1, -sg["vol"], sg["vs_sma"]], sg
+
+
+def rank_scale(rows):
+    """Per ogni colonna, la posizione in classifica tra i candidati del giorno: da -0,5 (ultimo)
+    a +0,5 (primo). Così gli indizi sono confrontabili tra titoli, anni e mercati."""
+    n = len(rows)
+    if not n:
+        return []
+    out = [[0.0] * len(rows[0]) for _ in rows]
+    if n == 1:
+        return out
+    for j in range(len(rows[0])):
+        for pos, r in enumerate(sorted(range(n), key=lambda r: rows[r][j])):
+            out[r][j] = pos / (n - 1) - 0.5
+    return out
+
+
+def candidates_day(stocks, market, i):
+    """I candidati del giorno i con il vettore del modello: [1, 5 indizi in classifica, mercato]."""
+    info = []
     for s in stocks:
-        x = s.signal(i)
-        if x is not None:
-            sig[s.sym] = x
-    order = sorted(sig, key=lambda k: -sig[k]["score"])
-    cut = max(1, int(round(len(order) * TOP_PCT)))
-    ok = lambda k: sig[k]["above"] and not sig[k]["frozen"]
-    similar = {k for k in order[:cut] if ok(k)}
-    picks = [k for k in order if ok(k)][:top]
-    return picks, similar, sig
+        raw, sg = raw_features(s, i)
+        if raw is not None:
+            info.append((s, sg, raw))
+    xs = rank_scale([raw for _, _, raw in info])
+    ms = market.signal(i)
+    m = 0.0 if ms is None else (0.5 if ms["above"] else -0.5)
+    return [{"s": s, "sig": sg, "raw": raw, "x": [1.0] + x + [m]} for (s, sg, raw), x in zip(info, xs)]
+
+
+# ------------------------------------------------------------------ la stima di probabilità
+
+def group_of(c):
+    """Il quinto di forza del candidato nel suo giorno: 0 = i meno forti, 4 = i più forti."""
+    return min(GROUPS - 1, int((c["x"][1] + 0.5) * GROUPS))
+
+
+def pav_increasing(vals, weights):
+    """Regressione isotonica crescente (pool adjacent violators): la sequenza non decrescente
+    più vicina ai valori, pesata."""
+    blocks = [[v, w, 1] for v, w in zip(vals, weights)]
+    i = 0
+    while i < len(blocks) - 1:
+        if blocks[i][0] > blocks[i + 1][0] + 1e-12:
+            (v1, w1, c1), (v2, w2, c2) = blocks[i], blocks[i + 1]
+            blocks[i] = [(v1 * w1 + v2 * w2) / (w1 + w2), w1 + w2, c1 + c2]
+            del blocks[i + 1]
+            i = max(0, i - 1)
+        else:
+            i += 1
+    out = []
+    for v, _, c in blocks:
+        out += [v] * c
+    return out
+
+
+def estimate(wins, n):
+    """Probabilità di riuscita per quinto di forza: la frequenza osservata, ristretta verso la
+    media (K_SHRINK casi fittizi alla media) e resa non decrescente con la forza, perché in
+    letteratura i titoli più forti non fanno peggio dei più deboli: un effetto contrario nei
+    dati è trattato come rumore e appiattito."""
+    W, N = sum(wins), sum(n)
+    if N == 0:
+        return [None] * GROUPS
+    base = W / N
+    raw = [(w + K_SHRINK * base) / (m + K_SHRINK) for w, m in zip(wins, n)]
+    return pav_increasing(raw, [m + K_SHRINK for m in n])
 
 
 # ------------------------------------------------------------------ la regola
@@ -469,146 +584,145 @@ def slim(st):
 
 # ------------------------------------------------------------------ analisi
 
+def group_stats(rets):
+    return slim(stats(rets))
+
+
+def outcome_stats(items):
+    """items: esiti di trade() eseguiti -> statistiche con come sono finiti."""
+    rets = [t["ret"] for t in items]
+    if not rets:
+        return {"n": 0}
+    st = stats(rets)
+    st.update({k: sum(1 for t in items if t["outcome"] == o) / len(items)
+               for k, o in (("p_target", "target"), ("p_stop", "stop"), ("p_tempo", "tempo"))})
+    return slim(st)
+
+
 def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
     last = len(calendar) - 1
     start = min(s.first for s in stocks) + LOOKBACK
-    sched = list(range(last, start - 1, -STEP))[::-1]       # settimanale, allineato a oggi
-    by_day = {i: rank_day(stocks, i, top) for i in sched}
-    smap = {s.sym: s for s in stocks}
-    rules = all_rules()
+    sched = list(range(last, start - 1, -STEP))[::-1]       # una decisione a settimana, allineata a oggi
+    days = {i: candidates_day(stocks, market, i) for i in sched}
+    today = days[last]
+    rank = lambda p, c: (-p, -c["x"][1])                   # per probabilità, poi per forza
+    models = {}
 
-    picks, _, sig_now = by_day[last]
-
-    # 1. verifica settimanale: i titoli scelti, tenuti una settimana, contro paniere e SPY
-    eq = {"strategia": [1.0], "paniere": [1.0], "spy": [1.0]}
-    dates = [calendar[sched[0]]]
-    weekly, prev = [], set()
-    for i in sched:
-        if i + STEP > last:
-            break
-        pk, _, sig = by_day[i]
-        if not pk:
+    for sid, hold in variants():
+        sty, key = style(sid), vkey(sid, hold)
+        # 1. l'esito della regola per ogni candidato di ogni settimana con esito già noto
+        cohorts = []
+        for i in sched:
+            if i + hold > last:
+                break
+            res = [(c, trade(c["s"], i, sty["ks"], sty["rr"], hold, cost_rt)) for c in days[i]]
+            cohorts.append((i, [(c, t) for c, t in res if t is not None]))
+        if not cohorts:
             continue
-        g = sum(smap[k].fwd(i, STEP) for k in pk) / len(pk)
-        net = g - len(set(pk) - prev) / len(pk) * cost_rt
-        prev = set(pk)
-        b = sum(smap[k].fwd(i, STEP) for k in sig) / len(sig)
-        spy = market.fwd(i, STEP)
-        eq["strategia"].append(eq["strategia"][-1] * (1 + net))
-        eq["paniere"].append(eq["paniere"][-1] * (1 + b))
-        eq["spy"].append(eq["spy"][-1] * (1 + spy))
-        dates.append(calendar[i + STEP])
-        weekly.append((net, b, calendar[i + STEP][:4]))
+        # 2. conteggi cumulati per quinto di forza, settimana dopo settimana
+        wins, cnt, cum = [0] * GROUPS, [0] * GROUPS, []
+        for i, res in cohorts:
+            for c, t in res:
+                if t["filled"]:
+                    g = group_of(c)
+                    cnt[g] += 1
+                    wins[g] += t["ret"] > 0
+            cum.append((wins[:], cnt[:]))
+        ci = [i for i, _ in cohorts]
 
-    # 2. comprare e tenere: track record per orizzonte
-    record = {}
-    for label, h in HORIZONS:
-        pk_r, bench_r, beat = [], [], []
-        for i in sched:
-            if i + h > last:
-                break
-            pk, _, sig = by_day[i]
-            if not pk:
+        # 3. verifica walk-forward: ogni anno la stima usa solo esiti noti prima del suo inizio
+        rows, preds = [], []
+        for Y in sorted({calendar[i][:4] for i in ci}):
+            test = [(i, res) for i, res in cohorts if calendar[i][:4] == Y]
+            j = bisect.bisect_left(ci, test[0][0] - hold) - 1     # ultima settimana con i + hold < inizio
+            if j + 1 < MIN_TRAIN_WEEKS:
                 continue
-            fr = [smap[k].fwd(i, h) for k in pk]
-            br = [smap[k].fwd(i, h) for k in sig]
-            pk_r += fr
-            bench_r += br
-            beat.append(sum(fr) / len(fr) > sum(br) / len(br))
-        record[label] = {"algoritmo": slim(stats(pk_r)), "paniere": slim(stats(bench_r)),
-                         "batte_paniere": r4(sum(beat) / len(beat)) if beat else None,
-                         "settimane": len(beat),
-                         "indipendenti": independent([i for i in sched if i + h <= last], h)}
+            est = estimate(*cum[j])
+            for i, res in test:
+                scored = sorted(((est[group_of(c)], c, t) for c, t in res), key=lambda z: rank(z[0], z[1]))
+                pick = lambda part: [t["ret"] for p, c, t in part if t["filled"]]
+                rows.append({"i": i, "anno": Y, "top": pick(scored[:top]), "bottom": pick(scored[-top:]),
+                             "tutti": pick(scored)})
+                preds += [(p, group_of(c), 1.0 if t["ret"] > 0 else 0.0, t["ret"]) for p, c, t in scored if t["filled"]]
+        oos = None
+        if rows:
+            flat = lambda g: [x for r in rows for x in r[g]]
+            years = []
+            for Y in sorted({r["anno"] for r in rows}):
+                ry = [r for r in rows if r["anno"] == Y]
+                years.append({"anno": Y, "settimane": len(ry),
+                              **{g: group_stats([x for r in ry for x in r[g]]) for g in ("top", "tutti", "bottom")}})
+            step = max(1, math.ceil(hold / STEP))                 # settimane che non si sovrappongono
+            diffs = [sum(r["top"]) / len(r["top"]) - sum(r["tutti"]) / len(r["tutti"])
+                     for r in rows[::step] if r["top"] and r["tutti"]]
+            t_stat = None
+            if len(diffs) > 2:
+                mu = sum(diffs) / len(diffs)
+                sd = math.sqrt(sum((d - mu) ** 2 for d in diffs) / (len(diffs) - 1))
+                t_stat = mu / sd * math.sqrt(len(diffs)) if sd > 0 else None
+            cal = []
+            for g in range(GROUPS):
+                pg = [z for z in preds if z[1] == g]
+                if pg:
+                    cal.append({"gruppo": g, "stimata": r4(sum(z[0] for z in pg) / len(pg)),
+                                "osservata": r4(sum(z[2] for z in pg) / len(pg)), "n": len(pg)})
+            oos = {"da": calendar[rows[0]["i"]], "a": calendar[rows[-1]["i"]], "settimane": len(rows),
+                   "calibrazione": cal, "top": group_stats(flat("top")), "tutti": group_stats(flat("tutti")),
+                   "bottom": group_stats(flat("bottom")), "anni": years, "t": r4(t_stat), "casi_t": len(diffs)}
 
-    # 3. la regola su tutte le scelte passate dell'algoritmo (ogni variante)
-    pooled = {}
-    for ks, rr, h in rules:
-        res = []
-        for i in sched:
-            if i + h >= last:
-                break
-            for k in by_day[i][0]:
-                res.append((i, trade(smap[k], i, ks, rr, h, cost_rt)))
-        pooled[rule_key(ks, rr, h)] = slim(trade_stats(res, h))
+        # 4. la stima di oggi (tutta la storia con esito noto) e com'è andata ogni quinto
+        est = estimate(*cum[-1])
+        by_g = [[] for _ in range(GROUPS)]
+        for i, res in cohorts:
+            for c, t in res:
+                if t["filled"]:
+                    by_g[group_of(c)].append(t)
+        all_t = [t for g in by_g for t in g]
+        models[key] = {"p": [r4(x) for x in est], "base": r4(sum(cum[-1][0]) / max(1, sum(cum[-1][1]))),
+                       "gruppi": [outcome_stats(g) for g in by_g], "tutti": outcome_stats(all_t), "oos": oos}
 
-    # 4. ogni titolo scelto: regola in condizioni simili, comprare e tenere, dati per l'app
-    future = trading_days_after(calendar[last], max(HOLDS) + 1, mercato)
-    detail = []
-    for k in picks:
-        s = smap[k]
-        sim_idx = [i for i in sched if i < last and k in by_day[i][1]]
-        grid = {}
-        for ks, rr, h in rules:
-            res = [(i, trade(s, i, ks, rr, h, cost_rt)) for i in sim_idx if i + h < last]
-            st = trade_stats(res, h)
-            st["affidabilita"] = confidence(st.get("indipendenti", 0))
-            grid[rule_key(ks, rr, h)] = slim(st)
-        hold_stats = {}
-        for label, h in HORIZONS:
-            idx = [i for i in sim_idx if i + h <= last]
-            n_ind = independent(idx, h)
-            hold_stats[label] = {"simili": slim(stats([s.fwd(i, h) for i in idx])),
-                                 "indipendenti": n_ind, "affidabilita": confidence(n_ind)}
+    # 5. i candidati di oggi, dal più probabile (la stima cresce con la forza, quindi l'ordine
+    #    è lo stesso per ogni regola: cambia solo la probabilità)
+    dkey = vkey(DEFAULT_STYLE, DEFAULT_HOLD)
+    cands = []
+    for c in sorted(today, key=lambda c: rank(models[dkey]["p"][group_of(c)], c)):
+        s, sg, raw = c["s"], c["sig"], c["raw"]
+        cands.append({
+            "symbol": s.sym, "name": s.name, "price": round(s.p[last], 4), "atr": r4(s.atr(last)),
+            "g": group_of(c), "forza": r4(c["x"][1] + 0.5),
+            "info": {"anno": r4(s.p[last] / s.p[last - LOOKBACK] - 1), "mese": r4(raw[1]),
+                     "dal_massimo": r4(raw[2]), "vol": r4(sg["vol"]), "sopra_media": r4(sg["vs_sma"])}})
+
+    # 6. per i primi: grafico e candele per la simulazione dell'app
+    smap = {s.sym: s for s in stocks}
+    details = {}
+    for c in cands[:top]:
+        s = smap[c["symbol"]]
         lo = max(s.first + 1, last - MC_BARS + 1)
-        bars = [[round(s.o[i] / s.p[i - 1], 5), round(s.h[i] / s.p[i - 1], 5),
-                 round(s.l[i] / s.p[i - 1], 5), round(s.p[i] / s.p[i - 1], 5)] for i in range(lo, last + 1)]
         c0 = max(s.first, last - 129)
-        detail.append({
-            "symbol": k, "name": s.name, "price": round(s.p[last], 2), "atr": round(s.atr(last), 4),
-            "signal": slim(sig_now[k]), "rule": grid, "hold": hold_stats, "bars": bars,
-            "chart": {"dates": calendar[c0:last + 1], "close": [round(x, 2) for x in s.p[c0:last + 1]],
-                      "sma": [round(s.sma(i), 2) if i - s.first >= SMA_WIN else None
-                              for i in range(c0, last + 1)]},
-        })
-
-    # 5. metriche della verifica
-    def curve_stats(c):
-        years = max(1e-9, (len(c) - 1) * STEP / 252)
-        peak, dd = c[0], 0.0
-        for x in c:
-            peak = max(peak, x)
-            dd = min(dd, x / peak - 1)
-        return {"cagr": r4(c[-1] ** (1 / years) - 1), "max_drawdown": r4(dd), "totale": r4(c[-1] - 1)}
-
-    metrics = {k: curve_stats(v) for k, v in eq.items()}
-    metrics["settimane"] = len(weekly)
-    metrics["settimane_positive"] = r4(sum(1 for n, _, _ in weekly if n > 0) / max(1, len(weekly)))
-    metrics["settimane_sopra_paniere"] = r4(sum(1 for n, b, _ in weekly if n > b) / max(1, len(weekly)))
-    ex = [n - b for n, b, _ in weekly]
-    if len(ex) > 2:
-        mu = sum(ex) / len(ex)
-        sd = math.sqrt(sum((x - mu) ** 2 for x in ex) / (len(ex) - 1))
-        metrics["eccesso_annuo"] = r4(mu * 52)
-        metrics["t_eccesso"] = r4(mu / sd * math.sqrt(len(ex))) if sd > 0 else None
-    years = {}
-    for n, b, y in weekly:
-        a = years.setdefault(y, [1.0, 1.0, 0])
-        a[0] *= 1 + n
-        a[1] *= 1 + b
-        a[2] += 1
-    metrics["anni"] = [{"anno": y, "strategia": r4(v[0] - 1), "paniere": r4(v[1] - 1), "settimane": v[2]}
-                       for y, v in sorted(years.items())]
+        details[s.sym] = {
+            "bars": [[round(s.o[i] / s.p[i - 1], 5), round(s.h[i] / s.p[i - 1], 5),
+                      round(s.l[i] / s.p[i - 1], 5), round(s.p[i] / s.p[i - 1], 5)] for i in range(lo, last + 1)],
+            "chart": {"dates": calendar[c0:last + 1], "close": [round(x, 4) for x in s.p[c0:last + 1]],
+                      "sma": [round(s.sma(i), 4) if i - s.first >= SMA_WIN else None for i in range(c0, last + 1)]},
+        }
 
     m_i = market.signal(last)
-    regime = {"spy_sopra_media200": m_i["above"], "spy_vs_media200": r4(m_i["vs_sma"])} if m_i else None
+    regime = {"sopra_media200": m_i["above"], "vs_media200": r4(m_i["vs_sma"])} if m_i else None
     return {
-        "asof": calendar[last], "future_days": future, "picks": detail, "record": record, "pooled": pooled,
-        "backtest": {"dates": dates, "curves": {k: [round(x, 4) for x in v] for k, v in eq.items()},
-                     "metrics": metrics, "da": dates[0], "a": dates[-1], "costo_andata_ritorno": cost_rt},
-        "universo": len(stocks), "regime": regime, "top": top,
-        "rules": {"stops_atr": STOPS_ATR, "targets_r": TARGETS_R, "holds": HOLDS, "default": DEFAULT_RULE,
-                  "limit_atr": LIMIT_ATR, "atr_win": ATR_WIN},
-        "classifica": [dict(symbol=k, **slim(sig_now[k])) for k in
-                       sorted(sig_now, key=lambda x: -sig_now[x]["score"])][:25],
-        "metodo": {"lookback": LOOKBACK, "skip": SKIP, "vol_win": VOL_WIN, "sma_win": SMA_WIN,
-                   "step": STEP, "top": top, "top_pct": TOP_PCT},
+        "asof": calendar[last], "future_days": trading_days_after(calendar[last], max(HOLDS) + 1, mercato),
+        "universo": len(stocks), "regime": regime, "top": top, "costo": cost_rt,
+        "rules": {"limit_atr": LIMIT_ATR, "atr_win": ATR_WIN, "styles": STYLES, "holds": list(HOLDS),
+                  "hold_names": {str(h): n for h, n in HOLD_NAMES.items()},
+                  "default": {"style": DEFAULT_STYLE, "hold": DEFAULT_HOLD}},
+        "groups": GROUPS, "models": models, "candidates": cands, "details": details,
     }
 
 
 def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=print, mercato="usa"):
     """Scarica, allinea e analizza un mercato. -> il dizionario dei risultati (vedi run)."""
     cfg = MERCATI[mercato]
-    MARKET = cfg["indice"]
+    index = cfg["indice"]
     if cost_pct is None:
         cost_pct = cfg["costo"]
     if tickers:
@@ -616,9 +730,9 @@ def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=pri
         syms = [x if x.endswith(".MI") else x.replace(".", "-") for x in syms]
     else:
         syms = cfg["universo"]
-    syms = [s for s in dict.fromkeys(syms) if s and s != MARKET]
+    syms = [s for s in dict.fromkeys(syms) if s and s != index]
     log("[settimana] %s: scarico %d titoli + %s (10 anni, giornaliero; cache 12 ore)..."
-        % (cfg["nome"], len(syms), MARKET))
+        % (cfg["nome"], len(syms), index))
 
     def get(sym):
         try:
@@ -627,14 +741,14 @@ def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=pri
             return sym, None, str(e)
 
     with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
-        got = list(ex.map(get, syms + [MARKET]))
+        got = list(ex.map(get, syms + [index]))
     errors = [e for _, t, e in got if e]
     texts = {s: t for s, t, _ in got if t}
-    if MARKET not in texts:
-        raise FetchError("non riesco a scaricare %s: %s" % (MARKET, "; ".join(errors)))
+    if index not in texts:
+        raise FetchError("non riesco a scaricare %s: %s" % (index, "; ".join(errors)))
 
     parsed = {s: parse(t, asof, cfg["fuso"], cfg["chiusura"]) for s, t in texts.items()}
-    calendar = sorted(parsed[MARKET][1])
+    calendar = sorted(parsed[index][1])
     closes = align({s: v[1] for s, v in parsed.items()}, calendar)
     ohlc = align_ohlc({s: v[2] for s, v in parsed.items()}, calendar)
     stocks = [Stock(s, closes[s], parsed[s][0].get("shortName") or parsed[s][0].get("longName") or "", ohlc[s])
@@ -647,17 +761,18 @@ def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=pri
     if len(stocks) < top:
         raise FetchError("servono almeno %d titoli con 1 anno di storia" % top)
 
-    r = run(stocks, Stock(MARKET, closes[MARKET], cfg["indice_nome"], ohlc[MARKET]), calendar, cost_pct / 100,
+    log("[settimana] %s: stima e verifica walk-forward su %d varianti della regola..." % (cfg["nome"], len(variants())))
+    r = run(stocks, Stock(index, closes[index], cfg["indice_nome"], ohlc[index]), calendar, cost_pct / 100,
             top, mercato)
     r["saltati"] = errors
     r["mercato"] = {k: cfg[k] for k in ("nome", "indice_nome", "indice_breve", "universo_nome", "valuta",
                                          "valuta_nome", "citta", "borsa", "costo")}
     r["mercato"]["id"] = mercato
     live = {}
-    for p in r["picks"]:
-        m = parsed[p["symbol"]][0]
+    for sym in r["details"]:
+        m = parsed[sym][0]
         if m.get("regularMarketPrice") and m.get("regularMarketTime") and not asof:
-            live[p["symbol"]] = {"price": m["regularMarketPrice"], "time": datetime.datetime.fromtimestamp(
+            live[sym] = {"price": m["regularMarketPrice"], "time": datetime.datetime.fromtimestamp(
                 m["regularMarketTime"] + m.get("gmtoffset", -18000), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")}
     r["live"] = live
     r["generato"] = now_in(cfg["fuso"]).strftime("%Y-%m-%d %H:%M")
@@ -673,55 +788,55 @@ def f_pct(x, d=1, sign=True):
     return (s % (x * 100)).replace(".", ",")
 
 
-def plan_for(p, r, rule=DEFAULT_RULE):
-    """Livelli e date della regola per un titolo scelto, dal prezzo di riferimento (ultima chiusura)."""
-    ks, rr, hold = rule
-    ref, a = p["price"], p["atr"]
+def plan_for(c, r, style_id=DEFAULT_STYLE, hold=DEFAULT_HOLD):
+    """Livelli e date della regola per un candidato, dal prezzo di riferimento (ultima chiusura)."""
+    sty = style(style_id)
+    ref, a = c["price"], c["atr"]
+    ks, rr = sty["ks"], sty["rr"]
     return {"entrata_giorno": r["future_days"][0], "limite": ref + r["rules"]["limit_atr"] * a,
             "stop": ref - ks * a if ks else None, "target": ref + rr * ks * a if (ks and rr) else None,
             "uscita_giorno": r["future_days"][hold - 1]}
 
 
-def print_report(r):
-    ks, rr, hold = DEFAULT_RULE
-    mk = r.get("mercato", {"nome": "USA", "indice_nome": "SPY", "valuta": "$"})
-    print("\nI %d TITOLI DELLA SETTIMANA - %s  (dati fino al %s, universo %d titoli, prezzi in %s)"
-          % (r["top"], mk["nome"].upper(), r["asof"], r["universo"], mk["valuta"]))
+def print_report(r, style_id=DEFAULT_STYLE, hold=DEFAULT_HOLD):
+    mk = r["mercato"]
+    key = vkey(style_id, hold)
+    m = r["models"][key]
+    sty = style(style_id)
+    print("\nTITOLI CONSIGLIATI - %s, in ordine di probabilità di riuscita" % mk["nome"].upper())
+    print("Dati fino al %s · %d titoli · %d candidati oggi (sopra la media a 200 giorni) · prezzi in %s" % (
+        r["asof"], r["universo"], len(r["candidates"]), mk["valuta"]))
     if r["regime"]:
         g = r["regime"]
-        print("Indice %s: %s la media a 200 giorni (%s)" % (mk["indice_nome"],
-            "sopra" if g["spy_sopra_media200"] else "SOTTO", f_pct(g["spy_vs_media200"])))
-    print("Regola: entrata con limite a chiusura + %g ATR, stop %g ATR, target %gR, uscita dopo %d sedute.\n"
-          % (LIMIT_ATR, ks, rr, hold))
+        print("Indice %s: %s la media a 200 giorni (%s)" % (
+            mk["indice_nome"], "sopra" if g["sopra_media200"] else "SOTTO", f_pct(g["vs_media200"])))
+    print("Stile %s, durata %s. Riuscita = l'operazione chiude in guadagno, costi inclusi." % (sty["nome"], HOLD_NAMES[hold]))
+    print("Probabilità per quinto di forza, dal più debole al più forte: %s\n" % " · ".join(f_pct(p, 0, False) for p in m["p"]))
     num = lambda x: "%9s" % "-" if x is None else "%9.2f" % x
-    print("  #  %-6s %9s %9s %9s %9s  %-10s %8s %8s %10s" % (
-        "titolo", "chiusura", "limite", "stop", "target", "esci il", "prob. +", "tipico", "casi"))
-    key = rule_key(*DEFAULT_RULE)
-    for n, p in enumerate(r["picks"], 1):
-        pl = plan_for(p, r)
-        st = p["rule"][key]
-        print(" %2d  %-6s %9.2f %9.2f %s %s  %-10s %8s %8s %10s" % (
-            n, p["symbol"].replace(".MI", ""), p["price"], pl["limite"], num(pl["stop"]), num(pl["target"]),
-            pl["uscita_giorno"],
-            f_pct(st.get("p_gain"), 0, False), f_pct(st.get("median")),
-            "%d (%d)" % (st.get("n", 0), st.get("indipendenti", 0))))
-    pool = r["pooled"][key]
-    print("\n  Entrata: seduta del %s. prob. + = quante volte la stessa regola, in condizioni simili," % r["future_days"][0])
-    print("  ha chiuso in guadagno (costi inclusi). Su tutte le scelte passate dell'algoritmo: %s in guadagno,"
-          % f_pct(pool.get("p_gain"), 0, False))
-    print("  tipico %s, target %s / stop %s / a tempo %s." % (
-        f_pct(pool.get("median")), f_pct(pool.get("p_target"), 0, False), f_pct(pool.get("p_stop"), 0, False),
-        f_pct(pool.get("p_tempo"), 0, False)))
-
-    b = r["backtest"]["metrics"]
-    print("\nVERIFICA (%s - %s, %d settimane): annuo %s contro paniere %s e " % (
-        r["backtest"]["da"], r["backtest"]["a"], b["settimane"], f_pct(b["strategia"]["cagr"]),
-        f_pct(b["paniere"]["cagr"])) + "%s %s" % (mk["indice_nome"], f_pct(b["spy"]["cagr"])))
-    if b.get("t_eccesso") is not None:
-        t = b["t_eccesso"]
-        print("  vantaggio sul paniere %s l'anno, t = %.2f: %s" % (
-            f_pct(b["eccesso_annuo"]), t, "significativo (t > 2)" if t > 2 else "NON distinguibile dal caso"))
-    print("\nFrequenze del passato, non previsioni. Bias di sopravvivenza. Non è consulenza finanziaria.")
+    print("  #  %-6s %7s %9s %9s %9s %9s  %-10s %9s" % (
+        "titolo", "prob.", "chiusura", "compra<=", "protez.", "obiett.", "vendi il", "tipico"))
+    for n, c in enumerate(r["candidates"][:r["top"]], 1):
+        pl = plan_for(c, r, style_id, hold)
+        g = m["gruppi"][c["g"]]
+        print(" %2d  %-6s %7s %9.2f %9.2f %s %s  %-10s %9s" % (
+            n, c["symbol"].replace(".MI", ""), f_pct(m["p"][c["g"]], 0, False), c["price"], pl["limite"],
+            num(pl["stop"]), num(pl["target"]), pl["uscita_giorno"], f_pct(g.get("median"))))
+    print("\n  La regola conta più del titolo. Probabilità di riuscita di tutti i candidati, per regola:")
+    for h in HOLDS:
+        print("   %-12s %s" % (HOLD_NAMES[h], "  ".join("%s %s" % (s["nome"], f_pct(r["models"][vkey(s["id"], h)]["base"], 0, False))
+                                                     for s in STYLES)))
+    o = m.get("oos")
+    if o:
+        print("\nVERIFICA WALK-FORWARD (%s - %s, %d settimane mai viste dalla stima):" % (o["da"], o["a"], o["settimane"]))
+        for b in o["calibrazione"]:
+            print("  quinto %d: stimava %s -> è andata bene il %s (%d operazioni)" % (
+                b["gruppo"] + 1, f_pct(b["stimata"], 0, False), f_pct(b["osservata"], 0, False), b["n"]))
+        for g, lab in (("top", "i primi 10"), ("tutti", "tutti i candidati"), ("bottom", "gli ultimi 10")):
+            print("  %-18s %s in guadagno, media %s" % (lab, f_pct(o[g]["p_gain"], 0, False), f_pct(o[g]["mean"], 2)))
+        if o["t"] is not None:
+            print("  vantaggio dei primi 10 sui candidati: t = %.2f (%s)" % (
+                o["t"], "significativo" if o["t"] > 2 else "non distinguibile dal caso"))
+    print("\nStime dal passato, non previsioni. Bias di sopravvivenza. Non è consulenza finanziaria.")
 
 
 # ------------------------------------------------------------------ main
@@ -732,6 +847,8 @@ def main(argv=None):
     ap.add_argument("--tickers", help="lista separata da virgole al posto dell'universo del mercato")
     ap.add_argument("--asof", help="usa solo i dati fino a questa data (YYYY-MM-DD)")
     ap.add_argument("--top", type=int, default=TOP, help="quanti titoli (default 10)")
+    ap.add_argument("--stile", choices=[s["id"] for s in STYLES], default=DEFAULT_STYLE)
+    ap.add_argument("--durata", type=int, choices=HOLDS, default=DEFAULT_HOLD, help="sedute: 10, 21 o 63")
     ap.add_argument("--costo", type=float, default=None,
                     help="costo in %% per operazione, andata e ritorno (default 0,1 USA, 0,2 Italia)")
     ap.add_argument("--workers", type=int, default=4)
@@ -742,7 +859,7 @@ def main(argv=None):
     except FetchError as e:
         print("[settimana] " + str(e))
         return 1
-    print_report(r)
+    print_report(r, a.stile, a.durata)
     os.makedirs(TRADER, exist_ok=True)
     name = "settimana.json" if a.mercato == "usa" else "settimana-%s.json" % a.mercato
     with open(os.path.join(TRADER, name), "w", encoding="utf-8") as fh:

@@ -5,13 +5,13 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <style>
-/* Layout: barra fissa con le schede; una colonna da 1120px; le righe-tabella diventano schede sotto i 760px */
+/* Layout: barra fissa con le sezioni; una colonna da 1040px; una scheda per titolo con tre blocchi (compra, vendi, quante) che si impilano su telefono */
 :root{
   --bg:#f3f5f8;--surface:#ffffff;--surface2:#edf0f5;--ink:#10151d;--ink2:#465062;--muted:#737d8f;--line:#e0e4eb;
-  --accent:#2453c9;--accent-ink:#ffffff;--accent-soft:#e5ecfb;
+  --accent:#2453c9;--accent-ink:#ffffff;--accent-soft:#e7eefc;
   --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;
   --good:#0ca30c;--crit:#d03b3b;--warn:#fab219;--neutral:#c3c2b7;
-  --good-ink:#0a7a0a;--crit-ink:#b42c2c;--warn-soft:#fff6de;
+  --good-ink:#0a7a0a;--crit-ink:#b42c2c;--warn-soft:#fff6de;--good-soft:#e8f6e8;--crit-soft:#fbeaea;
   --band-out:#d3e5fb;--band-in:#8db9ef;--median:#184f95;
   --shadow:0 1px 2px rgba(16,21,29,.05),0 4px 16px rgba(16,21,29,.04);
   --f-body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -21,113 +21,110 @@
   --bg:#0d1015;--surface:#151920;--surface2:#1c212a;--ink:#eef0f3;--ink2:#b5bcc8;--muted:#818b9a;--line:#262c37;
   --accent:#6f95f2;--accent-ink:#0d1015;--accent-soft:#1b2640;
   --s1:#3987e5;--s2:#d95926;--s3:#199e70;--neutral:#55575c;
-  --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;
+  --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;--good-soft:#14281a;--crit-soft:#301a1a;
   --band-out:#123a6b;--band-in:#1f5fae;--median:#c4dcf8;--shadow:none}}
 :root[data-theme="dark"]{color-scheme:dark;
   --bg:#0d1015;--surface:#151920;--surface2:#1c212a;--ink:#eef0f3;--ink2:#b5bcc8;--muted:#818b9a;--line:#262c37;
   --accent:#6f95f2;--accent-ink:#0d1015;--accent-soft:#1b2640;
   --s1:#3987e5;--s2:#d95926;--s3:#199e70;--neutral:#55575c;
-  --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;
+  --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;--good-soft:#14281a;--crit-soft:#301a1a;
   --band-out:#123a6b;--band-in:#1f5fae;--median:#c4dcf8;--shadow:none}
 *{box-sizing:border-box}
 [hidden]{display:none!important}
 html,body{background:var(--bg)}
-body{color:var(--ink);font:15px/1.5 var(--f-body);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+body{color:var(--ink);font:15px/1.55 var(--f-body);font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--surface)}
-.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
-h1,h2,h3{font-family:var(--f-head);letter-spacing:-.01em;text-wrap:balance;margin:0}
-h2{font-size:20px}h3{font-size:16px}
+.wrap{max-width:1040px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+h1,h2,h3,h4{font-family:var(--f-head);letter-spacing:-.01em;text-wrap:balance;margin:0}
+h1{font-size:28px;line-height:1.2}h2{font-size:20px}h3{font-size:16px}h4{font-size:14px}
 p{margin:0}
 .sub{color:var(--ink2)}
 .note{color:var(--muted);font-size:13px}
+.pos{color:var(--good-ink)}.neg{color:var(--crit-ink)}
 button{font:inherit;color:inherit}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
 
 /* barra */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--surface);border-bottom:1px solid var(--line)}
-.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;padding-block:10px 0}
+.top .wrap{display:flex;flex-wrap:wrap;align-items:center;gap:4px 18px;padding-block:10px 0}
 .brand{display:flex;align-items:baseline;gap:10px;flex:1 1 auto;min-width:0}
 .brand b{font-family:var(--f-head);font-size:21px;letter-spacing:-.02em}
 .brand span{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 nav.tabs{display:flex;gap:2px;width:100%;overflow-x:auto;scrollbar-width:none}
 nav.tabs a{padding:9px 12px 10px;color:var(--ink2);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
 nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
-main{padding-block:20px 56px}
-.view{display:grid;gap:16px}
+main{padding-block:22px 56px}
+.view{display:grid;gap:18px}
+.view > *{min-width:0}
 
 /* blocchi */
-.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px 20px;box-shadow:var(--shadow);min-width:0}
-.card > h2 + .sub,.card > h3 + .sub{margin-top:2px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.card > h2 + .sub,.card > h3 + .sub{margin-top:4px}
 .alert{display:flex;gap:12px;align-items:flex-start;background:var(--warn-soft);border:1px solid var(--line);border-radius:14px;padding:12px 16px}
 .alert .ic{flex:none;width:22px;height:22px;border-radius:50%;background:var(--warn);color:#10151d;display:grid;place-items:center;font-weight:700;font-size:13px;margin-top:1px}
 .alert p{font-size:14px;color:var(--ink2)}
 .alert b{color:var(--ink)}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:10px;counter-reset:s}
+.steps li{list-style:none;display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--ink2)}
+.steps li::before{counter-increment:s;content:counter(s);flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:13px}
+.steps b{color:var(--ink)}
+ol.steps{margin:0;padding:0}
 
-/* controlli della regola */
-.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(230px,100%),1fr));gap:14px 22px;margin-top:12px}
-.ctl.acct{grid-column:1/-1}
-.ctl.acct .money{max-width:560px}
-.ctl label,.ctl .lab{display:block;font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
-.seg{display:flex;background:var(--surface2);border-radius:10px;padding:3px;gap:3px}
-.seg button{flex:1;border:0;background:transparent;border-radius:8px;padding:7px 6px;cursor:pointer;font-size:13.5px;color:var(--ink2);white-space:nowrap}
-.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
-.seg button:disabled{opacity:.35;cursor:not-allowed}
-.money{display:flex;gap:8px}
-.money input{width:100%;min-width:0;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 10px;font:inherit}
-.money .f{flex:1;min-width:0}
-.money .f small{display:block;font-size:11.5px;color:var(--muted);margin-bottom:3px}
+/* scelta della regola */
+.lab{display:block;font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.opts{display:grid;gap:8px}
+.opts.h{grid-template-columns:repeat(3,minmax(0,1fr))}
+.opts.s{grid-template-columns:repeat(4,minmax(0,1fr))}
+.opt{display:flex;flex-direction:column;gap:2px;text-align:left;border:1.5px solid var(--line);background:var(--surface);border-radius:12px;padding:10px 12px;cursor:pointer;min-width:0}
+.opt:hover{border-color:var(--muted)}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.opt .n{font-weight:600}
+.opt .d{font-size:12.5px;color:var(--ink2)}
+.opt .p{font-family:var(--f-head);font-weight:600;font-size:18px;margin-top:4px}
+.opt .p small{font-family:var(--f-body);font-weight:400;font-size:12px;color:var(--muted)}
+.choose{display:grid;gap:16px}
+.outcome{border-radius:12px;background:var(--surface2);padding:12px 14px;font-size:14.5px;color:var(--ink2)}
+.outcome b{color:var(--ink)}
+.acct{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:end}
+.acct .f{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
+.acct input{width:130px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:7px 10px;font:inherit}
 
-/* sintesi */
-.sum{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
-.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
-.stat .k{font-size:12.5px;color:var(--ink2)}
-.stat .v{font-family:var(--f-head);font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
-.stat .d{font-size:12px;color:var(--muted)}
-
-/* elenco */
-.list{background:var(--surface);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
-.lh,.row{display:grid;grid-template-columns:26px minmax(150px,1.5fr) repeat(4,minmax(78px,.8fr)) minmax(88px,.9fr) minmax(130px,1.2fr) 72px 18px;gap:10px;align-items:center;padding:10px 16px}
-.lh{font-size:11.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--line);background:var(--surface2)}
-.lh span:nth-child(n+3),.row .n{text-align:right}
-.row{border-top:1px solid var(--line);cursor:pointer;width:100%;text-align:left;background:transparent;border-left:0;border-right:0;border-bottom:0}
-.lh + .row{border-top:0}
-.row:hover{background:var(--surface2)}
-.row[aria-expanded="true"]{background:var(--accent-soft)}
-.row .rk{color:var(--muted);font-weight:600}
-.row .tk{font-family:var(--f-head);font-weight:700;font-size:16.5px}
-.row .nm{display:block;color:var(--ink2);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row .sm{display:block;font-size:11.5px;color:var(--muted)}
-.row .chev{color:var(--muted);transition:transform .15s}
-.row[aria-expanded="true"] .chev{transform:rotate(90deg)}
-.row .lbl{display:none}
-.pos{color:var(--good-ink)}.neg{color:var(--crit-ink)}
-.prob{display:flex;align-items:center;gap:8px;justify-content:flex-end}
-.meter{position:relative;flex:1;max-width:84px;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
+/* scheda titolo */
+.picks{display:grid;gap:12px}
+.pick{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:16px 18px;display:grid;gap:12px;min-width:0}
+.pick .hd{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.pick .rk{flex:none;width:30px;height:30px;border-radius:50%;background:var(--surface2);display:grid;place-items:center;font-weight:700;color:var(--ink2)}
+.pick .id{flex:1 1 160px;min-width:0}
+.pick .tk{font-family:var(--f-head);font-weight:700;font-size:20px;margin-right:8px}
+.pick .nm{color:var(--ink2);font-size:13.5px}
+.pick .pr{display:flex;align-items:center;gap:10px}
+.pick .pv{font-family:var(--f-head);font-weight:700;font-size:26px;line-height:1}
+.pick .pl{font-size:12px;color:var(--muted);line-height:1.3}
+.meter{position:relative;width:96px;height:8px;border-radius:4px;background:var(--surface2);overflow:hidden}
 .meter i{position:absolute;inset:0 auto 0 0;background:var(--s1);border-radius:4px}
 .meter::after{content:"";position:absolute;left:50%;top:-1px;bottom:-1px;width:1px;background:var(--muted)}
-.chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:1px 8px;white-space:nowrap;color:var(--ink2)}
-.chip::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--muted)}
-.chip.alta::before{background:var(--good)}.chip.media::before{background:var(--warn)}.chip.bassa::before{background:var(--crit)}
-.detail{border-top:1px solid var(--line);padding:18px 16px 22px;background:var(--surface);display:grid;gap:18px;min-width:0}
-.detail > *{min-width:0}
-.plan{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:14px}
-.step{border:1px solid var(--line);border-radius:12px;padding:14px 16px;min-width:0}
-.step .h{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:6px}
-.step .dot{width:10px;height:10px;border-radius:3px;flex:none}
-.step p{color:var(--ink2);font-size:14px}
-.step p + p{margin-top:6px}
-.step b{color:var(--ink)}
-.entry-in{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;font-size:13px;color:var(--ink2)}
-.entry-in input{width:110px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:5px 8px;font:inherit}
-.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(320px,100%),1fr));gap:18px}
+.trio{display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:10px}
+.trio > div{border-radius:12px;padding:10px 12px;background:var(--surface2);min-width:0}
+.trio .k{display:block;font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);margin-bottom:2px}
+.trio .big{font-family:var(--f-head);font-weight:600;font-size:18px}
+.trio small{display:block;color:var(--ink2);font-size:12.5px}
+.trio .sell{display:grid;gap:2px;font-size:14px}
+.why{font-size:14px;color:var(--ink2)}
+.why b{color:var(--ink)}
+.more{justify-self:start;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 14px;cursor:pointer;font-size:13.5px;color:var(--ink2)}
+.more[aria-expanded="true"]{background:var(--accent-soft);color:var(--ink)}
+.more-body{display:grid;gap:16px;border-top:1px solid var(--line);padding-top:14px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:18px}
 .two > *{min-width:0}
+.entry-in{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--ink2)}
+.entry-in input{width:110px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:5px 8px;font:inherit}
+.bar{display:flex;gap:2px;height:14px}
+.bar i{display:block;height:100%;border-radius:3px;min-width:2px}
 .oc{display:grid;gap:12px;margin-top:10px}
-.oc .r{display:grid;grid-template-columns:minmax(120px,170px) 1fr 70px;gap:10px;align-items:center}
+.oc .r{display:grid;grid-template-columns:minmax(110px,160px) 1fr 64px;gap:10px;align-items:center}
 .oc .r .t{font-size:13px;color:var(--ink2)}
 .oc .r .t small{display:block;color:var(--muted);font-size:11.5px}
 .oc .r .g{font-family:var(--f-head);font-weight:600;font-size:18px;text-align:right}
-.bar{display:flex;gap:2px;height:14px}
-.bar i{display:block;height:100%;border-radius:3px;min-width:2px}
 .legend{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;color:var(--ink2);margin-top:8px}
 .legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
 .legend i.ln{height:2px;border-radius:1px;vertical-align:3px}
@@ -141,34 +138,51 @@ main{padding-block:20px 56px}
 .tip .r{display:flex;justify-content:space-between;gap:14px;color:var(--ink2)}
 .tip .r span:last-child{color:var(--ink)}
 
+/* verifica: confronto delle regole */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:16px;margin-top:12px}
+.rg h4{margin-bottom:6px;color:var(--ink2)}
+.rb{display:grid;grid-template-columns:110px 1fr 44px;gap:8px;align-items:center;width:100%;border:1px solid transparent;background:transparent;border-radius:10px;padding:6px 8px;cursor:pointer;text-align:left}
+.rb:hover{background:var(--surface2)}
+.rb[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft)}
+.rb .rn{font-size:13.5px}
+.rb .rv{font-weight:600;text-align:right}
+.rb .rx{grid-column:2/-1;font-size:12px;color:var(--muted);margin-top:-4px}
+.track{position:relative;height:10px;border-radius:5px;background:var(--surface2)}
+.track i{position:absolute;inset:0 auto 0 0;border-radius:5px;background:var(--s1)}
+.track::after{content:"";position:absolute;left:50%;top:-2px;bottom:-2px;width:1px;background:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(180px,100%),1fr));gap:10px;margin-top:12px}
+.stat{background:var(--surface2);border-radius:12px;padding:12px 14px}
+.stat .k{font-size:12.5px;color:var(--ink2)}
+.stat .v{font-family:var(--f-head);font-size:26px;font-weight:600;letter-spacing:-.02em;line-height:1.2}
+.stat .d{font-size:12px;color:var(--muted)}
+.ctlrow{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:end}
+.seg{display:inline-flex;flex-wrap:wrap;max-width:100%;background:var(--surface2);border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:transparent;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13.5px;color:var(--ink2);white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.12)}
+
 /* tabelle */
 .scroll{overflow-x:auto;min-width:0}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
-th:first-child,td:first-child{text-align:left}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
 th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
-tr.cur td{background:var(--accent-soft);font-weight:600}
-details summary{cursor:pointer;color:var(--ink2);font-size:13.5px;margin-top:10px}
+details > summary{cursor:pointer;color:var(--ink2);font-size:14px}
+details[open] > summary{margin-bottom:10px}
 .empty{text-align:center;padding:40px 16px;color:var(--ink2)}
 .empty code{background:var(--surface2);padding:2px 6px;border-radius:6px}
 .prose{max-width:68ch;display:grid;gap:10px;color:var(--ink2)}
 .prose b{color:var(--ink)}
 .prose h3{color:var(--ink);margin-top:8px}
-footer{color:var(--muted);font-size:12.5px;margin-top:8px}
+footer{color:var(--muted);font-size:12.5px}
 
 @media (max-width:760px){
-  .lh{display:none}
-  .row{grid-template-columns:1fr 1fr;gap:8px 14px;padding:14px 16px}
-  .row > .who{grid-column:1/-1;display:flex;align-items:baseline;gap:8px;min-width:0}
-  .row > .who .nm{flex:1;min-width:0}
-  .row .rk{display:none}
-  .row .chev{display:none}
-  .row .lbl{display:block;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-  .row .n{text-align:left}
-  .row .prob{justify-content:flex-start}
+  .opts.s{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .trio{grid-template-columns:1fr}
   .oc .r{grid-template-columns:1fr 60px}
   .oc .r .t{grid-column:1/-1}
+  h1{font-size:24px}
 }
+@media (max-width:420px){.opts.h .opt .d{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
@@ -180,7 +194,7 @@ footer{color:var(--muted);font-size:12.5px;margin-top:8px}
       <a href="#italia" data-v="italia" id="nav-it">Titoli italiani</a>
       <a href="#verifica" data-v="verifica">Verifica</a>
       <a href="#daytrade" data-v="daytrade">Day trade</a>
-      <a href="#metodo" data-v="metodo">Metodo</a>
+      <a href="#metodo" data-v="metodo">Come funziona</a>
     </nav>
   </div>
 </header>
@@ -196,38 +210,44 @@ footer{color:var(--muted);font-size:12.5px;margin-top:8px}
 <script>
 "use strict";
 const D = JSON.parse(document.getElementById('data').textContent);
-let mkt = 'usa';
-let S = D.mercati ? (D.mercati.usa || D.mercati.italia) : D.settimana;
-if (D.mercati && !D.mercati.usa) mkt = 'italia';
-function setMkt(m) { if (D.mercati && D.mercati[m]) { mkt = m; S = D.mercati[m]; } }
+let mkt = D.mercati.usa ? 'usa' : 'italia';
+let S = D.mercati[mkt];
+function setMkt(m) { if (D.mercati[m]) { mkt = m; S = D.mercati[m]; } }
 const $ = (s, r = document) => r.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const nf = (x, d = 2) => Number(x).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
 const pc = (x, d = 1, sign = true) => { if (x == null) return 'n/d'; let v = x * 100; if (Math.abs(v) < 0.5 * Math.pow(10, -d)) v = 0; return (sign && v > 0 ? '+' : '') + nf(v, d) + ' %'; };
+const p100 = x => x == null ? 'n/d' : Math.round(x * 100) + ' %';
 const usd = x => x == null ? '–' : nf(x, 2) + ' $';
-const money = x => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + (S && S.mercato ? S.mercato.valuta : '$');
+const money = x => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + S.mercato.valuta;
 const tk = s => String(s).replace(/\.MI$/, '');
 const dt = (s, o) => new Date(s + 'T12:00:00Z').toLocaleDateString('it-IT', Object.assign({timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'}, o || {}));
 const dtl = s => dt(s, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-const cost = () => S ? S.backtest.costo_andata_ritorno : 0.001;
 
 /* ---------------- stato (ricordato solo in questo browser) ---------------- */
-const DEF = S ? {ks: S.rules.default[0], rr: S.rules.default[1], hold: S.rules.default[2]} : {ks: 3, rr: 2, hold: 21};
-const st = Object.assign({ks: DEF.ks, rr: DEF.rr, hold: DEF.hold, cap: 10000, risk: 100, maxpct: 15, trend: false, open: null, entry: {}}, load());
-function load() { try { return JSON.parse(localStorage.getItem('finanza-app') || '{}'); } catch (e) { return {}; } }
-function save() { try { localStorage.setItem('finanza-app', JSON.stringify({ks: st.ks, rr: st.rr, hold: st.hold, cap: st.cap, risk: st.risk, maxpct: st.maxpct, trend: st.trend})); } catch (e) {} }
-const key = (ks = st.ks, rr = st.rr, h = st.hold) => `${ks}|${rr}|${h}`;
-const holdName = h => ({10: '2 settimane', 21: '1 mese', 63: '3 mesi'})[h] || h + ' sedute';
-const stopName = k => k ? nf(k, k % 1 ? 1 : 0) + ' ATR' : 'nessuno';
-const tgtName = r => r ? nf(r, r % 1 ? 1 : 0) + 'R' : 'nessuno';
+const DEF = S.rules.default;
+const st = Object.assign({style: DEF.style, hold: DEF.hold, cap: 10000, risk: 100, maxpct: 15, trend: false, open: {}, entry: {}, vmkt: null}, load());
+st.open = {}; st.entry = {};
+function load() { try { const x = JSON.parse(localStorage.getItem('finanza-app-v3') || '{}'); return x && typeof x === 'object' ? x : {}; } catch (e) { return {}; } }
+function save() { try { localStorage.setItem('finanza-app-v3', JSON.stringify({style: st.style, hold: st.hold, cap: st.cap, risk: st.risk, maxpct: st.maxpct, trend: st.trend})); } catch (e) {} }
+const key = (s = st.style, h = st.hold) => `${s}|${h}`;
+const model = (s, h) => S.models[key(s, h)];
+const styleOf = id => S.rules.styles.find(s => s.id === id);
+const holdName = h => S.rules.hold_names[h];
+const prob = c => model().p[c.g];
+const GROUP_NAMES = ['tra i più deboli', 'sotto la media', 'nella media', 'sopra la media', 'tra i più forti'];
+const GROUP_SHORT = ['Più deboli', 'Sotto media', 'Nella media', 'Sopra media', 'Più forti'];
+if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
+if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
-/* ---------------- routing ---------------- */
+/* ---------------- sezioni ---------------- */
 const VIEWS = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo'];
 let view = null;
 function route() {
   let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'consigli';
-  if (v === 'italia' && !(D.mercati && D.mercati.italia)) v = 'consigli';
+  if (v === 'italia' && !D.mercati.italia) v = 'consigli';
+  if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
   ['consigli', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
@@ -236,7 +256,7 @@ function route() {
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
   else if (sec === 'daytrade') renderDay();
   else renderMetodo();
-  if (S && S.mercato) $('#meta').textContent = `Dati al ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
+  $('#meta').textContent = `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
 function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
 window.addEventListener('hashchange', route);
@@ -293,10 +313,10 @@ function priceChart(box, p, lv) {
   const path = arr => { let d = '', pen = false; arr.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); pen = true; }); return d; };
   el('path', {d: path(C.sma), fill: 'none', stroke: css('--muted'), 'stroke-width': 1.5, 'stroke-dasharray': '5 4'}, svg);
   el('path', {d: path(C.close), fill: 'none', stroke: css('--s1'), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg);
-  const lines = [[lv.target, 'Target ' + nf(lv.target), '--good', ''], [lv.limit, 'Limite ' + nf(lv.limit), '--accent', '4 4'], [lv.stop, 'Stop ' + nf(lv.stop), '--crit', '']].filter(a => a[0] != null);
+  const lines = [[lv.target, 'Obiettivo ' + nf(lv.target), '--good', ''], [lv.limit, 'Prezzo max ' + nf(lv.limit), '--accent', '4 4'], [lv.stop, 'Protezione ' + nf(lv.stop), '--crit', '']].filter(a => a[0] != null);
   lines.forEach(([v, lab, c, dash], k) => {
     el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css(c), 'stroke-width': 1.5, 'stroke-dasharray': dash}, svg);
-    halo(svg, m.l + 6, (lab.startsWith('Stop') ? y(v) + 15 : y(v) - 6), lab, {'text-anchor': 'start'});
+    halo(svg, m.l + 6, (lab.startsWith('Protezione') ? y(v) + 15 : y(v) - 6), lab, {'text-anchor': 'start'});
   });
   const dot = el('circle', {r: 4, fill: css('--s1'), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg);
   el('circle', {cx: x(n - 1), cy: y(C.close[n - 1]), r: 4, fill: css('--s1'), stroke: css('--surface'), 'stroke-width': 2}, svg);
@@ -323,285 +343,268 @@ function fanChart(box, bands, labels, lv, label, timeFmt) {
   el('path', {d: area(0, 4), fill: css('--band-out')}, svg);
   el('path', {d: area(1, 3), fill: css('--band-in')}, svg);
   el('path', {d: 'M' + bands.map((r, i) => x(i) + ',' + y(r[2])).join('L'), fill: 'none', stroke: css('--median'), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg);
-  [[lv.target, 'Target ', '--good', ''], [lv.entry, 'Entrata ', '--muted', '4 4'], [lv.stop, 'Stop ', '--crit', '']].forEach(([v, lab, c, dash]) => {
+  [[lv.target, 'Obiettivo ', '--good', ''], [lv.entry, 'Entrata ', '--muted', '4 4'], [lv.stop, 'Protezione ', '--crit', '']].forEach(([v, lab, c, dash]) => {
     if (v == null || !isFinite(v)) return;
     el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css(c), 'stroke-width': 2, 'stroke-dasharray': dash}, svg);
-    halo(svg, W - m.r, lab === 'Stop ' ? y(v) + 15 : y(v) - 6, lab + nf(v));
+    halo(svg, W - m.r, lab === 'Protezione ' ? y(v) + 15 : y(v) - 6, lab + nf(v));
   });
   const dot = el('circle', {r: 4.5, fill: css('--median'), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg);
   crosshair(svg, box, m, W, H, n, x, (i, on) => {
     if (!on) { dot.setAttribute('visibility', 'hidden'); return ''; }
     const b = bands[i]; dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(b[2])); dot.setAttribute('visibility', 'visible');
-    return `<div class="t">${timeFmt.tip(i)}</div>` + [['95° percentile', b[4]], ['75°', b[3]], ['Mediana', b[2]], ['25°', b[1]], ['5°', b[0]]].map(([k, v]) => `<div class="r"><span>${k}</span><span>${nf(v)}</span></div>`).join('');
+    return `<div class="t">${timeFmt.tip(i)}</div>` + [['1 caso su 20 sopra', b[4]], ['1 su 4 sopra', b[3]], ['Caso centrale', b[2]], ['1 su 4 sotto', b[1]], ['1 su 20 sotto', b[0]]].map(([k, v]) => `<div class="r"><span>${k}</span><span>${nf(v)}</span></div>`).join('');
   });
 }
 
-/* Barre degli esiti (target / a tempo / stop) in HTML */
+
+
+/* Barre degli esiti (obiettivo / data / protezione) in HTML */
 function outcomeRow(label, small, s) {
   if (!s || !s.n) return `<div class="r"><div class="t">${label}<small>${small}</small></div><div class="note">Nessun caso</div><div class="g">n/d</div></div>`;
-  const seg = (p, c, t) => p > 0 ? `<i style="width:${(p * 100).toFixed(1)}%;background:var(${c})" title="${t}: ${pc(p, 0, false)}"></i>` : '';
+  const sg = (p, c, t) => p > 0 ? `<i style="width:${(p * 100).toFixed(1)}%;background:var(${c})" title="${t}: ${p100(p)}"></i>` : '';
   return `<div class="r"><div class="t">${label}<small>${small}</small></div>
-    <div><div class="bar" role="img" aria-label="target ${pc(s.p_target, 0, false)}, a tempo ${pc(s.p_tempo, 0, false)}, stop ${pc(s.p_stop, 0, false)}">${seg(s.p_target, '--good', 'Target')}${seg(s.p_tempo, '--neutral', 'Uscita alla data')}${seg(s.p_stop, '--crit', 'Stop')}</div>
-    <div class="note" style="margin-top:3px">tipico ${pc(s.median)} · 8 casi su 10 tra ${pc(s.p10, 0)} e ${pc(s.p90, 0)}</div></div>
-    <div class="g" title="Probabilità di guadagno">${pc(s.p_gain, 0, false)}</div></div>`;
+    <div><div class="bar" role="img" aria-label="obiettivo ${p100(s.p_target)}, alla data ${p100(s.p_tempo)}, protezione ${p100(s.p_stop)}">${sg(s.p_target, '--good', 'Obiettivo raggiunto')}${sg(s.p_tempo, '--neutral', 'Venduto alla data')}${sg(s.p_stop, '--crit', 'Protezione scattata')}</div>
+    <div class="note" style="margin-top:3px">di solito ${pc(s.median)} · 1 volta su 10 sotto ${pc(s.p10, 0)}, 1 su 10 sopra ${pc(s.p90, 0)}</div></div>
+    <div class="g" title="In guadagno">${p100(s.p_gain)}</div></div>`;
 }
-const ocLegend = `<div class="legend"><span><i style="background:var(--good)"></i>Target raggiunto</span><span><i style="background:var(--neutral)"></i>Uscita alla data</span><span><i style="background:var(--crit)"></i>Stop scattato</span><span>Numero a destra = probabilità di guadagno</span></div>`;
+const ocLegend = `<div class="legend"><span><i style="background:var(--good)"></i>Obiettivo raggiunto</span><span><i style="background:var(--neutral)"></i>Venduto alla data</span><span><i style="background:var(--crit)"></i>Protezione scattata</span><span>A destra: quante volte in guadagno</span></div>`;
 
-/* ---------------- Macchina del Tempo (nel browser) ---------------- */
+/* ---------------- simulazione nel browser (Macchina del Tempo) ---------------- */
 function rng(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
 const mcCache = {};
-function timeMachine(p, entry, lv, trend) {
-  const ck = [p.symbol, key(), entry.toFixed(4), trend].join('/');
+function timeMachine(c, lv, trend) {
+  const ck = [mkt, c.symbol, key(), lv.entry.toFixed(4), trend].join('/');
   if (mcCache[ck]) return mcCache[ck];
-  const B = p.bars, nb = B.length, hold = st.hold, N = 10000, rand = rng(19);
+  const B = S.details[c.symbol].bars, nb = B.length, hold = st.hold, N = 10000, rand = rng(19);
   let adj = 1;
   if (!trend) { let mu = 0; for (const b of B) mu += Math.log(b[3]); adj = Math.exp(-mu / nb); }
-  const stop = lv.stop == null ? -Infinity : lv.stop, target = lv.target == null ? Infinity : lv.target;
+  const stop = lv.stop == null ? -Infinity : lv.stop, target = lv.target == null ? Infinity : lv.target, entry = lv.entry;
   const closes = Array.from({length: hold}, () => new Float64Array(N));
   const rets = new Float64Array(N); let nT = 0, nS = 0, nD = 0;
   for (let n = 0; n < N; n++) {
     let prev = entry, done = false, ret = 0;
     for (let d = 0; d < hold; d++) {
       const b = B[(rand() * nb) | 0];
-      const o = prev * b[0] * adj, h = prev * b[1] * adj, l = prev * b[2] * adj, c = prev * b[3] * adj;
-      closes[d][n] = c;
+      const o = prev * b[0] * adj, h = prev * b[1] * adj, l = prev * b[2] * adj, cl = prev * b[3] * adj;
+      closes[d][n] = cl;
       if (!done) {
         if (d > 0 && o <= stop) { done = true; ret = o / entry - 1; nS++; }
         else if (d > 0 && o >= target) { done = true; ret = o / entry - 1; nT++; }
         else if (l <= stop) { done = true; ret = stop / entry - 1; nS++; }
         else if (h >= target) { done = true; ret = target / entry - 1; nT++; }
-        else if (d === hold - 1) { done = true; ret = c / entry - 1; nD++; }
+        else if (d === hold - 1) { done = true; ret = cl / entry - 1; nD++; }
       }
-      prev = c;
+      prev = cl;
     }
-    rets[n] = ret - cost();
+    rets[n] = ret - S.costo;
   }
   const q = (arr, f) => arr[Math.min(arr.length - 1, Math.floor(f * (arr.length - 1)))];
   const bands = [[entry, entry, entry, entry, entry]];
-  for (const c of closes) { c.sort(); bands.push([q(c, .05), q(c, .25), q(c, .5), q(c, .75), q(c, .95)]); }
-  const r = rets.slice().sort();
-  let g = 0; for (const v of rets) if (v > 0) g++;
+  for (const cl of closes) { cl.sort(); bands.push([q(cl, .05), q(cl, .25), q(cl, .5), q(cl, .75), q(cl, .95)]); }
+  const r = rets.slice().sort(); let g = 0; for (const v of rets) if (v > 0) g++;
   return (mcCache[ck] = {n: N, p_target: nT / N, p_stop: nS / N, p_tempo: nD / N, p_gain: g / N, median: q(r, .5), p10: q(r, .1), p90: q(r, .9), bands});
 }
 
-/* ---------------- Consigli ---------------- */
-function levels(p, entry) {
-  const a = p.atr;
-  return {entry, limit: p.price + S.rules.limit_atr * a, stop: st.ks ? entry - st.ks * a : null, target: st.ks && st.rr ? entry + st.rr * st.ks * a : null,
-          entryDay: S.future_days[0], exitDay: S.future_days[st.hold - 1]};
+/* ---------------- titoli consigliati ---------------- */
+function levels(c, entry) {
+  const sty = styleOf(st.style), a = c.atr;
+  return {entry, limit: c.price + S.rules.limit_atr * a, stop: sty.ks ? entry - sty.ks * a : null,
+          target: sty.ks && sty.rr ? entry + sty.rr * sty.ks * a : null, entryDay: S.future_days[0], exitDay: S.future_days[st.hold - 1]};
 }
 function sizing(lv) {
-  const capPos = st.cap * st.maxpct / 100;
-  const byCap = Math.floor(capPos / lv.entry);
+  const byCap = Math.floor(st.cap * st.maxpct / 100 / lv.entry);
   const byRisk = lv.stop != null ? Math.floor(st.risk / (lv.entry - lv.stop)) : Infinity;
   const sh = Math.max(0, Math.min(byCap, byRisk));
-  return {sh, amount: sh * lv.entry, loss: lv.stop != null ? sh * (lv.entry - lv.stop) : sh * lv.entry, binds: byRisk < byCap ? 'rischio' : 'peso'};
+  return {sh, amount: sh * lv.entry, loss: lv.stop != null ? sh * (lv.entry - lv.stop) : null};
 }
-function seg(id, opts, cur, dis) {
-  return `<div class="seg" role="group" id="${id}">` + opts.map(([v, lab]) => `<button type="button" data-v="${v}" aria-pressed="${v === cur}" ${dis && dis(v) ? 'disabled' : ''}>${lab}</button>`).join('') + '</div>';
+function ranked() { return S.candidates.slice().sort((a, b) => prob(b) - prob(a) || b.forza - a.forza); }
+function whyText(c) {
+  const i = c.info, parts = [];
+  parts.push(`<b>${pc(i.anno, 0)}</b> nell'ultimo anno, forza ${GROUP_NAMES[c.g]} dei candidati`);
+  parts.push(i.dal_massimo > -0.02 ? 'quasi al massimo dell’anno' : `${pc(-i.dal_massimo, 0, false)} sotto il massimo dell’anno`);
+  parts.push(`${pc(i.sopra_media, 0, false)} sopra la media a 200 giorni`);
+  parts.push(`oscilla in media del ${pc(c.atr / c.price, 1, false)} al giorno`);
+  return parts.join(' · ');
+}
+function optHold() {
+  return S.rules.holds.map(h => { const m = model(st.style, h);
+    return `<button type="button" class="opt" data-h="${h}" aria-pressed="${h === st.hold}"><span class="n">${holdName(h)}</span><span class="d">vendi al più tardi il ${dt(S.future_days[h - 1])}</span><span class="p">${p100(m.base)} <small>in guadagno</small></span></button>`; }).join('');
+}
+function optStyle() {
+  return S.rules.styles.map(s => { const m = model(s.id, st.hold);
+    return `<button type="button" class="opt" data-s="${s.id}" aria-pressed="${s.id === st.style}"><span class="n">${s.nome}</span><span class="d">${s.desc}</span><span class="p">${p100(m.base)} <small>in guadagno</small></span></button>`; }).join('');
 }
 
 function renderConsigli() {
-  const v = $('#v-consigli');
-  if (!S) { v.innerHTML = '<div class="card empty">Nessun dato. Esegui <code>python3 app.py</code>.</div>'; return; }
-  const m = S.backtest.metrics, t = m.t_eccesso;
-  const R = S.rules;
-  const M = S.mercato || {nome: 'USA', universo_nome: 'S&P 100', valuta_nome: 'dollari', citta: 'New York'};
+  const v = $('#v-consigli'), M = S.mercato, m = model(), sty = styleOf(st.style), t = m.tutti;
+  const flat = Math.max(...m.p) - Math.min(...m.p) < 0.005;
+  const best = Object.entries(S.models).sort((a, b) => b[1].base - a[1].base)[0];
+  const [bs, bh] = best[0].split('|');
   v.innerHTML = `
-  <div><h1 style="font-size:26px">${M.nome === 'Italia' ? 'Titoli italiani' : 'Titoli USA'} della settimana</h1>
-    <p class="sub">I ${S.picks.length} punteggi migliori del ${esc(M.universo_nome)} (${S.universo} titoli) · dati alla chiusura di ${dtl(S.asof)} · prezzi in ${esc(M.valuta_nome)}${M.nome === 'Italia' ? ' · costi 0,2 % per operazione, Tobin tax compresa' : ''}</p></div>
-  <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità vere, non promesse.</b> Ogni numero è quante volte una cosa è successa nel passato. Negli ultimi ${Math.round(m.settimane / 52)} anni l'algoritmo ha battuto il paniere di ${pc(m.eccesso_annuo)} l'anno, ma con t = ${nf(t)} il vantaggio ${t > 2 ? 'è statisticamente significativo' : '<b>non si distingue dal caso</b>'}. Non è consulenza finanziaria.</p></div>
-  <div class="card">
-    <h2>La tua regola</h2>
-    <p class="sub">Entrata con un ordine limite alla prossima seduta. Uscita alla prima tra stop, target e data. Cambia una scelta e tutto si ricalcola.</p>
-    <div class="controls">
-      <div class="ctl"><span class="lab">Stop-loss sotto l'entrata</span>${seg('c-ks', R.stops_atr.map(k => [k, stopName(k)]), st.ks)}</div>
-      <div class="ctl"><span class="lab">Target (multipli del rischio)</span>${seg('c-rr', R.targets_r.map(r => [r, tgtName(r)]), st.rr, r => !st.ks && r)}</div>
-      <div class="ctl"><span class="lab">Durata massima</span>${seg('c-hold', R.holds.map(h => [h, holdName(h)]), st.hold)}</div>
-      <div class="ctl acct"><span class="lab">Il tuo conto (in ${esc(M.valuta_nome)})</span><div class="money">
-        <div class="f"><small>Capitale</small><input id="c-cap" type="number" min="0" step="100" inputmode="decimal" value="${st.cap}"></div>
-        <div class="f"><small>Rischio max per titolo</small><input id="c-risk" type="number" min="0" step="10" inputmode="decimal" value="${st.risk}"></div>
-        <div class="f"><small>Peso max %</small><input id="c-pct" type="number" min="1" max="100" step="1" inputmode="decimal" value="${st.maxpct}"></div></div></div>
-    </div>
+  <div>
+    <h1>${M.nome === 'Italia' ? 'Titoli italiani' : 'Titoli USA'} consigliati</h1>
+    <p class="sub" style="margin-top:4px">Aggiornato alla chiusura di ${dtl(S.asof)}. ${S.candidates.length} titoli su ${S.universo} del ${esc(M.universo_nome)} sono in salita (sopra la media a 200 giorni): qui i primi 10, dal più probabile. Prezzi in ${esc(M.valuta_nome)}.</p>
   </div>
-  <div class="sum" id="sum"></div>
-  <div class="list" id="list"></div>
-  <details class="card"><summary><b>Classifica completa</b> · i primi 25 punteggi del ${esc(M.universo_nome)}</summary><div class="scroll" style="margin-top:10px"><table>
-    <thead><tr><th>#</th><th style="text-align:left">Titolo</th><th>Punteggio</th><th>Momentum 12-1</th><th>Volatilità</th><th>Sopra la media 200</th></tr></thead>
-    <tbody>${S.classifica.map((x, i) => `<tr><td>${i + 1}</td><td style="text-align:left;font-weight:600">${esc(tk(x.symbol))}</td><td>${nf(x.score)}</td><td>${pc(x.mom)}</td><td>${pc(x.vol, 1, false)}</td><td>${x.frozen ? '<span class="neg">esclusa: prezzo fermo</span>' : (x.above ? 'sì' : '<span class="neg">no</span>')}</td></tr>`).join('')}</tbody></table></div></details>
-  <footer>Dati Yahoo Finance fino alla chiusura del ${dtl(S.asof)} · app generata il ${S.generato.replace(' ', ' alle ')} (ora di ${esc(M.citta)}) · prezzi in ${esc(M.valuta_nome)} · non è consulenza finanziaria.</footer>`;
-  const bind = (id, f) => $('#' + id).addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.disabled) return; f(Number(b.dataset.v)); save(); renderConsigli(); });
-  bind('c-ks', k => { st.ks = k; if (!k) st.rr = 0; else if (!st.rr) st.rr = DEF.rr; });
-  bind('c-rr', r => { st.rr = r; });
-  bind('c-hold', h => { st.hold = h; });
-  [['c-cap', 'cap'], ['c-risk', 'risk'], ['c-pct', 'maxpct']].forEach(([id, k]) => $('#' + id).addEventListener('change', e => { const x = Number(e.target.value); if (x > 0) { st[k] = x; save(); renderList(); } }));
-  renderList();
+  <ol class="steps">
+    <li><span><b>Scegli quanto tenere e come uscire.</b> La probabilità di ogni scelta è scritta sul bottone.</span></li>
+    <li><span><b>Compra il giorno indicato</b>, con un ordine al prezzo massimo indicato. Se il prezzo è più alto, non comprare.</span></li>
+    <li><span><b>Vendi al primo segnale</b> tra obiettivo, protezione e data.</span></li>
+  </ol>
+  <div class="card choose">
+    <div><span class="lab">Quanto tenere</span><div class="opts h" id="c-hold">${optHold()}</div></div>
+    <div><span class="lab">Come uscire</span><div class="opts s" id="c-style">${optStyle()}</div></div>
+    <p class="outcome">Con <b>${sty.nome} · ${holdName(st.hold)}</b>, sui titoli in salita degli ultimi anni <b>${Math.round(t.p_gain * 100)} operazioni su 100</b> sono finite in guadagno (costi inclusi). Di solito ${pc(t.median)}; 1 volta su 10 sotto ${pc(t.p10, 0)}, 1 volta su 10 sopra ${pc(t.p90, 0)}.
+    ${key() !== best[0] ? `<br><span class="note">La scelta con più operazioni in guadagno è stata <b>${styleOf(bs).nome} · ${holdName(Number(bh))}</b> (${p100(best[1].base)}), ma nei casi peggiori perde di più: guarda la Verifica.</span>` : ''}</p>
+  </div>
+  <div class="alert" role="note"><div class="ic">!</div><p><b>Cosa significa la probabilità.</b> È quante volte, in passato, operazioni come questa su titoli simili (stessa forza dell'ultimo anno) sono finite in guadagno. ${flat ? `Con questa scelta <b>è uguale per tutti i titoli</b>: i dati non mostrano che i più forti vadano meglio, quindi l'ordine è per forza dell'ultimo anno.` : `Con questa scelta i titoli più forti sono andati un po' meglio: ${GROUP_SHORT.map((g, i) => `${g.toLowerCase()} ${p100(m.p[i])}`).join(', ')}.`} Conta di più <b>quanto tieni e come esci</b> che quale titolo scegli. Non è una previsione e non è consulenza finanziaria.</p></div>
+  <div class="card"><span class="lab">Quanto investire (in ${esc(M.valuta_nome)})</span><div class="acct">
+    <label class="f" for="c-cap">Capitale<input id="c-cap" type="number" min="0" step="100" inputmode="decimal" value="${st.cap}"></label>
+    <label class="f" for="c-risk">Perdita massima per titolo<input id="c-risk" type="number" min="0" step="10" inputmode="decimal" value="${st.risk}"></label>
+    <label class="f" for="c-pct">Al massimo su un titolo (%)<input id="c-pct" type="number" min="1" max="100" step="1" inputmode="decimal" value="${st.maxpct}"></label></div></div>
+  <div class="picks" id="picks"></div>
+  <details class="card"><summary><b>Tutti i ${S.candidates.length} titoli in salita</b>, dal più probabile</summary><div class="scroll"><table>
+    <thead><tr><th>#</th><th class="l">Titolo</th><th>Probabilità</th><th>Ultimo anno</th><th>Dal massimo</th><th>Oscillazione al giorno</th><th class="l">Forza</th></tr></thead>
+    <tbody>${ranked().map((c, i) => `<tr><td>${i + 1}</td><td class="l"><b>${esc(tk(c.symbol))}</b> <span class="note">${esc(c.name)}</span></td><td>${p100(prob(c))}</td><td>${pc(c.info.anno, 0)}</td><td>${pc(c.info.dal_massimo, 0)}</td><td>${pc(c.atr / c.price, 1, false)}</td><td class="l">${GROUP_SHORT[c.g]}</td></tr>`).join('')}</tbody></table></div></details>
+  <footer>Dati Yahoo Finance fino alla chiusura di ${dtl(S.asof)} · app generata il ${S.generato.replace(' ', ' alle ')} (ora di ${esc(M.citta)}) · costi ${pc(S.costo, 1, false)} per operazione${M.nome === 'Italia' ? ', Tobin tax compresa' : ''} · non è consulenza finanziaria.</footer>`;
+  $('#c-hold').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.hold = Number(b.dataset.h); save(); renderConsigli(); });
+  $('#c-style').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.style = b.dataset.s; save(); renderConsigli(); });
+  [['c-cap', 'cap'], ['c-risk', 'risk'], ['c-pct', 'maxpct']].forEach(([id, k]) => $('#' + id).addEventListener('change', e => { const x = Number(e.target.value); if (x > 0) { st[k] = x; save(); renderPicks(); } }));
+  renderPicks();
 }
 
-function renderList() {
-  const k = key(), pool = S.pooled[k], bh = S.pooled[`0|0|${st.hold}`];
-  $('#sum').innerHTML = `
-    <div class="stat"><div class="k">Questa regola, in passato</div><div class="v">${pc(pool.p_gain, 0, false)}</div><div class="d">delle operazioni in guadagno · ${nf(pool.n, 0)} operazioni</div></div>
-    <div class="stat"><div class="k">Risultato tipico</div><div class="v ${pool.median >= 0 ? 'pos' : 'neg'}">${pc(pool.median)}</div><div class="d">media ${pc(pool.mean)} · costi inclusi</div></div>
-    <div class="stat"><div class="k">Come finivano</div><div class="v" style="font-size:18px;line-height:1.6">${pc(pool.p_target, 0, false)} · ${pc(pool.p_tempo, 0, false)} · ${pc(pool.p_stop, 0, false)}</div><div class="d">target · alla data · stop</div></div>
-    <div class="stat"><div class="k">Senza stop né target</div><div class="v">${pc(bh.p_gain, 0, false)}</div><div class="d">in guadagno tenendo ${holdName(st.hold)} · tipico ${pc(bh.median)}</div></div>`;
-  const rows = S.picks.map((p, i) => {
-    const lv = levels(p, p.price), s = p.rule[k];
-    return `<div class="row" role="button" tabindex="0" aria-expanded="${st.open === p.symbol}" data-s="${p.symbol}">
-      <span class="rk">${i + 1}</span>
-      <span class="who"><span class="tk">${esc(tk(p.symbol))}</span><span class="nm">${esc(p.name)}</span></span>
-      <span class="n"><span class="lbl">Chiusura</span>${money(p.price)}</span>
-      <span class="n"><span class="lbl">Entrata max</span>${money(lv.limit)}</span>
-      <span class="n neg"><span class="lbl">Stop</span>${money(lv.stop)}</span>
-      <span class="n pos"><span class="lbl">Target</span>${money(lv.target)}</span>
-      <span class="n"><span class="lbl">Esci entro</span>${dt(lv.exitDay)}</span>
-      <span class="n"><span class="lbl">Prob. guadagno</span><span class="prob"><span class="meter"><i style="width:${(s.p_gain || 0) * 100}%"></i></span><b>${s.n ? pc(s.p_gain, 0, false) : 'n/d'}</b></span></span>
-      <span class="n ${s.median >= 0 ? 'pos' : 'neg'}"><span class="lbl">Tipico</span>${s.n ? pc(s.median) : 'n/d'}</span>
-      <span class="chev" aria-hidden="true">›</span>
-    </div>${st.open === p.symbol ? '<div class="detail" id="detail"></div>' : ''}`;
+function renderPicks() {
+  const m = model(), list = ranked().filter(c => S.details[c.symbol]).slice(0, S.top);
+  $('#picks').innerHTML = list.map((c, i) => {
+    const entry = st.entry[c.symbol] || c.price, lv = levels(c, entry), sz = sizing(lv), g = m.gruppi[c.g], p = prob(c);
+    const today = S.generato.slice(0, 10) === lv.entryDay;
+    const pctOf = x => pc(x / entry - 1, 1);
+    const open = !!st.open[c.symbol];
+    return `<article class="pick" data-s="${c.symbol}">
+      <div class="hd"><span class="rk">${i + 1}</span>
+        <div class="id"><span class="tk">${esc(tk(c.symbol))}</span><span class="nm">${esc(c.name)}</span></div>
+        <div class="pr" title="Probabilità di riuscita"><span class="meter"><i style="width:${p * 100}%"></i></span><span class="pv">${p100(p)}</span><span class="pl">probabilità<br>di riuscita</span></div></div>
+      <div class="trio">
+        <div><span class="k">Compra</span><span class="big">fino a ${money(lv.limit)}</span><small>${today ? 'oggi, ' : ''}${dt(lv.entryDay)} · ultima chiusura ${money(c.price)}</small></div>
+        <div><span class="k">Vendi al primo di questi</span><div class="sell">
+          ${lv.target != null ? `<span><b class="pos">${money(lv.target)}</b> obiettivo (${pctOf(lv.target)})</span>` : '<span class="note">nessun obiettivo: lasci correre</span>'}
+          ${lv.stop != null ? `<span><b class="neg">${money(lv.stop)}</b> protezione (${pctOf(lv.stop)})</span>` : '<span class="note">nessuna protezione</span>'}
+          <span><b>${dt(lv.exitDay)}</b> alla chiusura, se non è successo prima</span></div></div>
+        <div><span class="k">Quante</span><span class="big">${sz.sh} azioni</span><small>${money(sz.amount)}${sz.loss != null ? ` · perdi al massimo ${money(sz.loss)}` : ' · senza protezione'}</small></div>
+      </div>
+      <p class="why"><b>Perché è qui:</b> ${whyText(c)}.</p>
+      <p class="note">Titoli simili con questa scelta: di solito ${pc(g.median)} · 1 volta su 10 sotto ${pc(g.p10, 0)} · 1 volta su 10 sopra ${pc(g.p90, 0)} (${nf(g.n, 0)} operazioni).</p>
+      <button type="button" class="more" aria-expanded="${open}">${open ? 'Nascondi' : 'Grafico e simulazione'}</button>
+      ${open ? '<div class="more-body"></div>' : ''}
+    </article>`;
   }).join('');
-  $('#list').innerHTML = `<div class="lh"><span>#</span><span>Titolo</span><span>Chiusura</span><span>Entrata max</span><span>Stop</span><span>Target</span><span>Esci entro</span><span>Prob. guadagno</span><span>Tipico</span><span></span></div>` + rows;
-  $('#list').querySelectorAll('.row').forEach(r => {
-    const go = () => { st.open = st.open === r.dataset.s ? null : r.dataset.s; renderList(); if (st.open) $('#list .row[aria-expanded="true"]').scrollIntoView({block: 'nearest'}); };
-    r.addEventListener('click', go);
-    r.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } });
+  $('#picks').querySelectorAll('.pick').forEach(a => {
+    const sym = a.dataset.s;
+    a.querySelector('.more').addEventListener('click', () => { st.open[sym] = !st.open[sym]; renderPicks(); if (st.open[sym]) a.scrollIntoView({block: 'nearest'}); });
+    if (st.open[sym]) renderMore(a, S.candidates.find(c => c.symbol === sym));
   });
-  if (st.open) renderDetail(S.picks.find(p => p.symbol === st.open));
 }
 
-function renderDetail(p) {
-  const box = $('#detail'); if (!box || !p) return;
-  const live = S.live && S.live[p.symbol];
-  const lim = p.price + S.rules.limit_atr * p.atr;
-  const entry = st.entry[p.symbol] || p.price;
-  const lv = levels(p, entry), sz = sizing(lv), k = key();
-  const own = p.rule[k], pool = S.pooled[k];
-  const pctOf = v => pc(v / entry - 1);
-  const today = S.generato.slice(0, 10) === lv.entryDay;
+function renderMore(card, c) {
+  const box = card.querySelector('.more-body'); if (!box) return;
+  const entry = st.entry[c.symbol] || c.price, lv = levels(c, entry), live = S.live && S.live[c.symbol];
   let liveTxt = '';
-  if (live) {
-    const ok = live.price <= lim;
-    liveTxt = `<p>Ultimo prezzo visto: <b>${money(live.price)}</b> (${live.time.slice(11)} del ${dt(live.time.slice(0, 10))}, in ritardo). ${ok ? 'È <b class="pos">sotto il limite</b>: l’ordine si eseguirebbe.' : 'È <b class="neg">sopra il limite</b>: non inseguirlo, l’ordine resta in attesa.'}</p>`;
-  }
+  if (live) liveTxt = `<p class="note">Ultimo prezzo visto: <b>${money(live.price)}</b> alle ${live.time.slice(11)} di ${dt(live.time.slice(0, 10))} (in ritardo). ${live.price <= lv.limit ? '<span class="pos">È sotto il prezzo massimo: l’ordine si eseguirebbe.</span>' : '<span class="neg">È sopra il prezzo massimo: non inseguirlo.</span>'}</p>`;
   box.innerHTML = `
-    <div class="plan">
-      <div class="step"><div class="h"><span class="dot" style="background:var(--accent)"></span>Quando entrare</div>
-        <p><b>${today ? 'Oggi, ' : ''}${dtl(lv.entryDay)}</b>, con un <b>ordine limite a ${money(lim)}</b> valido solo per quella seduta (ultima chiusura ${money(p.price)} + ${nf(S.rules.limit_atr, 1)} ATR).</p>
-        <p>Se il prezzo non scende fino al limite, non comprare: il giorno dopo i numeri cambiano.</p>${liveTxt}
-        <div class="entry-in"><label for="c-entry">Il tuo prezzo di entrata</label><input id="c-entry" type="number" step="0.01" min="0" value="${entry.toFixed(2)}"><span>stop, target e simulazione si spostano con lui</span></div>
-      </div>
-      <div class="step"><div class="h"><span class="dot" style="background:var(--crit)"></span>Quando vendere</div>
-        <p>Alla prima di queste tre cose:</p>
-        <p>${lv.stop != null ? `<b class="neg">Stop-loss a ${money(lv.stop)}</b> (${pctOf(lv.stop)}, ${stopName(st.ks)} sotto l'entrata)` : '<b>Nessuno stop</b>: nessuna protezione dalle discese'}</p>
-        <p>${lv.target != null ? `<b class="pos">Target a ${money(lv.target)}</b> (${pctOf(lv.target)}, ${tgtName(st.rr)})` : '<b>Nessun target</b>: lasci correre il guadagno'}</p>
-        <p><b>Alla chiusura di ${dtl(lv.exitDay)}</b>, se nessuno dei due è scattato (${st.hold} sedute).</p>
-      </div>
-      <div class="step"><div class="h"><span class="dot" style="background:var(--s1)"></span>Quante azioni</div>
-        <p>Con ${money(st.cap)} di capitale, al massimo ${nf(st.maxpct, 0)} % per titolo e ${money(st.risk)} di rischio:</p>
-        <p><b style="font-size:20px;font-family:var(--f-head)">${sz.sh} azioni</b> = ${money(sz.amount)}</p>
-        <p>${lv.stop != null ? `Perdita se scatta lo stop: <b class="neg">${money(sz.loss)}</b>. Limita ${sz.binds === 'rischio' ? 'il rischio massimo' : 'il peso massimo per titolo'}.` : 'Senza stop la perdita possibile è tutto l’importo investito.'}</p>
-        <p class="note">Uno stop è un ordine, non una garanzia: con un salto di prezzo può eseguirsi più in basso.</p>
-      </div>
-    </div>
+    ${liveTxt}
+    <div class="entry-in"><label for="e-${c.symbol}">Se hai comprato a un altro prezzo, scrivilo qui:</label><input id="e-${c.symbol}" type="number" step="0.001" min="0" value="${entry.toFixed(entry < 10 ? 3 : 2)}"><span>obiettivo, protezione e quantità si aggiornano.</span></div>
     <div class="two">
-      <div><h3>Prezzo, ultimi 6 mesi</h3><div class="chart" id="pc"><div class="tip"></div></div>
-        <div class="legend"><span><i class="ln" style="background:var(--s1)"></i>Chiusura</span><span style="color:var(--muted)"><i class="dash"></i>Media a 200 giorni</span><span><i class="ln" style="background:var(--accent)"></i>Limite di entrata</span><span><i class="ln" style="background:var(--crit)"></i>Stop</span><span><i class="ln" style="background:var(--good)"></i>Target</span></div>
-        <p class="note" style="margin-top:8px">Momentum 12-1 ${pc(p.signal.mom)} · volatilità ${pc(p.signal.vol, 1, false)} · ${pc(p.signal.vs_sma)} sopra la media a 200 giorni · ATR ${money(p.atr)} (${pc(p.atr / p.price, 1, false)} al giorno)</p></div>
-      <div><h3>Probabilità di guadagno con questa regola</h3>
-        <div class="oc">${outcomeRow('Storia di ' + esc(tk(p.symbol)), own.n ? `${own.n} casi simili, ${own.indipendenti} indipendenti · affidabilità ${own.affidabilita}` : 'nessun caso simile', own)}
-        ${outcomeRow('Tutte le scelte', `${nf(pool.n, 0)} operazioni dell'algoritmo dal ${dt(S.backtest.da, {weekday: undefined, year: 'numeric'})}`, pool)}
-        <div id="mc-row">${outcomeRow('Macchina del Tempo', 'calcolo in corso…', null)}</div></div>${ocLegend}
-        <p class="note" style="margin-top:8px">Storia: la stessa regola rifatta ogni volta che ${esc(tk(p.symbol))} era tra il 20 % migliore del punteggio e sopra la media a 200 giorni. Costi inclusi (${pc(cost(), 2, false)} per operazione).</p></div>
+      <div><h3>Prezzo negli ultimi 6 mesi</h3><div class="chart" data-c="price"><div class="tip"></div></div>
+        <div class="legend"><span><i class="ln" style="background:var(--s1)"></i>Chiusura</span><span style="color:var(--muted)"><i class="dash"></i>Media a 200 giorni</span><span><i class="ln" style="background:var(--accent)"></i>Prezzo massimo per comprare</span><span><i class="ln" style="background:var(--crit)"></i>Protezione</span><span><i class="ln" style="background:var(--good)"></i>Obiettivo</span></div></div>
+      <div><h3>Simulazione: 10.000 futuri possibili</h3>
+        <p class="note">Ogni giorno è un giorno vero di ${esc(tk(c.symbol))} dell'ultimo anno, preso a caso. Mostra quanto spesso il prezzo tocca obiettivo o protezione per come si muove questo titolo. <label style="white-space:nowrap"><input type="checkbox" class="trend" ${st.trend ? 'checked' : ''}> con la tendenza dell'ultimo anno</label> (più ottimista).</p>
+        <div class="oc" data-c="oc"></div>${ocLegend}</div>
     </div>
-    <div><h3>Macchina del Tempo: 10.000 volte le prossime ${st.hold} sedute</h3>
-      <p class="sub" style="font-size:14px">Ogni giorno è una candela vera di ${esc(tk(p.symbol))} presa a caso dall'ultimo anno. <label style="white-space:nowrap"><input type="checkbox" id="c-trend" ${st.trend ? 'checked' : ''}> includi la tendenza dell'ultimo anno</label> <span class="note">(più ottimista: suppone che la corsa continui)</span></p>
-      <div class="chart" id="fan"><div class="tip"></div></div>
-      <div class="legend"><span><i class="ln" style="background:var(--median)"></i>Mediana</span><span><i style="background:var(--band-in)"></i>50 % centrale</span><span><i style="background:var(--band-out)"></i>90 % centrale</span></div></div>
-    <div><h3>Se invece compri e tieni</h3><div class="scroll"><table><thead><tr><th>Per</th><th>Prob. di guadagno</th><th>Tipico</th><th>8 casi su 10 tra</th><th>Casi (indip.)</th><th>Affidabilità</th></tr></thead><tbody>
-      ${Object.entries(p.hold).map(([h, x]) => { const s = x.simili; return s.n ? `<tr><td>${h}</td><td>${pc(s.p_gain, 0, false)}</td><td class="${s.median >= 0 ? 'pos' : 'neg'}">${pc(s.median)}</td><td>${pc(s.p10, 0)} e ${pc(s.p90, 0)}</td><td>${s.n} (${x.indipendenti})</td><td><span class="chip ${x.affidabilita}">${x.affidabilita}</span></td></tr>` : `<tr><td>${h}</td><td colspan="5" style="text-align:left">n/d</td></tr>`; }).join('')}
-    </tbody></table></div><p class="note" style="margin-top:6px">Senza stop né target, nelle stesse condizioni simili. A 1 anno i casi indipendenti sono pochissimi: è il numero più fragile.</p></div>`;
-  $('#c-entry').addEventListener('change', e => { const x = Number(e.target.value); if (x > 0) { st.entry[p.symbol] = x; renderDetail(p); } });
-  $('#c-trend').addEventListener('change', e => { st.trend = e.target.checked; save(); runMC(p, lv); });
-  priceChart($('#pc'), p, lv);
-  setTimeout(() => runMC(p, lv), 0);
+    <div><h3>Dove potrebbe andare il prezzo nelle prossime ${st.hold} sedute</h3><div class="chart" data-c="fan"><div class="tip"></div></div>
+      <div class="legend"><span><i class="ln" style="background:var(--median)"></i>Il caso centrale</span><span><i style="background:var(--band-in)"></i>La metà dei casi</span><span><i style="background:var(--band-out)"></i>9 casi su 10</span></div></div>`;
+  box.querySelector('input[type=number]').addEventListener('change', e => { const x = Number(e.target.value); if (x > 0) { st.entry[c.symbol] = x; renderPicks(); } });
+  box.querySelector('.trend').addEventListener('change', e => { st.trend = e.target.checked; save(); drawMore(box, c, lv); });
+  drawMore(box, c, lv);
 }
-function runMC(p, lv) {
-  const r = timeMachine(p, lv.entry, lv, st.trend);
-  const row = $('#mc-row'); if (!row) return;
-  row.innerHTML = outcomeRow('Macchina del Tempo', `10.000 simulazioni ${st.trend ? 'con' : 'senza'} la tendenza`, r);
-  const labels = ['entrata'].concat(S.future_days.slice(0, st.hold).map(d => dt(d, {weekday: undefined})));
-  fanChart($('#fan'), r.bands, labels, {entry: lv.entry, stop: lv.stop, target: lv.target}, 'Ventaglio dei prezzi simulati',
+function drawMore(box, c, lv) {
+  const d = S.details[c.symbol];
+  priceChart(box.querySelector('[data-c=price]'), {symbol: c.symbol, chart: d.chart}, lv);
+  const r = timeMachine(c, lv, st.trend);
+  box.querySelector('[data-c=oc]').innerHTML = outcomeRow('10.000 simulazioni', st.trend ? 'con la tendenza' : 'senza tendenza', r);
+  const labels = ['oggi'].concat(S.future_days.slice(0, st.hold).map(x => dt(x, {weekday: undefined})));
+  fanChart(box.querySelector('[data-c=fan]'), r.bands, labels, {entry: lv.entry, stop: lv.stop, target: lv.target}, 'Ventaglio dei prezzi simulati',
     {every: i => i === 0 || i === r.bands.length - 1 || i % Math.max(1, Math.round(st.hold / 5)) === 0, tip: i => i ? `Seduta ${i} · ${dt(S.future_days[i - 1])}` : 'Entrata'});
 }
 
-/* ---------------- Verifica ---------------- */
-const SER = () => [['strategia', 'I 10 titoli, ogni settimana', '--s1', 'I 10 titoli'], ['paniere', 'Paniere: tutti, stesso peso', '--s2', 'Paniere'], ['spy', S.mercato ? S.mercato.indice_nome : 'SPY (S&P 500)', '--s3', S.mercato ? S.mercato.indice_breve : 'SPY']];
-function equityChart(box) {
-  const B = S.backtest, H = Math.max(260, Math.min(380, (box.clientWidth || 700) * .45));
-  const [svg, W] = frame(box, H, 'Crescita di 1 dollaro investito');
-  const narrow = W < 560, m = {l: 46, r: narrow ? 10 : 132, t: 12, b: 26}, C = B.curves, dates = B.dates, n = dates.length;
-  const all = SER().flatMap(([k]) => C[k]); const lo = Math.min(...all) * .97, hi = Math.max(...all) * 1.03;
-  const L = Math.log, x = i => m.l + (W - m.l - m.r) * i / (n - 1), y = v => m.t + (H - m.t - m.b) * (L(hi) - L(v)) / (L(hi) - L(lo));
-  for (const v of [.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10]) { if (v < lo || v > hi) continue;
-    el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: v === 1 ? css('--muted') : css('--line'), 'stroke-width': 1}, svg);
-    text(svg, m.l - 8, y(v) + 4, '×' + nf(v, v % 1 ? 2 : 0), {'text-anchor': 'end'}); }
-  xLabels(svg, n, x, H, i => dates[i].slice(0, 4), i => i > 0 && dates[i].slice(0, 4) !== dates[i - 1].slice(0, 4), narrow ? 56 : 40);
-  SER().slice().reverse().forEach(([k, , c]) => el('path', {d: 'M' + C[k].map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join('L'), fill: 'none', stroke: css(c), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg));
-  if (!narrow) { const ends = SER().map(([k, , , short]) => ({lab: short, v: C[k][n - 1], yy: y(C[k][n - 1])})).sort((a, b) => a.yy - b.yy);
-    for (let i = 1; i < ends.length; i++) if (ends[i].yy - ends[i - 1].yy < 15) ends[i].yy = ends[i - 1].yy + 15;
-    ends.forEach(e => text(svg, W - m.r + 8, e.yy + 4, e.lab + ' ×' + nf(e.v, 1), {'font-size': 12, fill: css('--ink')})); }
-  const dots = SER().map(([, , c]) => el('circle', {r: 4, fill: css(c), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg));
-  crosshair(svg, box, m, W, H, n, x, (i, on) => {
-    dots.forEach((d, j) => { if (!on) { d.setAttribute('visibility', 'hidden'); return; } d.setAttribute('cx', x(i)); d.setAttribute('cy', y(C[SER()[j][0]][i])); d.setAttribute('visibility', 'visible'); });
-    return on ? `<div class="t">${dt(dates[i], {year: 'numeric'})}</div>` + SER().map(([k, , c, short]) => `<div class="r"><span>${swatch(css(c))}${short}</span><span>×${nf(C[k][i], 2)}</span></div>`).join('') : '';
-  });
-}
-function yearChart(box) {
-  const Y = S.backtest.metrics.anni, H = 240;
-  const [svg, W] = frame(box, H, 'Rendimento anno per anno');
-  const m = {l: 46, r: 8, t: 12, b: 26};
-  const vals = Y.flatMap(a => [a.strategia, a.paniere]); const hi = Math.max(.05, ...vals) * 1.05, lo = Math.min(-.05, ...vals) * 1.05;
-  const y = v => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo);
-  yGrid(svg, m, W, y, lo, hi, v => nf(v * 100, 0) + '%');
-  el('line', {x1: m.l, x2: W - m.r, y1: y(0), y2: y(0), stroke: css('--muted')}, svg);
-  const slot = (W - m.l - m.r) / Y.length, bw = Math.max(3, Math.min(22, (slot - 8) / 2));
-  Y.forEach((a, i) => { const cx = m.l + slot * i + slot / 2;
-    [['strategia', '--s1', -1], ['paniere', '--s2', 1]].forEach(([k, c, s]) => { const v = a[k], top = y(Math.max(0, v)), bot = y(Math.min(0, v));
-      el('rect', {x: cx + (s < 0 ? -bw - 1 : 1), y: top, width: bw, height: Math.max(1, bot - top), rx: Math.min(4, bw / 2), fill: css(c)}, svg); });
-    text(svg, cx, H - 8, (W < 560 ? "'" + a.anno.slice(2) : a.anno) + (a.settimane < 40 ? '*' : ''), {'text-anchor': 'middle'});
+/* ---------------- verifica ---------------- */
+function calibChart(box, cal) {
+  const H = 230, [svg, W] = frame(box, H, 'Probabilità stimata e osservata per gruppo di forza');
+  const m = {l: 40, r: 8, t: 12, b: 34}, n = cal.length;
+  const hi = Math.min(1, Math.max(.7, ...cal.flatMap(c => [c.stimata, c.osservata])) + .05);
+  const y = v => m.t + (H - m.t - m.b) * (hi - v) / hi;
+  for (let v = 0; v <= hi + 1e-9; v += .2) { el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css('--line')}, svg); text(svg, m.l - 6, y(v) + 4, Math.round(v * 100) + '%', {'text-anchor': 'end'}); }
+  el('line', {x1: m.l, x2: W - m.r, y1: y(.5), y2: y(.5), stroke: css('--muted'), 'stroke-dasharray': '3 3'}, svg);
+  const slot = (W - m.l - m.r) / n, bw = Math.max(6, Math.min(30, (slot - 14) / 2));
+  cal.forEach((c, i) => { const cx = m.l + slot * i + slot / 2;
+    [['stimata', '--s1', -1], ['osservata', '--s2', 1]].forEach(([k, col, s]) => el('rect', {x: cx + (s < 0 ? -bw - 1 : 1), y: y(c[k]), width: bw, height: y(0) - y(c[k]), rx: Math.min(4, bw / 2), fill: css(col)}, svg));
+    text(svg, cx, H - 18, W < 520 ? String(c.gruppo + 1) + '°' : GROUP_SHORT[c.gruppo], {'text-anchor': 'middle', fill: css('--ink2')});
+    text(svg, cx, H - 4, W < 520 ? '' : nf(c.n, 0) + ' op.', {'text-anchor': 'middle'});
     const hb = el('rect', {x: m.l + slot * i, y: m.t, width: slot, height: H - m.t - m.b, fill: 'transparent'}, svg);
-    hb.addEventListener('pointermove', ev => { const b = box.getBoundingClientRect(); tip(box, `<div class="t">${a.anno}${a.settimane < 40 ? ' (parziale)' : ''}</div><div class="r"><span>${swatch(css('--s1'))}I 10 titoli</span><span>${pc(a.strategia, 0)}</span></div><div class="r"><span>${swatch(css('--s2'))}Paniere</span><span>${pc(a.paniere, 0)}</span></div>`, ev.clientX - b.left, ev.clientY - b.top); });
+    hb.addEventListener('pointermove', ev => { const b = box.getBoundingClientRect(); tip(box, `<div class="t">${GROUP_SHORT[c.gruppo]} · ${nf(c.n, 0)} operazioni</div><div class="r"><span>${swatch(css('--s1'))}Stimata</span><span>${p100(c.stimata)}</span></div><div class="r"><span>${swatch(css('--s2'))}Andata bene davvero</span><span>${p100(c.osservata)}</span></div>`, ev.clientX - b.left, ev.clientY - b.top); });
+    hb.addEventListener('pointerleave', () => untip(box)); });
+}
+function yearsChart(box, years) {
+  const H = 230, [svg, W] = frame(box, H, 'Operazioni in guadagno, anno per anno');
+  const m = {l: 40, r: 8, t: 12, b: 26}, n = years.length, hi = 1;
+  const y = v => m.t + (H - m.t - m.b) * (hi - v) / hi;
+  for (let v = 0; v <= 1.0001; v += .25) { el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css('--line')}, svg); text(svg, m.l - 6, y(v) + 4, Math.round(v * 100) + '%', {'text-anchor': 'end'}); }
+  el('line', {x1: m.l, x2: W - m.r, y1: y(.5), y2: y(.5), stroke: css('--muted'), 'stroke-dasharray': '3 3'}, svg);
+  const slot = (W - m.l - m.r) / n, bw = Math.max(4, Math.min(24, (slot - 10) / 2));
+  years.forEach((a, i) => { const cx = m.l + slot * i + slot / 2;
+    [['top', '--s1', -1], ['tutti', '--s2', 1]].forEach(([k, col, s]) => { const v = a[k].p_gain || 0; el('rect', {x: cx + (s < 0 ? -bw - 1 : 1), y: y(v), width: bw, height: y(0) - y(v), rx: Math.min(4, bw / 2), fill: css(col)}, svg); });
+    text(svg, cx, H - 8, (W < 520 ? "'" + a.anno.slice(2) : a.anno) + (a.settimane < 40 ? '*' : ''), {'text-anchor': 'middle'});
+    const hb = el('rect', {x: m.l + slot * i, y: m.t, width: slot, height: H - m.t - m.b, fill: 'transparent'}, svg);
+    hb.addEventListener('pointermove', ev => { const b = box.getBoundingClientRect(); tip(box, `<div class="t">${a.anno}${a.settimane < 40 ? ' (parziale)' : ''}</div><div class="r"><span>${swatch(css('--s1'))}I primi 10</span><span>${p100(a.top.p_gain)} · media ${pc(a.top.mean, 1)}</span></div><div class="r"><span>${swatch(css('--s2'))}Tutti i titoli in salita</span><span>${p100(a.tutti.p_gain)} · media ${pc(a.tutti.mean, 1)}</span></div>`, ev.clientX - b.left, ev.clientY - b.top); });
     hb.addEventListener('pointerleave', () => untip(box)); });
 }
 function renderVerifica() {
-  const v = $('#v-verifica'); if (!S) { v.innerHTML = '<div class="card empty">Nessun dato.</div>'; return; }
-  const m = S.backtest.metrics, t = m.t_eccesso, R = S.rules;
-  const variants = [];
-  R.stops_atr.forEach(ks => R.targets_r.forEach(rr => { if (ks || !rr) variants.push([ks, rr]); }));
+  const v = $('#v-verifica'), M = S.mercato, m = model(), o = m.oos, sty = styleOf(st.style);
+  const mkts = Object.keys(D.mercati);
+  const mae = o && o.calibrazione.length ? o.calibrazione.reduce((s, c) => s + Math.abs(c.stimata - c.osservata) * c.n, 0) / o.calibrazione.reduce((s, c) => s + c.n, 0) : null;
   v.innerHTML = `
-  ${D.mercati && Object.keys(D.mercati).length > 1 ? `<div class="ctl" style="max-width:320px"><span class="lab">Mercato</span>${seg('v-mkt', Object.keys(D.mercati).map(m => [m, D.mercati[m].mercato.nome]), mkt)}</div>` : ''}
-  <div class="card"><h2>Come sarebbe andata${S.mercato ? ' · ' + esc(S.mercato.nome) : ''}</h2>
-    <p class="sub">Ogni settimana dal ${dtl(S.backtest.da)} al ${dtl(S.backtest.a)}: stessa regola di scelta, solo i dati disponibili in quel momento, ${pc(cost(), 2, false)} di costo per ogni titolo cambiato. Scala logaritmica.</p>
-    <div class="chart" id="eq"><div class="tip"></div></div>
-    <div class="legend">${SER().map(([, lab, c]) => `<span><i class="ln" style="background:var(${c})"></i>${lab}</span>`).join('')}</div>
-    <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Portafoglio</th><th>All'anno</th><th>Calo massimo</th><th>Totale</th></tr></thead><tbody>
-      ${SER().map(([k, lab]) => `<tr><td>${lab}</td><td>${pc(m[k].cagr)}</td><td class="neg">${pc(m[k].max_drawdown)}</td><td>${pc(m[k].totale, 0)}</td></tr>`).join('')}</tbody></table></div>
-    <p class="note" style="margin-top:8px">Settimane in guadagno ${pc(m.settimane_positive, 0, false)} · settimane meglio del paniere ${pc(m.settimane_sopra_paniere, 0, false)} · vantaggio medio ${pc(m.eccesso_annuo)} l'anno, <b>t = ${nf(t)}</b>: ${t > 2 ? 'significativo' : 'non distinguibile dal caso (servirebbe almeno 2)'}.</p></div>
-  <div class="card"><h2>Anno per anno</h2><p class="sub">Un vantaggio vero dovrebbe ripetersi quasi ogni anno. * = anno parziale.</p>
-    <div class="chart" id="yr"><div class="tip"></div></div>
-    <div class="legend"><span><i style="background:var(--s1)"></i>I 10 titoli</span><span><i style="background:var(--s2)"></i>Paniere</span></div></div>
-  <div class="card"><h2>Tutte le varianti della regola</h2>
-    <p class="sub">Ogni titolo scelto in ogni settimana, rifatto con ciascuna regola di uscita. Riga evidenziata: la tua. Gli stop stretti scattano spesso per semplice rumore.</p>
-    <div class="ctl" style="margin-top:10px;max-width:420px">${seg('v-hold', R.holds.map(h => [h, holdName(h)]), st.hold)}</div>
-    <div class="scroll" style="margin-top:10px"><table><thead><tr><th>Stop</th><th style="text-align:left">Target</th><th>In guadagno</th><th>Tipico</th><th>Media</th><th>10 % peggiori sotto</th><th>Target · data · stop</th></tr></thead><tbody>
-      ${variants.map(([ks, rr]) => { const s = S.pooled[`${ks}|${rr}|${st.hold}`]; return `<tr class="${ks === st.ks && rr === st.rr ? 'cur' : ''}"><td>${stopName(ks)}</td><td style="text-align:left">${tgtName(rr)}</td><td>${pc(s.p_gain, 0, false)}</td><td class="${s.median >= 0 ? 'pos' : 'neg'}">${pc(s.median)}</td><td class="${s.mean >= 0 ? 'pos' : 'neg'}">${pc(s.mean, 2)}</td><td>${pc(s.p10, 1)}</td><td>${pc(s.p_target, 0, false)} · ${pc(s.p_tempo, 0, false)} · ${pc(s.p_stop, 0, false)}</td></tr>`; }).join('')}
-    </tbody></table></div>
-    <p class="note" style="margin-top:8px">Scegliere la riga migliore dopo averla vista è adattarsi al passato: le differenze piccole sono rumore.</p></div>
-  <div class="card"><h2>Comprare e tenere i titoli scelti</h2><div class="scroll"><table><thead><tr><th>Per</th><th>Scelte in guadagno</th><th>Tipico</th><th>Paniere in guadagno</th><th>Paniere tipico</th><th>Settimane sopra il paniere</th><th>Casi indip.</th></tr></thead><tbody>
-    ${Object.entries(S.record).map(([h, x]) => `<tr><td>${h}</td><td>${pc(x.algoritmo.p_gain, 0, false)}</td><td>${pc(x.algoritmo.median)}</td><td>${pc(x.paniere.p_gain, 0, false)}</td><td>${pc(x.paniere.median)}</td><td>${pc(x.batte_paniere, 0, false)}</td><td>${x.indipendenti}</td></tr>`).join('')}</tbody></table></div></div>`;
-  $('#v-hold').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.hold = Number(b.dataset.v); save(); renderVerifica(); });
-  $('#v-mkt')?.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.vmkt = b.dataset.v; setMkt(st.vmkt); renderVerifica(); });
-  equityChart($('#eq')); yearChart($('#yr'));
+  <div><h1>Funziona? La verifica</h1><p class="sub" style="margin-top:4px">Tre domande, con i dati ${M.nome === 'Italia' ? 'dei titoli italiani' : 'dei titoli USA'}. Le risposte cambiano con la scelta di quanto tenere e come uscire.</p></div>
+  <div class="ctlrow">
+    ${mkts.length > 1 ? `<div><span class="lab">Mercato</span><div class="seg" id="v-mkt">${mkts.map(x => `<button type="button" data-v="${x}" aria-pressed="${x === mkt}">${D.mercati[x].mercato.nome}</button>`).join('')}</div></div>` : ''}
+    <div><span class="lab">Quanto tenere</span><div class="seg" id="v-hold">${S.rules.holds.map(h => `<button type="button" data-v="${h}" aria-pressed="${h === st.hold}">${holdName(h)}</button>`).join('')}</div></div>
+    <div><span class="lab">Come uscire</span><div class="seg" id="v-style">${S.rules.styles.map(s => `<button type="button" data-v="${s.id}" aria-pressed="${s.id === st.style}">${s.nome}</button>`).join('')}</div></div>
+  </div>
+  <div class="card"><h2>1. Conta di più il titolo o la regola?</h2>
+    <p class="sub">Quante operazioni sono finite in guadagno, su tutti i titoli in salita, per ogni combinazione. La linea tratteggiata è il 50 %: testa o croce. Tocca una riga per sceglierla.</p>
+    <div class="rules">${S.rules.holds.map(h => `<div class="rg"><h4>Tenere ${holdName(h)}</h4>${S.rules.styles.map(s => { const t = model(s.id, h).tutti;
+      return `<button type="button" class="rb" data-s="${s.id}" data-h="${h}" aria-pressed="${s.id === st.style && h === st.hold}"><span class="rn">${s.nome}</span><span class="track"><i style="width:${t.p_gain * 100}%"></i></span><span class="rv">${p100(t.p_gain)}</span><span class="rx">di solito ${pc(t.median)} · 1 su 10 sotto ${pc(t.p10, 0)} · 1 su 10 sopra ${pc(t.p90, 0)}</span></button>`; }).join('')}</div>`).join('')}</div>
+    <p class="note" style="margin-top:10px">Tenere più a lungo senza protezione aumenta le volte in guadagno, perché in questi anni le azioni sono salite, ma allarga anche le perdite nei casi peggiori. Le protezioni vicine scattano spesso per il normale saliscendi del prezzo.</p></div>
+  ${o ? `<div class="card"><h2>2. Le probabilità dette sono quelle vere?</h2>
+    <p class="sub">Per ogni anno dal ${new Date(o.da).getFullYear()} la stima è stata fatta solo con gli anni precedenti, poi confrontata con com'è andata davvero. Gruppi di titoli per forza dell'ultimo anno, con ${sty.nome} · ${holdName(st.hold)}.</p>
+    <div class="chart" id="cal"><div class="tip"></div></div>
+    <div class="legend"><span><i style="background:var(--s1)"></i>Probabilità stimata</span><span><i style="background:var(--s2)"></i>Andate bene davvero</span></div>
+    <p class="outcome" style="margin-top:10px">In media la stima ha sbagliato di <b>${Math.round(mae * 100)} punti</b>. ${mae <= .03 ? 'Quando l’app dice 52 %, aspettati qualcosa tra 49 % e 55 %.' : 'Gli anni della verifica sono andati diversamente dai precedenti: prendi le probabilità come un ordine di grandezza, non come un numero preciso.'}</p></div>
+  <div class="card"><h2>3. I primi 10 della classifica hanno fatto meglio?</h2>
+    <p class="sub">Ogni settimana dal ${dtl(o.da)} al ${dtl(o.a)}, con le sole informazioni di quel momento.</p>
+    <div class="tiles">
+      <div class="stat"><div class="k">I primi 10</div><div class="v">${p100(o.top.p_gain)}</div><div class="d">in guadagno · media ${pc(o.top.mean, 2)} · ${nf(o.top.n, 0)} operazioni</div></div>
+      <div class="stat"><div class="k">Tutti i titoli in salita</div><div class="v">${p100(o.tutti.p_gain)}</div><div class="d">in guadagno · media ${pc(o.tutti.mean, 2)} · ${nf(o.tutti.n, 0)} operazioni</div></div>
+      <div class="stat"><div class="k">Gli ultimi 10</div><div class="v">${p100(o.bottom.p_gain)}</div><div class="d">in guadagno · media ${pc(o.bottom.mean, 2)} · ${nf(o.bottom.n, 0)} operazioni</div></div>
+    </div>
+    <p class="outcome" style="margin-top:12px">${o.t != null && o.t > 2 ? `Sì: il vantaggio dei primi 10 è <b>statisticamente significativo</b> (t = ${nf(o.t)}).` : `<b>Non in modo affidabile.</b> La differenza con la media è dentro il rumore (t = ${o.t != null ? nf(o.t) : 'n/d'}; servirebbe almeno 2). La classifica dice da dove partire, non chi vincerà.`}</p>
+    <h3 style="margin-top:16px">Anno per anno: quante operazioni in guadagno</h3>
+    <div class="chart" id="yrs"><div class="tip"></div></div>
+    <div class="legend"><span><i style="background:var(--s1)"></i>I primi 10</span><span><i style="background:var(--s2)"></i>Tutti i titoli in salita</span><span>* anno parziale</span></div></div>` : '<div class="card empty">Storia troppo corta per la verifica con questa durata.</div>'}
+  <p class="note">L'elenco dei titoli è quello di oggi degli indici: chi è uscito perché è andato male non c'è, quindi i numeri sono un po' ottimisti per tutti. Il confronto tra i gruppi resta corretto.</p>`;
+  const bind = (id, f) => $('#' + id)?.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; f(b); save(); renderVerifica(); });
+  bind('v-mkt', b => { st.vmkt = b.dataset.v; setMkt(st.vmkt); });
+  bind('v-hold', b => { st.hold = Number(b.dataset.v); });
+  bind('v-style', b => { st.style = b.dataset.v; });
+  v.querySelectorAll('.rb').forEach(b => b.addEventListener('click', () => { st.style = b.dataset.s; st.hold = Number(b.dataset.h); save(); renderVerifica(); }));
+  draw.verifica();
 }
 
 /* ---------------- Day trade ---------------- */
@@ -632,30 +635,40 @@ function renderDay() {
     {every: i => mc.band_times[i].endsWith(':00') || i === 0, tip: i => mc.band_times[i] + ' (New York)'});
 }
 
-/* ---------------- Metodo ---------------- */
+
+
+/* ---------------- come funziona ---------------- */
 function renderMetodo() {
-  const v = $('#v-metodo'), M = S ? S.metodo : null, R = S ? S.rules : null;
-  v.innerHTML = `<div class="card"><div class="prose">
-    <h2>Come funziona</h2>
-    <h3>1. La scelta dei titoli</h3>
-    <p>Per ogni titolo dell'indice (S&amp;P 100 per gli USA, FTSE MIB per l'Italia) si misura quanto è salito <b>da 12 mesi fa a 1 mese fa</b> (momentum 12-1, Jegadeesh e Titman, 1993) e lo si divide per la sua <b>volatilità degli ultimi 3 mesi</b>. Si tengono solo i titoli sopra la loro <b>media a 200 giorni</b> e con volatilità almeno del 10 % annuo (sotto quella soglia il prezzo è quasi fermo, di solito perché un'offerta pubblica di acquisto lo blocca), e si scelgono i ${M ? M.top : 10} punteggi più alti. I parametri sono quelli standard della letteratura e non sono stati adattati ai dati.</p>
-    <h3>2. Quando entrare e quando vendere</h3>
-    <p>Entrata con un <b>ordine limite</b> alla seduta successiva all'ultima chiusura, a chiusura + ${R ? nf(R.limit_atr, 1) : '0,5'} ATR: se il prezzo scappa, non si compra. L'<b>ATR</b> è l'oscillazione media giornaliera degli ultimi ${R ? R.atr_win : 14} giorni. Uscita alla prima tra <b>stop-loss</b> (multipli di ATR sotto l'entrata), <b>target</b> (multipli del rischio, "2R" = il doppio di quanto rischi) e <b>data</b> (dopo 2 settimane, 1 mese o 3 mesi di borsa, festività della Borsa di New York comprese).</p>
-    <h3>3. Le probabilità</h3>
-    <p><b>Storia del titolo</b>: la regola rifatta ogni volta che quel titolo era tra il 20 % migliore del punteggio e sopra la media a 200 giorni. <b>Tutte le scelte</b>: la regola su ogni titolo scelto ogni settimana dal 2017. <b>Macchina del Tempo</b>: 10.000 futuri costruiti con candele vere dell'ultimo anno prese a caso, di solito senza la tendenza. Le "casi indipendenti" sono le finestre che non si sovrappongono: sono le osservazioni che contano davvero.</p>
+  const R = S.rules;
+  $('#v-metodo').innerHTML = `<div class="card"><div class="prose">
+    <h1>Come funziona</h1>
+    <h3>1. Quali titoli guarda</h3>
+    <p>I titoli dell'<b>S&amp;P 100</b> (USA) e del <b>FTSE MIB</b> (Italia). Tiene solo quelli <b>in salita</b>: prezzo sopra la sua media degli ultimi 200 giorni di borsa. Esclude quelli con il prezzo quasi fermo (meno del 10 % di oscillazione in un anno), perché di solito sono bloccati da un'offerta di acquisto.</p>
+    <h3>2. Quando comprare e quando vendere</h3>
+    <p><b>Compra</b> alla seduta successiva con un ordine a prezzo massimo: l'ultima chiusura più mezza oscillazione media giornaliera. Se il prezzo è più alto, non si compra. <b>Vendi</b> al primo di tre segnali: l'<b>obiettivo</b> (prezzo di guadagno), la <b>protezione</b> (prezzo di uscita in perdita, lo stop-loss) o la <b>data</b>. L'oscillazione media giornaliera è la media degli ultimi ${R.atr_win} giorni: le protezioni si misurano in oscillazioni, così si adattano a quanto si muove ogni titolo.</p>
+    <p>${R.styles.map(s => `<b>${s.nome}</b>: ${s.desc}`).join('<br>')}</p>
+    <h3>3. Come calcola la probabilità</h3>
+    <p>Per ogni settimana degli ultimi ~9 anni ha rifatto la stessa operazione su <b>tutti i titoli in salita</b>, con i soli prezzi disponibili quel giorno. Li ha divisi in cinque gruppi per <b>forza dell'ultimo anno</b> (rendimento da 12 a 1 mese fa diviso per la volatilità, Jegadeesh e Titman, 1993). La probabilità di un titolo è la frequenza con cui le operazioni del suo gruppo sono finite in guadagno, costi inclusi, leggermente avvicinata alla media per non fidarsi dei gruppi piccoli. In letteratura i titoli più forti non fanno peggio dei più deboli: se i dati dicono il contrario, è considerato rumore e la probabilità resta uguale per tutti.</p>
+    <h3>4. Cosa è stato provato e scartato</h3>
+    <p><b>Un modello con sei indizi</b> (forza, ultimo mese, vicinanza al massimo, calma del prezzo, distanza dalla media, mercato): sui dati che non aveva visto, quando diceva 57 % è andata bene il 46 %. Peggio del caso, quindi scartato. <b>La storia del singolo titolo</b>: chi è andato bene in passato non va meglio dopo. Scartata. <b>Il risultato:</b> con i soli prezzi, la probabilità di riuscita a poche settimane dipende pochissimo dal titolo; dipende soprattutto da quanto tieni e da come esci.</p>
     <h3>Titoli italiani</h3>
-    <p>Stesso metodo sul FTSE MIB e su qualche grande titolo vicino all'indice, prezzi in euro, calendario di <b>Borsa Italiana</b> (chiusa a Capodanno, Venerdì Santo, Pasquetta, 1° maggio, Ferragosto, 24, 25, 26 e 31 dicembre; orario 9:00–17:30). Il costo per operazione è <b>0,2 %</b> perché sugli acquisti di azioni italiane si paga la <b>Tobin tax dello 0,1 %</b>. L'indice FTSE MIB di riferimento non comprende i dividendi, mentre i titoli sì: il confronto giusto è con il paniere. Sui guadagni in Italia si paga il 26 % di imposta, che qui non è considerato.</p>
+    <p>Prezzi in euro, calendario di Borsa Italiana (chiusa a Capodanno, Venerdì Santo, Pasquetta, 1° maggio, Ferragosto, 24, 25, 26 e 31 dicembre), costo 0,2 % per operazione perché sugli acquisti di azioni italiane si paga la <b>Tobin tax dello 0,1 %</b>. Sui guadagni si paga il 26 % di imposta, qui non considerato.</p>
     <h3>Limiti</h3>
-    <p>L'universo è la composizione <b>di oggi</b> degli indici: nel passato contiene solo aziende sopravvissute e cresciute, quindi i numeri sono ottimistici; il confronto con il paniere è più affidabile dei valori assoluti. Nel passato si vede un'esecuzione ideale ai prezzi giornalieri; nella realtà ci sono spread, salti di prezzo e tasse. Il momentum può crollare all'improvviso nei rimbalzi dopo un mercato ribassista. Oggi il vantaggio storico dell'algoritmo <b>non è statisticamente significativo</b>.</p>
+    <p>L'elenco dei titoli è quello di oggi: chi è uscito dagli indici perché è andato male non c'è, quindi i numeri sono un po' ottimisti. Nel passato l'esecuzione è ideale; nella realtà ci sono spread, salti di prezzo e tasse. Una protezione è un ordine, non una garanzia: con un salto può eseguirsi più in basso.</p>
     <h3>Aggiornare l'app</h3>
-    <p>L'app è un'istantanea dei dati al momento in cui è stata generata. Per aggiornarla: <code>python3 app.py</code> nel repository, oppure chiedi a Claude di rigenerarla e ripubblicarla.</p>
-    <p class="note">Dati: Yahoo Finance (non ufficiale, può avere ritardi o errori). Non è consulenza finanziaria: decidi tu e, se serve, parla con un consulente abilitato. Prova prima con un conto simulato.</p>
+    <p>L'app è una fotografia dei dati di ${dtl(S.asof)}. Per aggiornarla: <code>python3 app.py</code> nel repository, oppure chiedi a Claude di rigenerarla.</p>
+    <p class="note">Dati Yahoo Finance (non ufficiali, possono avere ritardi o errori). Non è consulenza finanziaria: decidi tu e, se serve, parla con un consulente abilitato. Prova prima con un conto simulato.</p>
   </div></div>`;
 }
 
 /* ---------------- avvio ---------------- */
-const draw = {consigli: () => { if (st.open) renderDetail(S.picks.find(p => p.symbol === st.open)); }, verifica: () => { if (S) { equityChart($('#eq')); yearChart($('#yr')); } }, daytrade: () => { if (D.daytrade) renderDay(); }};
-if (!(D.mercati && D.mercati.italia)) $('#nav-it').hidden = true;
+const draw = {
+  consigli: () => document.querySelectorAll('#picks .pick').forEach(a => { if (st.open[a.dataset.s]) { const c = S.candidates.find(x => x.symbol === a.dataset.s); const box = a.querySelector('.more-body'); if (box && box.innerHTML) drawMore(box, c, levels(c, st.entry[c.symbol] || c.price)); } }),
+  verifica: () => { const o = model().oos; if (o) { calibChart($('#cal'), o.calibrazione); yearsChart($('#yrs'), o.anni); } },
+  daytrade: () => { if (D.daytrade) renderDay(); },
+};
+if (!D.mercati.italia) $('#nav-it').hidden = true;
+if (!D.mercati.usa) document.querySelector('nav.tabs a[data-v=consigli]').hidden = true;
 route();
 let rt, lastW = window.innerWidth; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; redraw(); } }, 150); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);

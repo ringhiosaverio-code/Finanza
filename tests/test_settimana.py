@@ -93,11 +93,10 @@ class Rule(unittest.TestCase):
         self.assertEqual((r["outcome"], r["days"]), ("tempo", 3))
         self.assertAlmostEqual(r["ret"], -0.03)                       # chiusura del 3o giorno = 97
 
-    def test_rule_grid(self):
-        rules = S.all_rules()
-        self.assertIn(S.DEFAULT_RULE, rules)
-        self.assertNotIn((0, 2.0, 21), rules)
-        self.assertEqual(len(rules), 39)
+    def test_styles_and_variants(self):
+        self.assertIn((S.DEFAULT_STYLE, S.DEFAULT_HOLD), S.variants())
+        self.assertEqual(len(S.variants()), len(S.STYLES) * len(S.HOLDS))
+        self.assertEqual(S.style("data")["ks"], 0)
 
     def test_trading_days_skip_weekends_and_holidays(self):
         days = S.trading_days_after("2026-11-24", 3)                  # giovedì 26 = Thanksgiving
@@ -124,10 +123,31 @@ class Italia(unittest.TestCase):
         n = 400
         calm = S.Stock("OPA", [100 * (1 + 0.0004 * i) for i in range(n)])      # sale piano, quasi senza oscillare
         others = [S.Stock("R%d" % k, walk(n, 0.0005, 0.015, 40 + k)) for k in range(6)]
-        picks, similar, sig = S.rank_day([calm] + others, n - 1, top=3)
-        self.assertTrue(sig["OPA"]["frozen"])
-        self.assertNotIn("OPA", picks)
-        self.assertNotIn("OPA", similar)
+        market = S.Stock("IDX", walk(n, 0.0003, 0.01, 7))
+        self.assertTrue(calm.signal(n - 1)["frozen"])
+        cands = S.candidates_day([calm] + others, market, n - 1)
+        self.assertNotIn("OPA", [c["s"].sym for c in cands])
+
+
+class Stima(unittest.TestCase):
+    def test_pav_makes_the_sequence_non_decreasing(self):
+        self.assertEqual(S.pav_increasing([1, 3, 2, 4], [1, 1, 1, 1]), [1, 2.5, 2.5, 4])
+        self.assertEqual(S.pav_increasing([5, 4, 3], [1, 1, 1]), [4, 4, 4])
+
+    def test_estimate_shrinks_and_never_rewards_the_weakest(self):
+        # i più deboli vanno meglio: per la regola è rumore, la stima diventa piatta
+        est = S.estimate([60, 50, 50, 50, 40], [100] * 5)
+        self.assertTrue(all(abs(p - 0.5) < 1e-9 for p in est))
+        # i più forti vanno meglio: la stima cresce, ma ristretta verso la media
+        est = S.estimate([40, 45, 50, 55, 60], [100] * 5)
+        self.assertEqual(est, sorted(est))
+        self.assertTrue(0.4 < est[0] < 0.5 < est[-1] < 0.6)
+
+    def test_group_of(self):
+        self.assertEqual([S.group_of({"x": [1, v]}) for v in (-0.5, -0.2, 0.0, 0.2, 0.5)], [0, 1, 2, 3, 4])
+
+    def test_rank_scale(self):
+        self.assertEqual(S.rank_scale([[3], [1], [2]]), [[0.5], [-0.5], [0.0]])
 
 
 class Stats(unittest.TestCase):
@@ -160,19 +180,20 @@ class Parse(unittest.TestCase):
 
 
 class Run(unittest.TestCase):
-    def test_strong_steady_trend_is_picked_and_report_is_complete(self):
-        n = 900
+    def test_ranking_is_by_probability_then_strength_and_output_is_complete(self):
+        n = 1100
         stocks = [S.Stock("UP", walk(n, 0.003, 0.008, 10), "Salita")]
-        stocks += [S.Stock("R%d" % k, walk(n, 0.0, 0.02, 20 + k)) for k in range(12)]
+        stocks += [S.Stock("R%d" % k, walk(n, 0.0004, 0.02, 20 + k)) for k in range(14)]
         market = S.Stock("SPY", walk(n, 0.0003, 0.01, 99))
         r = S.run(stocks, market, calendar(n), 0.001)
-        self.assertEqual(r["picks"][0]["symbol"], "UP")
-        self.assertLessEqual(len(r["picks"]), S.TOP)
-        for p in r["picks"]:
-            self.assertEqual(set(p["hold"]), {h for h, _ in S.HORIZONS})
-        self.assertEqual(len(r["backtest"]["dates"]), len(r["backtest"]["curves"]["strategia"]))
-        self.assertIn("t_eccesso", r["backtest"]["metrics"])
-        self.assertEqual(len(r["pooled"]), len(S.all_rules()))
+        self.assertEqual(set(r["models"]), {S.vkey(s, h) for s, h in S.variants()})
+        for key, m in r["models"].items():
+            self.assertEqual(m["p"], sorted(m["p"]), key)               # mai a favore dei più deboli
+        dk = S.vkey(S.DEFAULT_STYLE, S.DEFAULT_HOLD)
+        probs = [r["models"][dk]["p"][c["g"]] for c in r["candidates"]]
+        self.assertEqual(probs, sorted(probs, reverse=True))           # in ordine di probabilità
+        self.assertEqual(r["candidates"][0]["symbol"], "UP")
+        self.assertEqual(set(r["details"]), {c["symbol"] for c in r["candidates"][:S.TOP]})
         self.assertEqual(len(r["future_days"]), max(S.HOLDS) + 1)
 
 
