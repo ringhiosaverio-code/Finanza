@@ -1,0 +1,3 @@
+# dati personali e di trading generati dalle skill (config, ordini, piani)
+trader/
+__pycache__/
