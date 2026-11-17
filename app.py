@@ -119,7 +119,9 @@ def main(argv=None):
     if not mercati:
         print("[app] nessun mercato disponibile")
         return 1
-    out = build({"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni()}, a.out)
+    data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(),
+            "aggiornato": settimana.now_in("Europe/Rome").strftime("%Y-%m-%d %H:%M")}
+    out = build(data, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
 

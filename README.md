@@ -45,7 +45,8 @@ python3 settimana.py --mercato etf                # anche: bond, oro
 python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a quella data
 ```
 
-Sezioni:
+Sezioni (Oggi, Cerca un titolo, Azioni, Funziona?, Come funziona; il day trade di prova è un link
+in Come funziona):
 
 - **Oggi**: i consigli del giorno su cinque categorie, in ordine di probabilità di guadagno:
   ETF azionari, ETF obbligazionari (UCITS su Borsa Italiana, acquistabili dall'Italia), oro e
@@ -71,9 +72,9 @@ Sezioni:
   fino a un prezzo massimo. (3) **Vendi** al primo tra obiettivo, protezione e data. I titoli
   sono **in ordine di probabilità di riuscita**, con il perché in parole semplici, quante azioni
   comprare, il grafico e 10.000 simulazioni nel browser.
-- **Verifica**: tre domande. Conta di più il titolo o la regola? Le probabilità dette sono quelle
+- **Funziona?**: tre domande. Conta di più il titolo o la regola? Le probabilità dette sono quelle
   vere? I primi 10 hanno fatto meglio?
-- **Simula**: scrivi un codice ISIN e ottieni le probabilità di guadagno a 1 giorno, 1 settimana,
+- **Cerca un titolo**: scrivi un codice ISIN e ottieni le probabilità di guadagno a 1 giorno, 1 settimana,
   1 mese e 1 anno con la loro affidabilità (vedi `simula.py` qui sotto).
 - **Day trade**: l'ultimo giro di `finanza.py`.
 - **Come funziona**: metodo, cosa è stato scartato e limiti.

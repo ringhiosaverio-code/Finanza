@@ -249,11 +249,9 @@ footer{color:var(--muted);font-size:12.5px}
     <div class="brand"><b>Finanza</b><span id="meta"></span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
-      <a href="#consigli" data-v="consigli">Titoli USA</a>
-      <a href="#italia" data-v="italia" id="nav-it">Titoli italiani</a>
-      <a href="#simula" data-v="simula">Simula</a>
-      <a href="#verifica" data-v="verifica">Verifica</a>
-      <a href="#daytrade" data-v="daytrade">Day trade</a>
+      <a href="#simula" data-v="simula">Cerca un titolo</a>
+      <a href="#consigli" data-v="consigli">Azioni</a>
+      <a href="#verifica" data-v="verifica">Funziona?</a>
       <a href="#metodo" data-v="metodo">Come funziona</a>
     </nav>
   </div>
@@ -313,14 +311,14 @@ function route() {
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
   ['oggi', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
-  document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === v ? 'page' : 'false'));
+  document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === (v === 'italia' ? 'consigli' : v) ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
   else if (sec === 'oggi') renderOggi();
   else if (sec === 'simula') renderSimula();
   else if (sec === 'daytrade') renderDay();
   else renderMetodo();
-  $('#meta').textContent = sec === 'oggi' ? 'Consigli di oggi' : sec === 'simula' ? `${Object.keys(D.simula || {}).length} titoli da simulare` : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
+  $('#meta').textContent = sec === 'oggi' ? (D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))}, ${D.aggiornato.slice(11, 16)}` : 'Consigli di oggi') : sec === 'simula' ? `${Object.keys(D.simula || {}).length} titoli da simulare` : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
 function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
 window.addEventListener('hashchange', route);
@@ -506,7 +504,8 @@ function renderConsigli() {
   const [bs, bh] = best[0].split('|');
   v.innerHTML = `
   <div>
-    <h1>${M.nome === 'Italia' ? 'Titoli italiani' : 'Titoli USA'} consigliati</h1>
+    <div class="ctlrow" style="justify-content:space-between;align-items:center"><h1>Azioni ${M.nome === 'Italia' ? 'italiane' : 'USA'}: scegli tu la regola</h1>
+      ${D.mercati.usa && D.mercati.italia ? `<div class="seg" id="c-mkt"><button type="button" data-v="consigli" aria-pressed="${M.nome !== 'Italia'}">USA</button><button type="button" data-v="italia" aria-pressed="${M.nome === 'Italia'}">Italia</button></div>` : ''}</div>
     <p class="sub" style="margin-top:4px">Aggiornato alla chiusura di ${dtl(S.asof)}. ${S.candidates.length} titoli su ${S.universo} del ${esc(M.universo_nome)} sono in salita (sopra la media a 200 giorni): qui i primi 10, dal più probabile. Prezzi in ${esc(M.valuta_nome)}.</p>
   </div>
   <ol class="steps">
@@ -530,6 +529,7 @@ function renderConsigli() {
     <thead><tr><th>#</th><th class="l">Titolo</th><th>Probabilità</th><th>Ultimo anno</th><th>Dal massimo</th><th>Oscillazione al giorno</th><th class="l">Forza</th></tr></thead>
     <tbody>${ranked().map((c, i) => `<tr><td>${i + 1}</td><td class="l"><b>${esc(tk(c.symbol))}</b> <span class="note">${esc(c.name)}</span></td><td>${p100(prob(c))}</td><td>${pc(c.info.anno, 0)}</td><td>${pc(c.info.dal_massimo, 0)}</td><td>${pc(c.atr / c.price, 1, false)}</td><td class="l">${GROUP_SHORT[c.g]}</td></tr>`).join('')}</tbody></table></div></details>
   <footer>Dati Yahoo Finance fino alla chiusura di ${dtl(S.asof)} · app generata il ${S.generato.replace(' ', ' alle ')} (ora di ${esc(M.citta)}) · costi ${pc(S.costo, 1, false)} per operazione${M.nome === 'Italia' ? ', Tobin tax compresa' : ''} · non è consulenza finanziaria.</footer>`;
+  $('#c-mkt')?.addEventListener('click', e => { const b = e.target.closest('button'); if (b) location.hash = b.dataset.v; });
   $('#c-hold').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.hold = Number(b.dataset.h); save(); renderConsigli(); });
   $('#c-style').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.style = b.dataset.s; save(); renderConsigli(); });
   [['c-cap', 'cap'], ['c-risk', 'risk'], ['c-pct', 'maxpct']].forEach(([id, k]) => $('#' + id).addEventListener('change', e => { const x = Number(e.target.value); if (x > 0) { st[k] = x; save(); renderPicks(); } }));
@@ -800,7 +800,7 @@ function renderSimula() {
   const v = $('#v-simula');
   const ex = ['IT0003132476', 'US0378331005', 'IE00B4L5Y983', 'IT0000072618'].map(i => SIM_LIST.find(s => s.isin === i)).filter(Boolean);
   v.innerHTML = `
-  <div><h1>Simula un titolo</h1><p class="sub" style="margin-top:4px">Scrivi il <b>codice ISIN</b> (12 caratteri, lo trovi nell'estratto conto o sul sito della banca), oppure il ticker o il nome. La Macchina del Tempo calcola quante probabilità ci sono di essere in guadagno dopo <b>1 giorno, 1 settimana, 1 mese e 1 anno</b>, e quanto ci si può fidare di ogni numero.</p></div>
+  <div><h1>Cerca un titolo</h1><p class="sub" style="margin-top:4px">Scrivi il <b>codice ISIN</b> (12 caratteri, lo trovi nell'estratto conto o sul sito della banca), oppure il ticker o il nome. La Macchina del Tempo calcola quante probabilità ci sono di essere in guadagno dopo <b>1 giorno, 1 settimana, 1 mese e 1 anno</b>, e quanto ci si può fidare di ogni numero.</p></div>
   <form class="card simf" id="sim-form" autocomplete="off">
     <label for="sim-q" class="lab">Codice ISIN, ticker o nome</label>
     <div class="simrow"><input id="sim-q" list="sim-list" placeholder="es. IT0003132476" value="${esc(simSt.q)}" spellcheck="false" autocapitalize="characters"><button type="submit" class="go">Simula</button></div>
@@ -912,7 +912,7 @@ function lineChart(box, dates, vals, c) {
 const CAT = [['etf', 'ETF azionario', 'ETF azionari', '--s1'], ['bond', 'ETF obbligazionario', 'ETF obbligazionari', '--s3'],
              ['oro', 'Oro e materie prime', 'Oro e materie prime', '--s4'], ['usa', 'Azione USA', 'Azioni USA', '--s2'],
              ['italia', 'Azione italiana', 'Azioni italiane', '--s5']].filter(c => D.mercati[c[0]]);
-const oggiSt = {cat: 'tutti', cedola: false};
+const oggiSt = {cat: 'tutti', cedola: false, tutti: false};
 const fmtc = (x, cur) => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + cur;
 function catInfo(m) {
   const M = D.mercati[m], key = M.consigliata.key, [sid, h] = key.split('|'), md = M.models[key];
@@ -923,14 +923,23 @@ function catInfo(m) {
   const aff = mae == null ? 'bassa' : mae <= .03 ? 'alta' : mae <= .06 ? 'media' : 'bassa';
   return {M, key, sid, hold: Number(h), md, sty, mae, aff, prot: M.models[`equilibrato|${h}`]};
 }
+// La probabilità di ogni scheda è quella dello strumento (simulazione prudente nel periodo consigliato
+// della sua categoria): la stessa del giudizio, così numero e verdetto dicono sempre la stessa cosa.
+let OGGI = null;
 function oggiItems() {
+  if (OGGI) return OGGI;
   const items = [];
   for (const [m, one, , col] of CAT) {
     const ci = catInfo(m);
     const list = ci.M.candidates.slice().sort((a, b) => ci.md.p[b.g] - ci.md.p[a.g] || b.forza - a.forza);
-    (m === 'usa' || m === 'italia' ? list.slice(0, 5) : list).forEach(c => items.push({m, one, col, ci, c, p: ci.md.p[c.g], g: ci.md.gruppi[c.g]}));
+    (m === 'usa' || m === 'italia' ? list.slice(0, 5) : list).forEach(c => {
+      const s = D.simula && D.simula[c.symbol];
+      const hz = s && (s.orizzonti.find(o => o.giorni === ci.hold) || s.orizzonti[2]);
+      items.push({m, one, col, ci, c, s, p: hz ? Math.round(hz.scenari.prudente.p_gain * 100) / 100 : ci.md.p[c.g]});
+    });
   }
-  return items.sort((a, b) => b.p - a.p || b.c.forza - a.c.forza);
+  const ord = m => CAT.findIndex(x => x[0] === m);
+  return (OGGI = items.sort((a, b) => b.p - a.p || ord(a.m) - ord(b.m) || b.c.forza - a.c.forza));
 }
 function yieldBox(c, m) {
   const y = c.rendimento;
@@ -940,25 +949,26 @@ function yieldBox(c, m) {
 }
 function renderOggi() {
   const v = $('#v-oggi'), all = oggiItems(), ref = D.mercati[CAT[0][0]];
-  const items = all.filter(x => (oggiSt.cat === 'tutti' || x.m === oggiSt.cat) && (!oggiSt.cedola || (x.c.rendimento || 0) > 0));
+  const filtered = all.filter(x => (oggiSt.cat === 'tutti' || x.m === oggiSt.cat) && (!oggiSt.cedola || (x.c.rendimento || 0) > 0));
+  const items = oggiSt.tutti ? filtered : filtered.slice(0, 10);
   const best = CAT.map(([m]) => ({m, ci: catInfo(m)})).sort((a, b) => b.ci.md.tutti.p_gain - a.ci.md.tutti.p_gain)[0];
   const bond = D.mercati.bond ? catInfo('bond') : null;
   v.innerHTML = `
   <div><h1>Consigli di oggi</h1>
-    <p class="sub" style="margin-top:4px">Aggiornato alla chiusura di ${dtl(ref.asof)}. ${all.length} occasioni tra ETF azionari, ETF obbligazionari, oro e azioni, <b>in ordine di probabilità di guadagno</b>. Sono tutti strumenti in salita (sopra la media a 200 giorni), e per ognuno trovi quando comprare, quanto tenere e quando vendere.</p></div>
+    <p class="sub" style="margin-top:4px">${D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))} alle ${D.aggiornato.slice(11, 16)} (ora italiana), con i prezzi di chiusura di ${dtl(ref.asof)}.` : `Prezzi di chiusura di ${dtl(ref.asof)}.`} ${all.length} occasioni tra ETF, obbligazioni, oro e azioni, <b>dalla più probabile</b>, con quando comprare, quanto tenere e quando vendere, e il perché.</p></div>
   <ol class="steps">
     <li><span><b>Compra il giorno indicato</b>, con un ordine al prezzo massimo indicato. Se costa di più, non comprare.</span></li>
     <li><span><b>Tieni per il tempo indicato</b>: è quello che in passato ha dato più operazioni in guadagno per quella categoria.</span></li>
     <li><span><b>Vendi alla data indicata</b>, alla chiusura. Le cedole e i dividendi pagati nel frattempo restano tuoi.</span></li>
   </ol>
-  <div class="card"><h2>Cosa conviene, per categoria</h2>
+  <details class="card"><summary><b>Perché questi tempi?</b> Le cinque categorie a confronto</summary><h2 style="margin-top:6px">Cosa conviene, per categoria</h2>
     <p class="sub" style="margin-top:4px">Per ogni categoria, la regola che dal 2017 ha dato più operazioni in guadagno, senza perdere più del 10 % in 1 caso su 10. Costi compresi, tasse escluse.</p>
     <div class="scroll" style="margin-top:10px"><table>
       <thead><tr><th class="l">Categoria</th><th class="l">Tenere</th><th>In guadagno</th><th>Di solito</th><th>1 su 10 sotto</th><th>Con protezione</th><th class="l">Affidabilità</th></tr></thead>
       <tbody>${CAT.map(([m, , many, col]) => { const ci = catInfo(m), t = ci.md.tutti;
         return `<tr><td class="l"><span class="cat" style="--cc:var(${col})">${many}</span></td><td class="l">${holdName(ci.hold)}${ci.sid === 'data' ? ', senza protezione' : ', ' + ci.sty.nome.toLowerCase()}</td><td><b>${p100(t.p_gain)}</b></td><td class="${t.median >= 0 ? 'pos' : 'neg'}">${pc(t.median)}</td><td class="neg">${pc(t.p10, 0)}</td><td>${ci.prot ? p100(ci.prot.tutti.p_gain) : '–'}</td><td class="l"><span class="chip ${ci.aff}">${ci.aff}</span>${ci.mae != null ? ` <span class="note">±${Math.round(ci.mae * 100)} punti</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
     <p class="note" style="margin-top:8px"><b>Con protezione</b>: la stessa durata con lo stile Equilibrato (si vende anche se il prezzo scende di 3 oscillazioni giornaliere). Fa scattare l'uscita per il normale saliscendi, quindi le operazioni in guadagno sono di meno. <b>Affidabilità</b>: di quanti punti ha sbagliato in media la stima negli anni che non aveva visto (verifica dal 2021). Per ETF e oro la stima fatta con gli anni 2017-2020 era più bassa di com'è andata dopo: il 2021-2026 è stato più favorevole del solito.</p>
-    <p class="outcome" style="margin-top:10px">Le probabilità più alte sono state per gli <b>${CAT.find(c => c[0] === best.m)[2]}</b> tenuti ${holdName(best.ci.hold)} (${p100(best.ci.md.tutti.p_gain)}).${bond ? ` Gli <b>ETF obbligazionari</b> nel breve guadagnano poco (di solito ${pc(bond.md.tutti.median)} in ${holdName(bond.hold)}): servono per stabilità e cedole, non per guadagnare in fretta, e nel 2022 hanno perso molto.` : ''}</p></div>
+    <p class="outcome" style="margin-top:10px">Le probabilità più alte sono state per gli <b>${CAT.find(c => c[0] === best.m)[2]}</b> tenuti ${holdName(best.ci.hold)} (${p100(best.ci.md.tutti.p_gain)}).${bond ? ` Gli <b>ETF obbligazionari</b> nel breve guadagnano poco (di solito ${pc(bond.md.tutti.median)} in ${holdName(bond.hold)}): servono per stabilità e cedole, non per guadagnare in fretta, e nel 2022 hanno perso molto.` : ''}</p></details>
   <div class="filters">
     ${[['tutti', 'Tutti']].concat(CAT.map(c => [c[0], c[2]])).map(([k, l]) => `<button type="button" class="chipb" data-c="${k}" aria-pressed="${oggiSt.cat === k}">${l}</button>`).join('')}
     <label class="note" style="white-space:nowrap"><input type="checkbox" id="o-ced" ${oggiSt.cedola ? 'checked' : ''}> solo chi paga cedole o dividendi</label>
@@ -977,12 +987,13 @@ function renderOggi() {
         <div><span class="k">Tieni e vendi</span><span class="big">${holdName(x.ci.hold)}</span><small>vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
         <div><span class="k">Cedole o dividendi</span><span class="big">${yv}</span><small>${ys}</small></div>
       </div>
-      ${D.simula && D.simula[c.symbol] ? verdettoHTML(giudizio(D.simula[c.symbol]), true) : ''}
-      <p class="note">In passato, per ${({etf: 'gli ETF azionari', bond: 'gli ETF obbligazionari', oro: 'oro e materie prime', usa: 'le azioni USA', italia: 'le azioni italiane'})[x.m]} in salita con questa regola: di solito ${pc(x.g.median)} · 1 volta su 10 sotto ${pc(x.g.p10, 0)} · 1 volta su 10 sopra ${pc(x.g.p90, 0)} · ${nf(x.g.n, 0)} operazioni · affidabilità ${x.ci.aff}. Ultimo anno ${pc(c.info.anno, 0)}.</p>
+      ${x.s ? verdettoHTML(giudizio(x.s), true) : ''}
     </article>`; }).join('') : '<div class="card empty">Nessuno strumento con questi filtri oggi.</div>'}</div>
-  <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (dal 2017, prezzi corretti per dividendi e split, costi compresi, tasse escluse). Anche con il 71 % di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
+  ${!oggiSt.tutti && filtered.length > 10 ? `<button type="button" class="go" id="o-tutti" style="justify-self:center">Mostra tutti (${filtered.length})</button>` : ''}
+  <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (prezzi corretti per dividendi e split, tasse escluse). Anche con il ${all.length ? p100(all[0].p) : '70 %'} di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
   v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
   $('#o-ced').addEventListener('change', e => { oggiSt.cedola = e.target.checked; renderOggi(); });
+  $('#o-tutti')?.addEventListener('click', () => { oggiSt.tutti = true; renderOggi(); });
 }
 
 /* ---------------- come funziona ---------------- */
@@ -1011,8 +1022,9 @@ function renderMetodo() {
     <p>Prezzi in euro, calendario di Borsa Italiana (chiusa a Capodanno, Venerdì Santo, Pasquetta, 1° maggio, Ferragosto, 24, 25, 26 e 31 dicembre), costo 0,2 % per operazione perché sugli acquisti di azioni italiane si paga la <b>Tobin tax dello 0,1 %</b>. Sui guadagni si paga il 26 % di imposta, qui non considerato.</p>
     <h3>Limiti</h3>
     <p>L'elenco dei titoli è quello di oggi: chi è uscito dagli indici perché è andato male non c'è, quindi i numeri sono un po' ottimisti. Nel passato l'esecuzione è ideale; nella realtà ci sono spread, salti di prezzo e tasse. Una protezione è un ordine, non una garanzia: con un salto può eseguirsi più in basso.</p>
-    <h3>Aggiornare l'app</h3>
-    <p>L'app è una fotografia dei dati di ${dtl(S.asof)}. Per aggiornarla: <code>python3 app.py</code> nel repository, oppure chiedi a Claude di rigenerarla.</p>
+    <h3>Aggiornamento</h3>
+    <p>${D.aggiornato ? `Ultimo aggiornamento: ${dtl(D.aggiornato.slice(0, 10))} alle ${D.aggiornato.slice(11, 16)} (ora italiana). ` : ''}L'algoritmo usa i prezzi di <b>chiusura</b>: durante la seduta non cambierebbe nulla, quindi l'app si aggiorna dopo la chiusura di Milano e di New York. A mano: <code>python3 app.py</code> nel repository.</p>
+    <p><a href="#daytrade">Esempio di day trade con la Macchina del Tempo</a> (dati di prova del 19 ottobre 2026): per chi opera in giornata, l'operazione con le probabilità più basse.</p>
     <p class="note">Dati Yahoo Finance (non ufficiali, possono avere ritardi o errori). Non è consulenza finanziaria: decidi tu e, se serve, parla con un consulente abilitato. Prova prima con un conto simulato.</p>
   </div></div>`;
 }
@@ -1024,8 +1036,7 @@ const draw = {
   daytrade: () => { if (D.daytrade) renderDay(); },
   simula: () => { if (simSt.cur) drawSim(simSt.cur); },
 };
-if (!D.mercati.italia) $('#nav-it').hidden = true;
-if (!D.mercati.usa) document.querySelector('nav.tabs a[data-v=consigli]').hidden = true;
+if (!D.mercati.italia && !D.mercati.usa) document.querySelector('nav.tabs a[data-v=consigli]').hidden = true;
 route();
 let rt, lastW = window.innerWidth; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; redraw(); } }, 150); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
