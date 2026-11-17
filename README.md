@@ -57,6 +57,12 @@ alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York.
 - **Esercitati**: un conto finto da 10.000 € ai prezzi di chiusura dell'ultimo aggiornamento, con i
   costi (0,1 %, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro.
   Prima di comprare mostra il giudizio, quando vendi confronta il risultato con il piano.
+- **Crypto intraday** (`intraday.py`): per ogni crypto due piani validi 24 ore, "compra il
+  ribasso" e "compra la rottura", con entrata, protezione, obiettivo e scadenza. Verifica sulle
+  candele orarie degli ultimi 2 anni (12 crypto, piani alle 18 e alle 22, costi 0,2 % per lato):
+  in guadagno il 29-44 % delle volte, media da -0,4 % a -0,5 % per operazione, in entrambi gli
+  anni. In 24 ore il movimento è quasi testa o croce e i costi lo rendono una perdita: l'app dice
+  "Per ora no" e suggerisce di provare nel conto demo.
 - **Crypto**: le 12 principali in euro (Bitcoin, Ethereum, Solana…) con le stesse regole: probabilità
   a 3 mesi di calendario, oscillazione, calo massimo storico (Bitcoin fino a -83 %) e giudizio.
 
@@ -144,6 +150,22 @@ già dentro (S&P 100, FTSE MIB, ETF azionari e obbligazionari, oro e quelli aggi
 di 1 giorno, 1 settimana, 1 mese, 3 mesi e 1 anno. Per un ISIN nuovo, `simula.py` lo aggiunge a
 `simula_lista.json` e `python3 app.py` lo mette nell'app con prezzi aggiornati. `isin.json` contiene
 la corrispondenza ISIN → ticker dei titoli dell'app, verificata uno per uno con la ricerca di Yahoo.
+
+## `verifica.py`: 22 anni di verifica della probabilità e del giudizio
+
+```bash
+python3 verifica.py      # richiede numpy; scrive verifica.json, che l'app mostra in Funziona?
+```
+
+Per tutti gli strumenti dell'app, ogni mese dal 2004, rifà la probabilità prudente di guadagno con
+i soli prezzi di quel giorno e la confronta con com'è andata (39.125 previsioni):
+
+- in media è prudente: detta 56 %, vera 58 %, sia prima sia dopo il 2017;
+- il giudizio distingue davvero: "Sì" in guadagno il 63 % delle volte (1 su 10 sotto -5 %),
+  "Con cautela" il 57 % (1 su 10 sotto -8 %), "Per ora no" il 53 % (1 su 10 sotto -26 %);
+- sopra il 70 % le stime sono state troppo ottimiste (vero 62 %): l'app lo segnala;
+- tre miglioramenti provati su anni mai visti (miscela con la frequenza del gruppo, ricalibratura
+  unica e per gruppo) non prevedono meglio: la stima resta quella prudente.
 
 ## Test
 

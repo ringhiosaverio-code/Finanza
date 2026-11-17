@@ -24,6 +24,7 @@ import json
 import os
 import sys
 
+import intraday
 import settimana
 import simula
 from concurrent.futures import ThreadPoolExecutor
@@ -105,6 +106,15 @@ def simulazioni(mercati, log=print):
     return out
 
 
+def crypto_intraday(log=print):
+    """Piani crypto per le prossime 24 ore e verifica di 2 anni (intraday.py)."""
+    try:
+        return intraday.analizza(log)
+    except Exception as e:                                   # rete o dati: l'app si genera lo stesso
+        log("[app] intraday saltato: %s" % e)
+        return None
+
+
 def calendari():
     """I giorni di borsa dal 2024 al 2027 (NYSE e Borsa Italiana): servono all'app per contare la data
     di vendita di un titolo comprato in un giorno qualsiasi."""
@@ -155,7 +165,8 @@ def main(argv=None):
         print("[app] nessun mercato disponibile")
         return 1
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
-            "calendari": calendari(), "cambio": cambio(),
+            "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(),
+            "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "aggiornato": settimana.now_in("Europe/Rome").strftime("%Y-%m-%d %H:%M")}
     out = build(data, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))

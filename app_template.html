@@ -668,6 +668,7 @@ function renderVerifica() {
     <div><span class="lab">Quanto tenere</span><div class="seg" id="v-hold">${S.rules.holds.map(h => `<button type="button" data-v="${h}" aria-pressed="${h === st.hold}">${holdName(h)}</button>`).join('')}</div></div>
     <div><span class="lab">Come uscire</span><div class="seg" id="v-style">${S.rules.styles.map(s => `<button type="button" data-v="${s.id}" aria-pressed="${s.id === st.style}">${s.nome}</button>`).join('')}</div></div>
   </div>
+  ${verifica25HTML()}
   <div class="card"><h2>1. Conta di più il titolo o la regola?</h2>
     <p class="sub">Quante operazioni sono finite in guadagno, su tutti i titoli in salita, per ogni combinazione. La linea tratteggiata è il 50 %: testa o croce. Tocca una riga per sceglierla.</p>
     <div class="rules">${S.rules.holds.map(h => `<div class="rg"><h4>Tenere ${holdName(h)}</h4>${S.rules.styles.map(s => { const t = model(s.id, h).tutti;
@@ -753,6 +754,8 @@ function giudizio(s) {
   if (p10 >= -.10) pro.push(`<b>Rischio contenuto</b>: 1 volta su 10 si perde più ${delp(-p10)}, in ${per}.`);
   else contro.push(`<b>Rischio ${p10 < -.2 ? 'molto ' : ''}alto</b>: 1 volta su 10 si perde più ${delp(-p10)}, in ${per}.`);
   if (s.rendimento > 0) pro.push(`<b>Paga ${isFund && m === 'bond' ? 'cedole' : 'dividendi'}</b>: ${pc(s.rendimento, 1, false)} negli ultimi 12 mesi, sul prezzo di oggi.`);
+  const v70 = D.verifica25 && D.verifica25.tutto.calibrazione.find(c => c.da >= .7);
+  if (p >= .7 && v70) contro.push(`<b>Stima molto alta</b>: in ${nf(v70.n, 0)} casi degli ultimi 25 anni in cui la stima superava il 70 %, è andata in guadagno davvero il ${p100(v70.vera)}.`);
   if (aff.livello === 'alta') pro.push(`<b>Stima affidabile</b>: ${esc(aff.motivo)}.`);
   else if (aff.livello === 'bassa') contro.push(`<b>Stima poco affidabile</b>: ${esc(aff.motivo)}.`);
   // il trend: lo usa l'algoritmo dei consigli, ma conta solo dove i dati dicono che conta
@@ -1242,9 +1245,59 @@ function renderCrypto() {
     <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno a 3 mesi</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
       return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
-  <p class="note">Tocca una riga per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
+  ${intradayHTML()}
+  <p class="note">Tocca una riga della prima tabella per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
   v.querySelectorAll('tr.clk').forEach(r => { const go = () => { simSt.q = r.dataset.q; location.hash = 'simula'; };
     r.addEventListener('click', go); r.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); });
+}
+
+/* ---------------- crypto intraday: le prossime 24 ore ---------------- */
+function intradayHTML() {
+  const I = D.intraday; if (!I || !I.crypto) return '';
+  const R = I.regole, V = I.verifica;
+  const hhmm = s => { const d = new Date(s.replace(' UTC', 'Z').replace(' ', 'T')); return d.toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}); };
+  const f = x => nf(x, dec(x));
+  const vtxt = s => s && s.n ? `${p100(s.p_gain)} in guadagno · media ${pc(s.media, 2)} · 1 su 10 sotto ${pc(s.p10, 1)}` : 'n/d';
+  const nessuna = R.every(r => V[r.id].tutto.media < 0);
+  const items = Object.entries(I.crypto).map(([sym, x]) => ({sym, x, s: SIM[sym]})).filter(o => o.s);
+  return `<div class="card"><h2>Intraday: le prossime 24 ore</h2>
+    <p class="sub" style="margin-top:4px">Due piani per ogni crypto, validi 24 ore dall'ultimo aggiornamento, e com'è andata la stessa regola negli ultimi 2 anni (piani rifatti ogni giorno alle 18 e alle 22 ora italiana, 12 crypto, costi 0,2 % per operazione).</p>
+    <div class="scroll" style="margin-top:10px"><table>
+      <thead><tr><th class="l">Regola</th><th class="l">Primo anno</th><th class="l">Secondo anno</th><th>Ordini eseguiti</th></tr></thead>
+      <tbody>${R.map(r => `<tr><td class="l"><b>${esc(r.nome)}</b><br><span class="note">${esc(r.desc)}</span></td><td class="l">${vtxt(V[r.id].anno1)}</td><td class="l">${vtxt(V[r.id].anno2)}</td><td>${p100(V[r.id].tutto.eseguite)}</td></tr>`).join('')}</tbody></table></div>
+    <div class="verdetto v-no" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">✕</span><div><b>Per ora no</b><p>${nessuna ? 'Nessuna regola intraday ha guadagnato in media, in nessuno dei due anni: in 24 ore il movimento delle crypto è quasi testa o croce, e i costi (0,4 % tra entrata e uscita) lo trasformano in una perdita. Se vuoi provare, fallo nel conto demo.' : 'Le regole intraday sono andate quasi in pareggio: i costi pesano più del movimento atteso.'}</p></div></div></div>
+    <div class="scroll" style="margin-top:12px"><table>
+      <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th class="l">Compra il ribasso</th><th class="l">Compra la rottura</th><th class="l">Fino a</th><th class="l">Su questa crypto (ribasso)</th></tr></thead>
+      <tbody>${items.map(({sym, x, s}) => { const a = x.piani.ribasso, b = x.piani.rottura, st = x.storia.ribasso;
+        return `<tr><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(tk(sym))}</span></td><td>${f(x.prezzo)} €<br><span class="note">${hhmm(x.ora)}</span></td>
+          <td class="l">compra a <b>${f(a.entrata)}</b><br><span class="neg">protezione ${f(a.protezione)}</span> · <span class="pos">obiettivo ${f(a.obiettivo)}</span></td>
+          <td class="l">compra sopra <b>${f(b.entrata)}</b><br><span class="neg">protezione ${f(b.protezione)}</span> · <span class="pos">obiettivo ${f(b.obiettivo)}</span></td>
+          <td class="l">${hhmm(x.fino)}</td><td class="l">${st.n ? `${p100(st.p_gain)} in guadagno, media ${pc(st.media, 2)} (${st.n})` : 'n/d'}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:8px">Se l'ordine non scatta entro la scadenza, niente operazione; se scatta, chiudi al più tardi alla scadenza. I livelli valgono per i prezzi dell'ultimo aggiornamento (due volte al giorno): controlla il prezzo prima di entrare. Non è consulenza finanziaria.</p></div>`;
+}
+
+/* ---------------- 25 anni di verifica della probabilità e del giudizio ---------------- */
+function verifica25HTML() {
+  const V = D.verifica25; if (!V || !V.tutto) return '';
+  const T = V.tutto, sì = T.giudizio.find(g => g.giudizio === 'Sì'), cau = T.giudizio.find(g => g.giudizio === 'Con cautela'), no = T.giudizio.find(g => g.giudizio === 'Per ora no');
+  const alt = V.alternative || [], att = alt.find(a => a.nome === 'attuale');
+  return `<div class="card"><h2>In ${new Date(T.a).getFullYear() - new Date(T.da).getFullYear()} anni: la probabilità e il giudizio funzionano?</h2>
+    <p class="sub" style="margin-top:4px">Per tutti gli strumenti dell'app, ogni mese dal ${dtl(T.da)}, la probabilità di guadagno è stata rifatta con i soli prezzi di quel giorno, sul periodo consigliato, e confrontata con com'è andata davvero: ${nf(T.n, 0)} previsioni.</p>
+    <div class="tiles">
+      ${[sì, cau, no].filter(Boolean).map(g => `<div class="stat"><div class="k">Giudizio "${g.giudizio}"</div><div class="v">${p100(g.in_guadagno)}</div><div class="d">in guadagno davvero · di solito ${pc(g.rendimento_tipico, 1)} · 1 su 10 sotto ${pc(g.p10, 0)} · ${nf(g.n, 0)} casi</div></div>`).join('')}
+    </div>
+    <p class="outcome" style="margin-top:12px">Il giudizio distingue davvero: i "Sì" sono andati in guadagno più spesso e con perdite più piccole nei casi peggiori. In media la probabilità detta (${p100(T.stimata)}) è stata un po' più bassa di quella vera (${p100(T.vera)}): è prudente, sia prima sia dopo il 2017.</p>
+    <div class="two" style="margin-top:12px">
+      <div><h3>Quando diceva…</h3><div class="scroll"><table><thead><tr><th class="l">Stima</th><th>Detta</th><th>Successa davvero</th><th>Casi</th></tr></thead>
+        <tbody>${T.calibrazione.map(c => `<tr><td class="l">${Math.round(c.da * 100)}–${Math.round(c.a * 100)} %</td><td>${p100(c.stimata)}</td><td><b>${p100(c.vera)}</b></td><td>${nf(c.n, 0)}</td></tr>`).join('')}</tbody></table></div>
+        <p class="note" style="margin-top:6px">Oltre il 70 % le stime sono state troppo ottimiste: l'app lo segnala.</p></div>
+      <div><h3>Per gruppo</h3><div class="scroll"><table><thead><tr><th class="l">Gruppo</th><th>Detta</th><th>Vera</th></tr></thead>
+        <tbody>${T.gruppi.map(g => `<tr><td class="l">${esc(g.gruppo)}</td><td>${p100(g.stimata)}</td><td><b>${p100(g.vera)}</b></td></tr>`).join('')}</tbody></table></div></div>
+    </div>
+    ${alt.length ? `<h3 style="margin-top:14px">Miglioramenti provati</h3><p class="note">Valutati anno per anno su anni che non avevano visto. Il numero è quanto prevedono meglio di chi dice sempre la media (0 = uguale).</p>
+      <ul class="note" style="margin:6px 0 0;padding-left:18px">${alt.map(a => `<li><b>${esc(a.nome)}</b>: ${(a.skill >= 0 ? '+' : '') + nf(a.skill * 100, 2)} %${a.nome === 'attuale' ? ' (quella in uso)' : att && a.skill <= att.skill + 0.001 ? ', non migliora: scartato' : ', differenza troppo piccola per cambiare'}</li>`).join('')}</ul>
+      <p class="note" style="margin-top:6px">Nessuna variante prevede in modo apprezzabilmente migliore: le differenze tra strumenti dello stesso gruppo sono soprattutto rumore. Quello che conta, e che il giudizio usa, è la categoria, il tempo e il rischio.</p>` : ''}
+  </div>`;
 }
 
 /* ---------------- altro ---------------- */
@@ -1276,6 +1329,10 @@ function renderMetodo() {
     <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
+    <h3>Crypto intraday</h3>
+    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive.</p>
+    <h3>La verifica di 25 anni</h3>
+    <p>Ogni mese dal 2004, per tutti gli strumenti, la probabilità di guadagno è stata rifatta con i soli prezzi di quel giorno e confrontata con com'è andata (<code>python3 verifica.py</code>). In media è prudente di un paio di punti; i "Sì" sono andati in guadagno più spesso dei "Con cautela" e dei "Per ora no", con perdite più piccole. Tre modi per migliorarla (miscela con la frequenza del gruppo, ricalibratura per tutti e per gruppo) sono stati provati su anni mai visti e nessuno prevede meglio: la stima resta quella prudente, con un avviso sopra il 70 %, dove in passato è stata troppo ottimista.</p>
     <h3>Perché sì e perché no</h3>
     <p>Per ogni strumento, nei consigli e nella ricerca per ISIN, il giudizio segue sempre le stesse regole, sul periodo consigliato per la sua categoria (3 mesi per ETF e oro, 1 mese per le azioni): <b>Sì</b> se nella simulazione prudente è finito in guadagno almeno 60 volte su 100 e nel 10 % dei casi peggiori non ha perso più del 10 %; <b>Per ora no</b> se in guadagno meno di 50 volte su 100, se nel 10 % peggiore ha perso più del 20 % o se il prezzo è bloccato; altrimenti <b>Con cautela</b>. Ogni motivo riporta i numeri da cui viene: la storia reale dello strumento, la simulazione, le cedole, l'affidabilità e il confronto con un ETF sul mondo intero.</p>
     <p><b>Il trend, verificato.</b> I consigli guardano gli strumenti in salita (sopra la media a 200 giorni), ma dal 2017 essere in salita ha aumentato le probabilità solo per gli ETF obbligazionari (58 contro 51 su 100). Per azioni ed ETF azionari non ha cambiato molto; per l'oro è andato meglio comprare in discesa. Per questo "è in discesa" diventa un motivo per non comprare solo dove i dati lo confermano, e l'app lo scrive con i numeri.</p>
