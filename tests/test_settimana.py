@@ -24,7 +24,9 @@ def walk(n, drift, vol, seed, start=100.0):
 
 
 def calendar(n):
-    return ["D%05d" % i for i in range(n)]
+    import datetime
+    d0 = datetime.date(2020, 1, 1)
+    return [(d0 + datetime.timedelta(days=i)).isoformat() for i in range(n)]
 
 
 class NoLookAhead(unittest.TestCase):
@@ -52,6 +54,56 @@ class NoLookAhead(unittest.TestCase):
         self.assertAlmostEqual(s.mom(i), p[i - 21] / p[i - 252] - 1, places=9)
 
 
+def flat_stock(n=40, price=100.0, rng=1.0):
+    """Titolo piatto con candele di ampiezza costante: ATR = 2 x rng."""
+    bars = [(price, price + rng, price - rng, price)] * n
+    return [price] * n, bars
+
+
+class Rule(unittest.TestCase):
+    def make(self, tail):
+        closes, bars = flat_stock()
+        for k, b in enumerate(tail):
+            bars[20 + k] = b
+            closes[20 + k] = b[3]
+        return S.Stock("X", closes, ohlc=bars)          # segnale al giorno 19, ATR = 2
+
+    def test_target_hit(self):
+        s = self.make([(100, 101, 99.5, 100.5), (100.5, 115, 100, 112)])
+        r = S.trade(s, 19, 3.0, 2.0, 10)
+        self.assertEqual((r["outcome"], r["days"]), ("target", 2))
+        self.assertAlmostEqual(r["ret"], 112 / 100 - 1)              # target = 100 + 2 x 3 x 2
+
+    def test_gap_below_stop_exits_at_open(self):
+        s = self.make([(100, 101, 99.5, 100), (90, 91, 89, 90)])
+        r = S.trade(s, 19, 3.0, 2.0, 10)
+        self.assertEqual((r["outcome"], round(r["ret"], 4)), ("stop", -0.10))
+
+    def test_both_same_day_counts_as_stop(self):
+        s = self.make([(100, 101, 99.5, 100), (100, 120, 80, 100)])
+        self.assertEqual(S.trade(s, 19, 3.0, 2.0, 10)["outcome"], "stop")
+
+    def test_limit_not_filled(self):
+        s = self.make([(105, 106, 104, 105)])                         # limite = 100 + 0,5 x 2 = 101
+        self.assertEqual(S.trade(s, 19, 3.0, 2.0, 10), {"filled": False})
+
+    def test_no_stop_no_target_exits_on_the_date(self):
+        s = self.make([(100, 101, 99.5, 100), (100, 120, 60, 95), (95, 96, 94, 97)])
+        r = S.trade(s, 19, 0, 0, 3)
+        self.assertEqual((r["outcome"], r["days"]), ("tempo", 3))
+        self.assertAlmostEqual(r["ret"], -0.03)                       # chiusura del 3o giorno = 97
+
+    def test_rule_grid(self):
+        rules = S.all_rules()
+        self.assertIn(S.DEFAULT_RULE, rules)
+        self.assertNotIn((0, 2.0, 21), rules)
+        self.assertEqual(len(rules), 39)
+
+    def test_trading_days_skip_weekends_and_holidays(self):
+        days = S.trading_days_after("2026-11-24", 3)                  # giovedì 26 = Thanksgiving
+        self.assertEqual(days, ["2026-11-25", "2026-11-27", "2026-11-30"])
+
+
 class Stats(unittest.TestCase):
     def test_stats(self):
         st = S.stats([-0.1, 0.0, 0.1, 0.2])
@@ -71,9 +123,9 @@ class Parse(unittest.TestCase):
         doc = {"chart": {"result": [{"meta": {"gmtoffset": 0, "shortName": "X"},
                                      "timestamp": [0, 86400, 172800],
                                      "indicators": {"adjclose": [{"adjclose": [10.0, None, 12.0]}]}}]}}
-        meta, out = S.parse(json.dumps(doc))
+        meta, out, _ = S.parse(json.dumps(doc))
         self.assertEqual(out, {"1970-01-01": 10.0, "1970-01-03": 12.0})
-        _, cut = S.parse(json.dumps(doc), cut="1970-01-02")
+        _, cut, _ = S.parse(json.dumps(doc), cut="1970-01-02")
         self.assertEqual(list(cut), ["1970-01-01"])
 
     def test_align_forward_fills_after_first_price(self):
@@ -91,9 +143,11 @@ class Run(unittest.TestCase):
         self.assertEqual(r["picks"][0]["symbol"], "UP")
         self.assertLessEqual(len(r["picks"]), S.TOP)
         for p in r["picks"]:
-            self.assertEqual(set(p["horizons"]), {h for h, _ in S.HORIZONS})
+            self.assertEqual(set(p["hold"]), {h for h, _ in S.HORIZONS})
         self.assertEqual(len(r["backtest"]["dates"]), len(r["backtest"]["curves"]["strategia"]))
         self.assertIn("t_eccesso", r["backtest"]["metrics"])
+        self.assertEqual(len(r["pooled"]), len(S.all_rules()))
+        self.assertEqual(len(r["future_days"]), max(S.HOLDS) + 1)
 
 
 if __name__ == "__main__":

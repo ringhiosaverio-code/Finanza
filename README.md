@@ -35,34 +35,48 @@ Si ferma sempre prima del broker: non invia mai ordini. Alla prima esecuzione cr
 `trader/config.json` dall'esempio (paper trading attivo); la cartella `trader/` è esclusa da git.
 Codici di uscita: 0 PASS, 1 BLOCK o nessun ingresso, 2 fermato dal filtro.
 
-## `settimana.py`: i 5 titoli della settimana
+## `app.py`: tutto in un'app
 
 ```bash
-python3 settimana.py                       # i 5 titoli di oggi + trader/settimana.html
-python3 settimana.py --asof 2025-06-30     # cosa avrebbe scelto a quella data
-python3 settimana.py --tickers AAPL,MSFT,NVDA,KO,XOM,JPM
+python3 app.py                       # scarica i dati, analizza, scrive trader/app.html
+python3 settimana.py                 # gli stessi 10 titoli, solo in testo
+python3 settimana.py --asof 2025-06-30
 ```
 
-- **Algoritmo** (trasparente, parametri standard della letteratura, non ottimizzati sui dati):
-  momentum 12-1 (rendimento da 12 a 1 mese fa) diviso per la volatilità a 3 mesi, solo titoli
-  sopra la media a 200 giorni; i 5 punteggi più alti dell'S&P 100.
-- **Probabilità di guadagno e guadagno tipico in %** a 7 giorni, 1 mese e 1 anno per ogni titolo:
-  quante volte, in condizioni simili, quel titolo era in guadagno dopo quel periodo, con il range
-  10-90 %, il numero di casi e quanti sono davvero indipendenti (affidabilità alta / media / bassa).
-- **Verifica**: la stessa scelta rifatta ogni settimana degli ultimi ~9 anni con i soli dati di allora,
-  costi inclusi, confrontata con il paniere e con SPY, anno per anno e con un test statistico (t)
-  che dice se il vantaggio è distinguibile dal caso.
+Un unico file HTML con quattro schede:
 
-Onestà prima di tutto: oggi il vantaggio storico sul paniere **non è statisticamente significativo**
-(t < 2). A metà 2025 lo sembrava (t = 2,36), poi un 2026 negativo l'ha riportato nel rumore: per
-questo nessun algoritmo va chiamato "affidabile". L'universo è l'S&P 100 di oggi, quindi la verifica
-soffre di bias di sopravvivenza ed è ottimistica. A 1 anno i casi indipendenti sono pochissimi.
-I dati vengono da Yahoo Finance (query1/query2.finance.yahoo.com), con una cache di 12 ore in `trader/cache/daily/`.
+- **Consigli**: i 10 titoli della settimana. Per ognuno **quando entrare** (ordine limite alla
+  prossima seduta a ultima chiusura + 0,5 ATR; se non si esegue, niente operazione), **quando
+  vendere** (alla prima tra stop-loss, target e una data precisa di borsa) e **quante azioni**
+  per il tuo capitale e il tuo rischio massimo. La **probabilità di guadagno** viene da tre fonti:
+  la stessa regola rifatta sul passato del titolo in condizioni simili, su tutte le scelte passate
+  dell'algoritmo, e la **Macchina del Tempo** (10.000 simulazioni nel browser con candele vere
+  dell'ultimo anno). Stop (1,5 / 2 / 3 ATR / nessuno), target (1,5R / 2R / 3R / nessuno) e durata
+  (2 settimane / 1 mese / 3 mesi) si cambiano e tutto si ricalcola.
+- **Verifica**: la scelta rifatta ogni settimana dal 2017 con i soli dati di allora, contro il
+  paniere e SPY, anno per anno, con il test statistico (t) e tutte le 39 varianti della regola.
+- **Day trade**: l'ultimo giro di `finanza.py`.
+- **Metodo**: come funziona e i suoi limiti.
+
+L'**algoritmo** è il momentum 12-1 (rendimento da 12 a 1 mese fa) diviso per la volatilità a
+3 mesi, solo per i titoli sopra la media a 200 giorni, sull'S&P 100. I parametri sono quelli
+standard della letteratura e non sono adattati ai dati.
+
+Cosa dicono i dati, senza abbellimenti:
+
+- Il vantaggio storico sul paniere **non è statisticamente significativo** (t < 2).
+- Gli stop stretti peggiorano i risultati: con 2 ATR lo stop scatta quasi una volta su due.
+  Per questo lo stop predefinito è 3 ATR, ma anche così "compra e tieni" ha una probabilità di
+  guadagno più alta. Lo stop serve a limitare le perdite grosse, non ad aumentare i guadagni.
+- L'universo è l'S&P 100 di oggi (bias di sopravvivenza): i numeri assoluti sono ottimistici.
+
+L'app è un'istantanea: per aggiornarla rilancia `python3 app.py`. I dati vengono da Yahoo Finance
+(query1/query2.finance.yahoo.com) con una cache di 12 ore in `trader/cache/daily/`.
 
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana.py, offline
+python3 -m unittest discover -s tests                         # settimana.py e la regola, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

@@ -1,36 +1,42 @@
 #!/usr/bin/env python3
-"""I 5 titoli della settimana: un algoritmo trasparente, verificato sul passato.
+"""I 10 titoli della settimana: un algoritmo trasparente, verificato sul passato, con
+quando entrare, quando vendere e la probabilità storica di guadagno.
 
 COSA FA
-  1. Scarica 10 anni di prezzi giornalieri (chiusure corrette per dividendi e split, Yahoo)
-     per ~100 grandi titoli USA (l'S&P 100) più SPY come riferimento di mercato.
-  2. Dà un punteggio a ogni titolo con una regola nota in letteratura:
-       momentum 12-1   = rendimento da 12 mesi fa a 1 mese fa (Jegadeesh e Titman, 1993)
-       diviso per la volatilità degli ultimi 3 mesi (momentum "corretto per il rischio")
-       e solo se il prezzo è sopra la sua media a 200 giorni (filtro di trend).
-  3. Sceglie i 5 punteggi più alti.
-  4. VERIFICA: rifà la stessa scelta ogni settimana degli ultimi ~9 anni, usando solo i dati
-     disponibili in quel momento, e misura cosa è successo dopo 7 giorni, 1 mese e 1 anno.
-  5. Per ogni titolo scelto calcola probabilità di guadagno e guadagno tipico in % a
-     7 giorni, 1 mese e 1 anno: è la frequenza storica di quando QUEL titolo si trovava in
-     condizioni simili (tra il 20 % migliore del punteggio e sopra la media a 200 giorni).
+  1. Scarica 10 anni di candele giornaliere (corrette per dividendi e split, Yahoo) per
+     ~100 grandi titoli USA (l'S&P 100) più SPY come riferimento di mercato.
+  2. Punteggio di ogni titolo (regola nota in letteratura, parametri standard, non ottimizzati):
+       momentum 12-1 = rendimento da 12 mesi fa a 1 mese fa (Jegadeesh e Titman, 1993)
+       diviso per la volatilità degli ultimi 3 mesi, solo sopra la media a 200 giorni.
+     Sceglie i 10 punteggi più alti.
+  3. Per ogni titolo una REGOLA precisa:
+       entrata  ordine limite per la prossima seduta a ultima chiusura + 0,5 ATR (se non si
+                esegue, niente operazione: non si insegue il prezzo)
+       uscita   la prima tra: stop-loss (entrata - 3 ATR), target (entrata + 2 volte il
+                rischio), oppure alla chiusura della 21a seduta.
+     ATR = oscillazione media giornaliera degli ultimi 14 giorni. Le date sono giorni di
+     borsa veri (festività NYSE 2026-2027).
+  4. PROBABILITÀ: la stessa regola rifatta su ogni volta che quel titolo era in condizioni
+     simili nel passato (tra il 20 % migliore del punteggio e sopra la media a 200 giorni),
+     e su tutte le scelte passate dell'algoritmo. Per 39 varianti della regola (stop, target,
+     durata, anche senza stop o senza target), così l'app può mostrarle tutte.
+  5. VERIFICA: la scelta rifatta ogni settimana degli ultimi ~9 anni con i soli dati di allora.
 
 COSA NON FA
-  Non prevede il futuro. Le probabilità sono frequenze del passato. L'universo è l'S&P 100
-  di OGGI: nel passato contiene solo aziende che sono sopravvissute e cresciute (bias di
-  sopravvivenza), quindi la verifica storica è ottimistica. Per 1 anno ci sono pochissimi
-  casi indipendenti: quel numero è il più fragile. Non è consulenza finanziaria.
+  Non prevede il futuro: le probabilità sono frequenze del passato. L'universo è l'S&P 100
+  di OGGI (bias di sopravvivenza: la verifica è ottimistica). Non è consulenza finanziaria.
 
 Esempi:
-    python3 settimana.py                    # i 5 titoli di questa settimana + report HTML
+    python3 settimana.py                    # i 10 titoli di questa settimana
     python3 settimana.py --asof 2025-06-30  # cosa avrebbe scelto a quella data
-    python3 settimana.py --tickers AAPL,MSFT,NVDA,KO,XOM,JPM
+    python3 app.py                          # tutto nell'app: trader/app.html
 
 Solo libreria standard, Python 3.8+.
 """
 
 import argparse
 import datetime
+import importlib.util
 import json
 import math
 import os
@@ -45,7 +51,7 @@ TRADER = os.path.join(ROOT, "trader")
 CACHE = os.path.join(TRADER, "cache", "daily")
 UA = "Mozilla/5.0 (compatible; finanza/1.0)"
 
-# S&P 100 (composizione recente). BRK-B nel formato di Yahoo.
+# S&P 100 (composizione recente). BRK-B nel formato di Yahoo; BNY Mellon oggi è BNY.
 UNIVERSE = """AAPL ABBV ABT ACN ADBE AIG AMD AMGN AMT AMZN AVGO AXP BA BAC BKNG BLK BMY BNY BRK-B C CAT
 CHTR CL CMCSA COF COP COST CRM CSCO CVS CVX DE DHR DIS DUK EMR F FDX GD GE GILD GM GOOGL GS HD HON IBM
 INTC INTU ISRG JNJ JPM KHC KO LIN LLY LMT LOW MA MCD MDLZ MDT MET META MMM MO MRK MS MSFT NEE NFLX NKE
@@ -58,16 +64,60 @@ LOOKBACK = 252     # 12 mesi di borsa
 SKIP = 21          # salta l'ultimo mese (inversione di breve periodo)
 VOL_WIN = 63       # 3 mesi per la volatilità
 SMA_WIN = 200      # media mobile del filtro di trend
+ATR_WIN = 14       # oscillazione media giornaliera
 STEP = 5           # ribilanciamento settimanale
-TOP = 5
+TOP = 10
 TOP_PCT = 0.20     # "condizioni simili" = nel 20 % migliore del punteggio
+
+# la regola di entrata e uscita, con le varianti che l'app permette di provare
+LIMIT_ATR = 0.5            # entrata: limite a ultima chiusura + 0,5 ATR
+STOPS_ATR = (1.5, 2.0, 3.0, 0)     # 0 = nessuno stop (si esce solo alla data)
+TARGETS_R = (1.5, 2.0, 3.0, 0)     # 0 = nessun target (si lascia correre fino a stop o data)
+HOLDS = (10, 21, 63)               # 2 settimane, 1 mese, 3 mesi di borsa
+# Stop a 3 ATR: lo standard per operazioni di qualche settimana. Sui dati, gli stop più stretti
+# scattano spesso per rumore (con 2 ATR quasi una volta su due): l'app mostra tutte le varianti.
+DEFAULT_RULE = (3.0, 2.0, 21)
+MC_BARS = 252              # candele usate dalla Macchina del Tempo dell'app
 
 
 class FetchError(Exception):
     pass
 
 
-# ------------------------------------------------------------------ dati
+def rule_key(ks, rr, hold):
+    return "%g|%g|%d" % (ks, rr, hold)
+
+
+def all_rules():
+    """Tutte le varianti: senza stop non c'è un rischio su cui misurare il target, quindi
+    'nessuno stop' va solo con 'nessun target' (uscita alla data)."""
+    return [(ks, rr, h) for h in HOLDS for ks in STOPS_ATR for rr in TARGETS_R if ks or not rr]
+
+
+# ------------------------------------------------------------------ calendario
+
+def _nyse_holidays():
+    path = os.path.join(ROOT, ".claude", "skills", "trader-alerts", "alerts.py")
+    try:
+        spec = importlib.util.spec_from_file_location("trader_alerts_cal", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return set(mod.NYSE_HOLIDAYS), set(mod.NYSE_EARLY_CLOSE)
+    except Exception:
+        return set(), set()
+
+
+def trading_days_after(day, n):
+    """I prossimi n giorni di borsa NYSE dopo `day` (YYYY-MM-DD)."""
+    hol, _ = _nyse_holidays()
+    d = datetime.date.fromisoformat(day)
+    out = []
+    while len(out) < n:
+        d += datetime.timedelta(days=1)
+        if d.weekday() < 5 and d.isoformat() not in hol:
+            out.append(d.isoformat())
+    return out
+
 
 def now_new_york():
     try:
@@ -76,6 +126,8 @@ def now_new_york():
     except Exception:
         return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
 
+
+# ------------------------------------------------------------------ dati
 
 def fetch(sym, max_age_hours=12):
     """Il JSON del grafico Yahoo a 10 anni, con una cache in trader/cache/daily."""
@@ -111,27 +163,41 @@ def fetch(sym, max_age_hours=12):
 
 
 def parse(text, cut=None):
-    """-> (meta, {data 'YYYY-MM-DD': chiusura corretta}). Scarta la barra di oggi se la
-    borsa non ha ancora chiuso, e tutto ciò che è dopo `cut` (per --asof)."""
+    """-> (meta, {data: chiusura corretta}, {data: (apertura, massimo, minimo, chiusura) corretti}).
+    Scarta la barra di oggi se la borsa non ha ancora chiuso, e tutto ciò che è dopo `cut`."""
     res = json.loads(text)["chart"]["result"][0]
     meta = res.get("meta", {})
     ts = res.get("timestamp") or []
     ind = res.get("indicators", {})
-    closes = ((ind.get("adjclose") or [{}])[0].get("adjclose")
-              or (ind.get("quote") or [{}])[0].get("close") or [])
+    q = (ind.get("quote") or [{}])[0]
+    raw_c = q.get("close") or []
+    adj = (ind.get("adjclose") or [{}])[0].get("adjclose") or raw_c
+    o_, h_, l_ = q.get("open") or [], q.get("high") or [], q.get("low") or []
     off = meta.get("gmtoffset", -18000)
-    out = {}
-    for t, c in zip(ts, closes):
+    closes, ohlc = {}, {}
+    for k, t in enumerate(ts):
+        c = adj[k] if k < len(adj) else None
         if c is None or c <= 0:
             continue
-        out[datetime.datetime.fromtimestamp(t + off, datetime.timezone.utc).strftime("%Y-%m-%d")] = float(c)
+        d = datetime.datetime.fromtimestamp(t + off, datetime.timezone.utc).strftime("%Y-%m-%d")
+        closes[d] = float(c)
+        rc = raw_c[k] if k < len(raw_c) else None
+        f = c / rc if rc else 1.0                      # fattore di correzione del giorno
+        vals = [x[k] if k < len(x) else None for x in (o_, h_, l_)]
+        if None in vals or not rc:
+            ohlc[d] = (c, c, c, c)
+        else:
+            o, h, lo = (v * f for v in vals)
+            ohlc[d] = (o, max(h, o, c), min(lo, o, c), c)
     now = now_new_york()
     today = now.strftime("%Y-%m-%d")
-    if today in out and now.hour < 16:
-        del out[today]                       # barra di oggi ancora in formazione
+    if today in closes and now.hour < 16:
+        del closes[today]                       # barra di oggi ancora in formazione
+        ohlc.pop(today, None)
     if cut:
-        out = {d: c for d, c in out.items() if d <= cut}
-    return meta, out
+        closes = {d: c for d, c in closes.items() if d <= cut}
+        ohlc = {d: v for d, v in ohlc.items() if d <= cut}
+    return meta, closes, ohlc
 
 
 def align(series, calendar):
@@ -148,15 +214,35 @@ def align(series, calendar):
     return out
 
 
+def align_ohlc(series, calendar):
+    """Come align, ma un giorno mancante diventa una candela piatta all'ultima chiusura."""
+    out = {}
+    for sym, s in series.items():
+        row, last = [], None
+        for d in calendar:
+            if d in s:
+                row.append(s[d])
+                last = s[d][3]
+            else:
+                row.append(None if last is None else (last, last, last, last))
+        out[sym] = row
+    return out
+
+
 # ------------------------------------------------------------------ indicatori
 
 class Stock:
     """Prezzi allineati + somme prefisse per media mobile e volatilità in O(1)."""
 
-    def __init__(self, sym, prices, name=""):
+    def __init__(self, sym, prices, name="", ohlc=None):
         self.sym, self.p, self.name = sym, prices, name
-        self.first = next((i for i, x in enumerate(prices) if x is not None), len(prices))
         n = len(prices)
+        if ohlc is None:
+            ohlc = [None if x is None else (x, x, x, x) for x in prices]
+        self.o = [b[0] if b else None for b in ohlc]
+        self.h = [b[1] if b else None for b in ohlc]
+        self.l = [b[2] if b else None for b in ohlc]
+        self.first = next((i for i, x in enumerate(prices) if x is not None), n)
         self.P = [0.0] * (n + 1)             # somme prefisse dei prezzi
         self.S1 = [0.0] * (n + 1)            # dei rendimenti log
         self.S2 = [0.0] * (n + 1)            # dei loro quadrati
@@ -183,6 +269,16 @@ class Stock:
     def mom(self, i):
         return self.p[i - SKIP] / self.p[i - LOOKBACK] - 1
 
+    def atr(self, i):
+        """Media del true range degli ultimi ATR_WIN giorni fino a i compreso."""
+        if i - self.first < ATR_WIN:
+            return None
+        tot = 0.0
+        for k in range(i - ATR_WIN + 1, i + 1):
+            pc = self.p[k - 1]
+            tot += max(self.h[k] - self.l[k], abs(self.h[k] - pc), abs(self.l[k] - pc))
+        return tot / ATR_WIN
+
     def fwd(self, i, h):
         if i + h >= len(self.p):
             return None
@@ -201,7 +297,7 @@ class Stock:
                 "vs_sma": self.p[i] / sma - 1}
 
 
-def rank_day(stocks, i):
+def rank_day(stocks, i, top=TOP):
     """Classifica del giorno i: (scelti, insieme 'condizioni simili', segnali)."""
     sig = {}
     for s in stocks:
@@ -211,8 +307,75 @@ def rank_day(stocks, i):
     order = sorted(sig, key=lambda k: -sig[k]["score"])
     cut = max(1, int(round(len(order) * TOP_PCT)))
     similar = {k for k in order[:cut] if sig[k]["above"]}
-    picks = [k for k in order if sig[k]["above"]][:TOP]
+    picks = [k for k in order if sig[k]["above"]][:top]
     return picks, similar, sig
+
+
+# ------------------------------------------------------------------ la regola
+
+def trade(s, i, ks, rr, hold, cost=0.0):
+    """La regola, rifatta sul passato dal segnale alla chiusura del giorno i.
+
+    Entrata: limite a chiusura(i) + LIMIT_ATR x ATR per la seduta i+1 (all'apertura se
+    l'apertura è sotto il limite, altrimenti al limite se il minimo lo tocca, altrimenti
+    niente operazione). Uscita: stop = entrata - ks x ATR, target = entrata + rr x ks x ATR,
+    oppure alla chiusura della seduta numero `hold` (ks = 0: nessuno stop; rr = 0: nessun
+    target). Un'apertura oltre lo stop o il target
+    esce all'apertura (gap). Se nello stesso giorno si toccano entrambi, conta lo stop.
+
+    -> None se mancano dati, {"filled": False} se il limite non si esegue, altrimenti
+       {"filled": True, "outcome": target|stop|tempo, "ret": rendimento netto, "days": n}.
+    """
+    n = len(s.p)
+    if i + hold >= n or s.p[i] is None:
+        return None
+    a = s.atr(i)
+    if not a:
+        return None
+    limit = s.p[i] + LIMIT_ATR * a
+    d = i + 1
+    if s.o[d] <= limit:
+        fill = s.o[d]
+    elif s.l[d] <= limit:
+        fill = limit
+    else:
+        return {"filled": False}
+    stop = fill - ks * a if ks else -math.inf
+    target = fill + rr * ks * a if (ks and rr) else math.inf
+
+    def out(kind, price, k):
+        return {"filled": True, "outcome": kind, "ret": price / fill - 1 - cost, "days": k - d + 1}
+
+    for k in range(d, d + hold):
+        if k > d:
+            if s.o[k] <= stop:
+                return out("stop", s.o[k], k)
+            if s.o[k] >= target:
+                return out("target", s.o[k], k)
+        if s.l[k] <= stop:
+            return out("stop", stop, k)
+        if s.h[k] >= target:
+            return out("target", target, k)
+    return out("tempo", s.p[d + hold - 1], d + hold - 1)
+
+
+def trade_stats(results, hold):
+    """results: lista di (indice del segnale, esito di trade)."""
+    done = [(i, r) for i, r in results if r and r.get("filled")]
+    unfilled = sum(1 for _, r in results if r and not r.get("filled"))
+    rets = [r["ret"] for _, r in done]
+    if not rets:
+        return {"n": 0, "non_eseguiti": unfilled, "indipendenti": 0}
+    st = stats(rets)
+    st.update({
+        "non_eseguiti": unfilled,
+        "p_target": sum(1 for _, r in done if r["outcome"] == "target") / len(done),
+        "p_stop": sum(1 for _, r in done if r["outcome"] == "stop") / len(done),
+        "p_tempo": sum(1 for _, r in done if r["outcome"] == "tempo") / len(done),
+        "giorni": sum(r["days"] for _, r in done) / len(done),
+        "indipendenti": independent(sorted({i for i, _ in done}), hold),
+    })
+    return st
 
 
 # ------------------------------------------------------------------ statistiche
@@ -247,22 +410,27 @@ def confidence(n_ind):
     return "alta" if n_ind >= 30 else ("media" if n_ind >= 10 else "bassa")
 
 
+def r4(x):
+    return None if x is None else round(x, 4)
+
+
+def slim(st):
+    return {k: (r4(v) if isinstance(v, float) else v) for k, v in st.items()}
+
+
 # ------------------------------------------------------------------ analisi
 
-def run(stocks, market, calendar, cost_rt):
+def run(stocks, market, calendar, cost_rt, top=TOP):
     last = len(calendar) - 1
     start = min(s.first for s in stocks) + LOOKBACK
     sched = list(range(last, start - 1, -STEP))[::-1]       # settimanale, allineato a oggi
-
-    by_day = {}
-    for i in sched:
-        by_day[i] = rank_day(stocks, i)
+    by_day = {i: rank_day(stocks, i, top) for i in sched}
     smap = {s.sym: s for s in stocks}
+    rules = all_rules()
 
-    # 1. le scelte di oggi
     picks, _, sig_now = by_day[last]
 
-    # 2. verifica settimanale: equity della strategia, del paniere equipesato e di SPY
+    # 1. verifica settimanale: i titoli scelti, tenuti una settimana, contro paniere e SPY
     eq = {"strategia": [1.0], "paniere": [1.0], "spy": [1.0]}
     dates = [calendar[sched[0]]]
     weekly, prev = [], set()
@@ -273,11 +441,9 @@ def run(stocks, market, calendar, cost_rt):
         if not pk:
             continue
         g = sum(smap[k].fwd(i, STEP) for k in pk) / len(pk)
-        turnover = len(set(pk) - prev) / TOP
-        net = g - turnover * cost_rt
+        net = g - len(set(pk) - prev) / len(pk) * cost_rt
         prev = set(pk)
-        bench = [smap[k].fwd(i, STEP) for k in sig]
-        b = sum(bench) / len(bench)
+        b = sum(smap[k].fwd(i, STEP) for k in sig) / len(sig)
         spy = market.fwd(i, STEP)
         eq["strategia"].append(eq["strategia"][-1] * (1 + net))
         eq["paniere"].append(eq["paniere"][-1] * (1 + b))
@@ -285,7 +451,7 @@ def run(stocks, market, calendar, cost_rt):
         dates.append(calendar[i + STEP])
         weekly.append((net, b, calendar[i + STEP][:4]))
 
-    # 3. track record dell'algoritmo per orizzonte
+    # 2. comprare e tenere: track record per orizzonte
     record = {}
     for label, h in HORIZONS:
         pk_r, bench_r, beat = [], [], []
@@ -300,66 +466,140 @@ def run(stocks, market, calendar, cost_rt):
             pk_r += fr
             bench_r += br
             beat.append(sum(fr) / len(fr) > sum(br) / len(br))
-        record[label] = {"algoritmo": stats(pk_r), "paniere": stats(bench_r),
-                         "batte_paniere": (sum(beat) / len(beat)) if beat else None,
-                         "settimane": len(beat), "indipendenti": independent(
-                             [i for i in sched if i + h <= last], h)}
+        record[label] = {"algoritmo": slim(stats(pk_r)), "paniere": slim(stats(bench_r)),
+                         "batte_paniere": r4(sum(beat) / len(beat)) if beat else None,
+                         "settimane": len(beat),
+                         "indipendenti": independent([i for i in sched if i + h <= last], h)}
 
-    # 4. per ogni titolo scelto: condizioni simili nel passato + storia completa
+    # 3. la regola su tutte le scelte passate dell'algoritmo (ogni variante)
+    pooled = {}
+    for ks, rr, h in rules:
+        res = []
+        for i in sched:
+            if i + h >= last:
+                break
+            for k in by_day[i][0]:
+                res.append((i, trade(smap[k], i, ks, rr, h, cost_rt)))
+        pooled[rule_key(ks, rr, h)] = slim(trade_stats(res, h))
+
+    # 4. ogni titolo scelto: regola in condizioni simili, comprare e tenere, dati per l'app
+    future = trading_days_after(calendar[last], max(HOLDS) + 1)
     detail = []
     for k in picks:
         s = smap[k]
-        row = {"symbol": k, "name": s.name, "price": s.p[last], "signal": sig_now[k], "horizons": {}}
+        sim_idx = [i for i in sched if i < last and k in by_day[i][1]]
+        grid = {}
+        for ks, rr, h in rules:
+            res = [(i, trade(s, i, ks, rr, h, cost_rt)) for i in sim_idx if i + h < last]
+            st = trade_stats(res, h)
+            st["affidabilita"] = confidence(st.get("indipendenti", 0))
+            grid[rule_key(ks, rr, h)] = slim(st)
+        hold_stats = {}
         for label, h in HORIZONS:
-            idx = [i for i in sched if i < last and i + h <= last and k in by_day[i][1]]
-            cond = [s.fwd(i, h) for i in idx]
-            base = [s.fwd(i, h) for i in range(s.first, last - h + 1)]
+            idx = [i for i in sim_idx if i + h <= last]
             n_ind = independent(idx, h)
-            row["horizons"][label] = {"simili": stats(cond), "indipendenti": n_ind,
-                                      "affidabilita": confidence(n_ind), "storia": stats(base)}
-        detail.append(row)
+            hold_stats[label] = {"simili": slim(stats([s.fwd(i, h) for i in idx])),
+                                 "indipendenti": n_ind, "affidabilita": confidence(n_ind)}
+        lo = max(s.first + 1, last - MC_BARS + 1)
+        bars = [[round(s.o[i] / s.p[i - 1], 5), round(s.h[i] / s.p[i - 1], 5),
+                 round(s.l[i] / s.p[i - 1], 5), round(s.p[i] / s.p[i - 1], 5)] for i in range(lo, last + 1)]
+        c0 = max(s.first, last - 129)
+        detail.append({
+            "symbol": k, "name": s.name, "price": round(s.p[last], 2), "atr": round(s.atr(last), 4),
+            "signal": slim(sig_now[k]), "rule": grid, "hold": hold_stats, "bars": bars,
+            "chart": {"dates": calendar[c0:last + 1], "close": [round(x, 2) for x in s.p[c0:last + 1]],
+                      "sma": [round(s.sma(i), 2) if i - s.first >= SMA_WIN else None
+                              for i in range(c0, last + 1)]},
+        })
 
-    # 5. metriche della curva
-    def curve_stats(c, w):
+    # 5. metriche della verifica
+    def curve_stats(c):
         years = max(1e-9, (len(c) - 1) * STEP / 252)
         peak, dd = c[0], 0.0
         for x in c:
             peak = max(peak, x)
             dd = min(dd, x / peak - 1)
-        return {"cagr": c[-1] ** (1 / years) - 1, "max_drawdown": dd, "totale": c[-1] - 1}
+        return {"cagr": r4(c[-1] ** (1 / years) - 1), "max_drawdown": r4(dd), "totale": r4(c[-1] - 1)}
 
-    metrics = {k: curve_stats(v, None) for k, v in eq.items()}
-    metrics["settimane_positive"] = sum(1 for n, _, _ in weekly if n > 0) / max(1, len(weekly))
-    metrics["settimane_sopra_paniere"] = sum(1 for n, b, _ in weekly if n > b) / max(1, len(weekly))
+    metrics = {k: curve_stats(v) for k, v in eq.items()}
     metrics["settimane"] = len(weekly)
-
-    # il vantaggio sul paniere è distinguibile dal caso? t sui rendimenti settimanali in eccesso
+    metrics["settimane_positive"] = r4(sum(1 for n, _, _ in weekly if n > 0) / max(1, len(weekly)))
+    metrics["settimane_sopra_paniere"] = r4(sum(1 for n, b, _ in weekly if n > b) / max(1, len(weekly)))
     ex = [n - b for n, b, _ in weekly]
     if len(ex) > 2:
         mu = sum(ex) / len(ex)
         sd = math.sqrt(sum((x - mu) ** 2 for x in ex) / (len(ex) - 1))
-        metrics["eccesso_annuo"] = mu * 52
-        metrics["t_eccesso"] = mu / sd * math.sqrt(len(ex)) if sd > 0 else None
-
-    # anno per anno
+        metrics["eccesso_annuo"] = r4(mu * 52)
+        metrics["t_eccesso"] = r4(mu / sd * math.sqrt(len(ex))) if sd > 0 else None
     years = {}
     for n, b, y in weekly:
         a = years.setdefault(y, [1.0, 1.0, 0])
         a[0] *= 1 + n
         a[1] *= 1 + b
         a[2] += 1
-    metrics["anni"] = [{"anno": y, "strategia": v[0] - 1, "paniere": v[1] - 1, "settimane": v[2]}
+    metrics["anni"] = [{"anno": y, "strategia": r4(v[0] - 1), "paniere": r4(v[1] - 1), "settimane": v[2]}
                        for y, v in sorted(years.items())]
 
     m_i = market.signal(last)
-    regime = {"spy_sopra_media200": m_i["above"], "spy_vs_media200": m_i["vs_sma"]} if m_i else None
+    regime = {"spy_sopra_media200": m_i["above"], "spy_vs_media200": r4(m_i["vs_sma"])} if m_i else None
+    return {
+        "asof": calendar[last], "future_days": future, "picks": detail, "record": record, "pooled": pooled,
+        "backtest": {"dates": dates, "curves": {k: [round(x, 4) for x in v] for k, v in eq.items()},
+                     "metrics": metrics, "da": dates[0], "a": dates[-1], "costo_andata_ritorno": cost_rt},
+        "universo": len(stocks), "regime": regime, "top": top,
+        "rules": {"stops_atr": STOPS_ATR, "targets_r": TARGETS_R, "holds": HOLDS, "default": DEFAULT_RULE,
+                  "limit_atr": LIMIT_ATR, "atr_win": ATR_WIN},
+        "classifica": [dict(symbol=k, **slim(sig_now[k])) for k in
+                       sorted(sig_now, key=lambda x: -sig_now[x]["score"])][:25],
+        "metodo": {"lookback": LOOKBACK, "skip": SKIP, "vol_win": VOL_WIN, "sma_win": SMA_WIN,
+                   "step": STEP, "top": top, "top_pct": TOP_PCT},
+    }
 
-    return {"asof": calendar[last], "picks": detail, "record": record,
-            "backtest": {"dates": dates, "curves": eq, "metrics": metrics, "da": dates[0], "a": dates[-1],
-                         "costo_andata_ritorno": cost_rt},
-            "universo": len(stocks), "regime": regime,
-            "classifica": [{"symbol": k, **sig_now[k]} for k in
-                           sorted(sig_now, key=lambda x: -sig_now[x]["score"])][:15]}
+
+def analizza(tickers=None, asof=None, cost_pct=0.1, top=TOP, workers=4, log=print):
+    """Scarica, allinea e analizza. -> il dizionario dei risultati (vedi run)."""
+    syms = [x.strip().upper().replace(".", "-") for x in tickers] if tickers else UNIVERSE
+    syms = [s for s in dict.fromkeys(syms) if s and s != MARKET]
+    log("[settimana] scarico %d titoli + %s (10 anni, giornaliero; cache 12 ore)..." % (len(syms), MARKET))
+
+    def get(sym):
+        try:
+            return sym, fetch(sym), None
+        except FetchError as e:
+            return sym, None, str(e)
+
+    with ThreadPoolExecutor(max_workers=max(1, workers)) as ex:
+        got = list(ex.map(get, syms + [MARKET]))
+    errors = [e for _, t, e in got if e]
+    texts = {s: t for s, t, _ in got if t}
+    if MARKET not in texts:
+        raise FetchError("non riesco a scaricare %s: %s" % (MARKET, "; ".join(errors)))
+
+    parsed = {s: parse(t, asof) for s, t in texts.items()}
+    calendar = sorted(parsed[MARKET][1])
+    closes = align({s: v[1] for s, v in parsed.items()}, calendar)
+    ohlc = align_ohlc({s: v[2] for s, v in parsed.items()}, calendar)
+    stocks = [Stock(s, closes[s], parsed[s][0].get("shortName") or parsed[s][0].get("longName") or "", ohlc[s])
+              for s in syms if s in closes]
+    short = [s.sym for s in stocks if s.first >= len(calendar) - LOOKBACK]
+    errors += ["%s: meno di 1 anno di dati" % x for x in short]
+    stocks = [s for s in stocks if s.first < len(calendar) - LOOKBACK]
+    for e in errors:
+        log("[settimana] saltato: " + e)
+    if len(stocks) < top:
+        raise FetchError("servono almeno %d titoli con 1 anno di storia" % top)
+
+    r = run(stocks, Stock(MARKET, closes[MARKET], "SPY", ohlc[MARKET]), calendar, cost_pct / 100, top)
+    r["saltati"] = errors
+    live = {}
+    for p in r["picks"]:
+        m = parsed[p["symbol"]][0]
+        if m.get("regularMarketPrice") and m.get("regularMarketTime") and not asof:
+            live[p["symbol"]] = {"price": m["regularMarketPrice"], "time": datetime.datetime.fromtimestamp(
+                m["regularMarketTime"] + m.get("gmtoffset", -18000), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")}
+    r["live"] = live
+    r["generato"] = now_new_york().strftime("%Y-%m-%d %H:%M")
+    return r
 
 
 # ------------------------------------------------------------------ stampa
@@ -371,62 +611,52 @@ def f_pct(x, d=1, sign=True):
     return (s % (x * 100)).replace(".", ",")
 
 
+def plan_for(p, r, rule=DEFAULT_RULE):
+    """Livelli e date della regola per un titolo scelto, dal prezzo di riferimento (ultima chiusura)."""
+    ks, rr, hold = rule
+    ref, a = p["price"], p["atr"]
+    return {"entrata_giorno": r["future_days"][0], "limite": ref + r["rules"]["limit_atr"] * a,
+            "stop": ref - ks * a if ks else None, "target": ref + rr * ks * a if (ks and rr) else None,
+            "uscita_giorno": r["future_days"][hold - 1]}
+
+
 def print_report(r):
-    print("\nI 5 TITOLI DELLA SETTIMANA  (dati fino al %s, universo %d titoli)" % (r["asof"], r["universo"]))
+    ks, rr, hold = DEFAULT_RULE
+    print("\nI %d TITOLI DELLA SETTIMANA  (dati fino al %s, universo %d titoli)" % (r["top"], r["asof"], r["universo"]))
     if r["regime"]:
         g = r["regime"]
         print("Mercato (SPY): %s la media a 200 giorni (%s)" % (
             "sopra" if g["spy_sopra_media200"] else "SOTTO", f_pct(g["spy_vs_media200"])))
+    print("Regola: entrata con limite a chiusura + %g ATR, stop %g ATR, target %gR, uscita dopo %d sedute.\n"
+          % (LIMIT_ATR, ks, rr, hold))
+    num = lambda x: "%9s" % "-" if x is None else "%9.2f" % x
+    print("  #  %-6s %9s %9s %9s %9s  %-10s %8s %8s %10s" % (
+        "titolo", "chiusura", "limite", "stop", "target", "esci il", "prob. +", "tipico", "casi"))
+    key = rule_key(*DEFAULT_RULE)
     for n, p in enumerate(r["picks"], 1):
-        s = p["signal"]
-        print("\n%d. %s  %s  -  prezzo %.2f" % (n, p["symbol"], p["name"], p["price"]))
-        print("   momentum 12-1 %s, volatilità %s, %s sopra la media 200" % (
-            f_pct(s["mom"]), f_pct(s["vol"], sign=False), f_pct(s["vs_sma"])))
-        print("   %-9s %10s %12s %22s %8s %12s" % ("", "prob. +", "tipico", "range 10-90 %", "casi", "affidabilità"))
-        for label, _ in HORIZONS:
-            h = p["horizons"][label]
-            st = h["simili"]
-            if not st["n"]:
-                print("   %-9s %10s" % (label, "n/d"))
-                continue
-            print("   %-9s %10s %12s %22s %8s %12s" % (
-                label, f_pct(st["p_gain"], 0, False), f_pct(st["median"]),
-                "%s / %s" % (f_pct(st["p10"]), f_pct(st["p90"])), "%d (%d)" % (st["n"], h["indipendenti"]),
-                h["affidabilita"]))
-    print("\n   prob. + = quante volte, in condizioni simili, il titolo era in guadagno dopo quel periodo.")
-    print("   tipico = guadagno mediano. casi = finestre storiche (tra parentesi quelle che non si sovrappongono).")
+        pl = plan_for(p, r)
+        st = p["rule"][key]
+        print(" %2d  %-6s %9.2f %9.2f %s %s  %-10s %8s %8s %10s" % (
+            n, p["symbol"], p["price"], pl["limite"], num(pl["stop"]), num(pl["target"]), pl["uscita_giorno"],
+            f_pct(st.get("p_gain"), 0, False), f_pct(st.get("median")),
+            "%d (%d)" % (st.get("n", 0), st.get("indipendenti", 0))))
+    pool = r["pooled"][key]
+    print("\n  Entrata: seduta del %s. prob. + = quante volte la stessa regola, in condizioni simili," % r["future_days"][0])
+    print("  ha chiuso in guadagno (costi inclusi). Su tutte le scelte passate dell'algoritmo: %s in guadagno,"
+          % f_pct(pool.get("p_gain"), 0, False))
+    print("  tipico %s, target %s / stop %s / a tempo %s." % (
+        f_pct(pool.get("median")), f_pct(pool.get("p_target"), 0, False), f_pct(pool.get("p_stop"), 0, False),
+        f_pct(pool.get("p_tempo"), 0, False)))
 
     b = r["backtest"]["metrics"]
-    print("\nVERIFICA SUL PASSATO (%s - %s, %d settimane, costi %s a cambio)" % (
-        r["backtest"]["da"], r["backtest"]["a"], b["settimane"], f_pct(r["backtest"]["costo_andata_ritorno"], 2, False)))
-    print("   %-26s %10s %12s %10s" % ("", "annuo", "calo max", "totale"))
-    for k, lab in (("strategia", "5 titoli, ogni settimana"), ("paniere", "tutti i titoli, stesso peso"),
-                   ("spy", "SPY (S&P 500)")):
-        m = b[k]
-        print("   %-26s %10s %12s %10s" % (lab, f_pct(m["cagr"]), f_pct(m["max_drawdown"]), f_pct(m["totale"], 0)))
-    print("   settimane in guadagno %s, settimane meglio del paniere %s" % (
-        f_pct(b["settimane_positive"], 0, False), f_pct(b["settimane_sopra_paniere"], 0, False)))
+    print("\nVERIFICA (%s - %s, %d settimane): annuo %s contro paniere %s e SPY %s" % (
+        r["backtest"]["da"], r["backtest"]["a"], b["settimane"], f_pct(b["strategia"]["cagr"]),
+        f_pct(b["paniere"]["cagr"]), f_pct(b["spy"]["cagr"])))
     if b.get("t_eccesso") is not None:
         t = b["t_eccesso"]
-        print("   vantaggio medio sul paniere %s l'anno, t = %.2f: %s" % (
-            f_pct(b["eccesso_annuo"]), t,
-            "statisticamente significativo (t > 2)" if t > 2 else
-            "NON distinguibile dal caso (servirebbe t > 2)"))
-    print("\n   anno   5 titoli   paniere")
-    for y in b["anni"]:
-        print("   %s %10s %9s%s" % (y["anno"], f_pct(y["strategia"], 0), f_pct(y["paniere"], 0),
-                                 "   (parziale)" if y["settimane"] < 40 else ""))
-    print("\n   %-9s %22s %22s %16s" % ("", "scelte: prob. + / tipico", "paniere: prob. + / tipico", "batte il paniere"))
-    for label, _ in HORIZONS:
-        x = r["record"][label]
-        a, p = x["algoritmo"], x["paniere"]
-        print("   %-9s %22s %22s %16s" % (
-            label, "%s / %s" % (f_pct(a.get("p_gain"), 0, False), f_pct(a.get("median"))),
-            "%s / %s" % (f_pct(p.get("p_gain"), 0, False), f_pct(p.get("median"))),
-            f_pct(x["batte_paniere"], 0, False)))
-    print("\nATTENZIONE: frequenze del passato, non previsioni. Universo = S&P 100 di oggi (bias di")
-    print("sopravvivenza: la verifica è ottimistica). A 1 anno i casi indipendenti sono pochissimi.")
-    print("Non è consulenza finanziaria.")
+        print("  vantaggio sul paniere %s l'anno, t = %.2f: %s" % (
+            f_pct(b["eccesso_annuo"]), t, "significativo (t > 2)" if t > 2 else "NON distinguibile dal caso"))
+    print("\nFrequenze del passato, non previsioni. Bias di sopravvivenza. Non è consulenza finanziaria.")
 
 
 # ------------------------------------------------------------------ main
@@ -435,63 +665,21 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--tickers", help="lista separata da virgole al posto dell'S&P 100")
     ap.add_argument("--asof", help="usa solo i dati fino a questa data (YYYY-MM-DD)")
+    ap.add_argument("--top", type=int, default=TOP, help="quanti titoli (default 10)")
     ap.add_argument("--costo", type=float, default=0.1,
-                    help="costo in %% per ogni titolo cambiato, andata e ritorno (default 0.1)")
+                    help="costo in %% per ogni operazione, andata e ritorno (default 0.1)")
     ap.add_argument("--workers", type=int, default=4)
-    ap.add_argument("--no-html", action="store_true")
     a = ap.parse_args(argv)
-
-    syms = [x.strip().upper().replace(".", "-") for x in a.tickers.split(",")] if a.tickers else UNIVERSE
-    syms = [s for s in dict.fromkeys(syms) if s != MARKET]
-    print("[settimana] scarico %d titoli + %s (10 anni, giornaliero; cache 12 ore)..." % (len(syms), MARKET),
-          flush=True)
-
-    def get(sym):
-        try:
-            return sym, fetch(sym), None
-        except FetchError as e:
-            return sym, None, str(e)
-
-    with ThreadPoolExecutor(max_workers=max(1, a.workers)) as ex:
-        got = list(ex.map(get, syms + [MARKET]))
-    errors = [e for _, t, e in got if e]
-    texts = {s: t for s, t, _ in got if t}
-    if MARKET not in texts:
-        print("[settimana] non riesco a scaricare %s: %s" % (MARKET, "; ".join(errors)))
+    try:
+        r = analizza(a.tickers.split(",") if a.tickers else None, a.asof, a.costo, a.top, a.workers)
+    except FetchError as e:
+        print("[settimana] " + str(e))
         return 1
-    for e in errors:
-        print("[settimana] saltato: " + e)
-
-    parsed = {s: parse(t, a.asof) for s, t in texts.items()}
-    calendar = sorted(parsed[MARKET][1])
-    aligned = align({s: v[1] for s, v in parsed.items()}, calendar)
-    stocks = [Stock(s, aligned[s], parsed[s][0].get("shortName") or parsed[s][0].get("longName") or "")
-              for s in syms if s in aligned]
-    short = [s.sym for s in stocks if s.first >= len(calendar) - LOOKBACK]
-    if short:
-        print("[settimana] saltati (meno di 1 anno di dati): " + ", ".join(short))
-        errors += ["%s: meno di 1 anno di dati" % x for x in short]
-    stocks = [s for s in stocks if s.first < len(calendar) - LOOKBACK]
-    market = Stock(MARKET, aligned[MARKET])
-    if len(stocks) < TOP:
-        print("[settimana] servono almeno %d titoli con 1 anno di storia." % TOP)
-        return 1
-
-    r = run(stocks, market, calendar, a.costo / 100)
-    r["metodo"] = {"lookback": LOOKBACK, "skip": SKIP, "vol_win": VOL_WIN, "sma_win": SMA_WIN,
-                   "step": STEP, "top": TOP, "top_pct": TOP_PCT}
-    r["saltati"] = errors
     print_report(r)
-
     os.makedirs(TRADER, exist_ok=True)
     with open(os.path.join(TRADER, "settimana.json"), "w", encoding="utf-8") as fh:
-        json.dump(r, fh, indent=1)
-    print("\n[settimana] scritto trader/settimana.json")
-    if not a.no_html:
-        import settimana_report
-        out = os.path.join(TRADER, "settimana.html")
-        settimana_report.write(out, r)
-        print("[settimana] report: trader/settimana.html")
+        json.dump(r, fh)
+    print("\n[settimana] scritto trader/settimana.json  (per l'app: python3 app.py)")
     return 0
 
 
