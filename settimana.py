@@ -71,6 +71,11 @@ UNIVERSE_IT = """A2A.MI AMP.MI AZM.MI BAMI.MI BMED.MI BMPS.MI BPE.MI BZU.MI CPR.
 G.MI HER.MI IG.MI INW.MI ISP.MI IP.MI IVG.MI LDO.MI MB.MI MONC.MI NEXI.MI PIRC.MI PRY.MI PST.MI RACE.MI REC.MI
 SPM.MI SRG.MI STLAM.MI STMMI.MI TEN.MI TIT.MI TRN.MI UCG.MI UNI.MI BC.MI BGN.MI LTMC.MI AVIO.MI""".split()
 
+UNIVERSE_ETF = [s + ".MI" for s in "SWDA CSSPX CSNDX EIMI VWRL SMEA CSEMU IMIB VHYL IDVY SJPA".split()]
+UNIVERSE_BOND = [s + ".MI" for s in
+                 "IEAG IEAC IHYG IBCI AGGH IBTM IBGS IBGM CSBGE7 ITPS BTP10 VETY SEML IGLT IBTS XG7S".split()]
+UNIVERSE_ORO = [s + ".MI" for s in "SGLD PHAG CMOD".split()]
+
 MERCATI = {
     "usa": {"nome": "USA", "universo": UNIVERSE, "indice": "SPY", "indice_nome": "SPY (S&P 500)", "indice_breve": "SPY",
             "universo_nome": "S&P 100", "valuta": "$", "valuta_nome": "dollari", "costo": 0.1,
@@ -79,6 +84,22 @@ MERCATI = {
     "italia": {"nome": "Italia", "universo": UNIVERSE_IT, "indice": "FTSEMIB.MI", "indice_nome": "FTSE MIB (senza dividendi)", "indice_breve": "FTSE MIB",
                "universo_nome": "FTSE MIB", "valuta": "€", "valuta_nome": "euro", "costo": 0.2,
                "fuso": "Europe/Rome", "citta": "Milano", "chiusura": (17, 30), "borsa": "Borsa Italiana"},
+    # ETF UCITS e ETC quotati su Borsa Italiana: acquistabili da chi investe dall'Italia (gli ETF USA
+    # di solito no, per la regola europea sui documenti KID). Un solo ETF per indice, senza doppioni.
+    # Niente Tobin tax sugli ETF: costo 0,1 %. La soglia del prezzo fermo scende con la volatilità
+    # tipica della categoria (un ETF di titoli di Stato a breve oscilla dell'1-2 % l'anno).
+    "etf": {"nome": "ETF azionari", "universo": UNIVERSE_ETF, "indice": "FTSEMIB.MI", "indice_nome": "FTSE MIB (senza dividendi)",
+            "indice_breve": "FTSE MIB", "universo_nome": "ETF azionari su Borsa Italiana", "valuta": "€",
+            "valuta_nome": "euro", "costo": 0.1, "fuso": "Europe/Rome", "citta": "Milano", "chiusura": (17, 30),
+            "borsa": "Borsa Italiana", "min_vol": 0.05},
+    "bond": {"nome": "ETF obbligazionari", "universo": UNIVERSE_BOND, "indice": "FTSEMIB.MI", "indice_nome": "FTSE MIB (senza dividendi)",
+             "indice_breve": "FTSE MIB", "universo_nome": "ETF obbligazionari su Borsa Italiana", "valuta": "€",
+             "valuta_nome": "euro", "costo": 0.1, "fuso": "Europe/Rome", "citta": "Milano", "chiusura": (17, 30),
+             "borsa": "Borsa Italiana", "min_vol": 0.01},
+    "oro": {"nome": "Oro e materie prime", "universo": UNIVERSE_ORO, "indice": "FTSEMIB.MI", "indice_nome": "FTSE MIB (senza dividendi)",
+            "indice_breve": "FTSE MIB", "universo_nome": "ETC e ETF su Borsa Italiana", "valuta": "€",
+            "valuta_nome": "euro", "costo": 0.1, "fuso": "Europe/Rome", "citta": "Milano", "chiusura": (17, 30),
+            "borsa": "Borsa Italiana", "min_vol": 0.05},
 }
 
 
@@ -123,6 +144,7 @@ FEATURES = [
      "basso": "mercato sotto la sua media a 200 giorni"},
 ]
 GROUPS = 5                 # quinti di forza ("titoli simili")
+MAX_LOSS_P10 = 0.10        # regola consigliata: nel 10 % dei casi peggiori non si perde più del 10 %
 K_SHRINK = 100             # quanto restringere ogni quinto verso la media
 MIN_TRAIN_WEEKS = 104      # almeno 2 anni di storia prima di giudicare un anno
 MC_BARS = 252              # candele usate dalla Macchina del Tempo dell'app
@@ -181,7 +203,7 @@ def borsa_italiana_holidays(year):
 def trading_days_after(day, n, mercato="usa"):
     """I prossimi n giorni di borsa dopo `day` (YYYY-MM-DD), con le festività del mercato."""
     d = datetime.date.fromisoformat(day)
-    if mercato == "italia":
+    if mercato != "usa":
         hol = set()
         for y in range(d.year, d.year + 3):
             hol |= borsa_italiana_holidays(y)
@@ -212,14 +234,14 @@ def now_new_york():
 
 def fetch(sym, max_age_hours=12):
     """Il JSON del grafico Yahoo a 10 anni, con una cache in trader/cache/daily."""
-    path = os.path.join(CACHE, sym + ".json")
+    path = os.path.join(CACHE, sym + ".v2.json")          # v2: con i dividendi
     if os.path.exists(path) and time.time() - os.path.getmtime(path) < max_age_hours * 3600:
         with open(path, encoding="utf-8") as fh:
             return fh.read()
     last = None
     for host in ("query2", "query1"):
         url = ("https://%s.finance.yahoo.com/v8/finance/chart/%s?range=10y&interval=1d"
-               "&includeAdjustedClose=true" % (host, sym))
+               "&includeAdjustedClose=true&events=div" % (host, sym))
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
         for attempt in range(3):
             try:
@@ -241,6 +263,23 @@ def fetch(sym, max_age_hours=12):
                 last = str(getattr(e, "reason", e))
                 time.sleep(1)
     raise FetchError("%s: %s" % (sym, last))
+
+
+def div_yield(text):
+    """Dividendi o cedole pagati negli ultimi 12 mesi, in percentuale dell'ultimo prezzo.
+    0 se non ha distribuito nulla (per esempio un ETF ad accumulo, che reinveste)."""
+    try:
+        res = json.loads(text)["chart"]["result"][0]
+    except (ValueError, KeyError, IndexError, TypeError):
+        return None
+    ts = res.get("timestamp") or []
+    raw = ((res.get("indicators") or {}).get("quote") or [{}])[0].get("close") or []
+    last = next((c for c in reversed(raw) if c), None)
+    if not ts or not last:
+        return None
+    divs = ((res.get("events") or {}).get("dividends") or {}).values()
+    tot = sum(d.get("amount", 0) for d in divs if ts[-1] - 365 * 86400 < d.get("date", 0) <= ts[-1])
+    return round(tot / last, 4)
 
 
 def parse(text, cut=None, tz="America/New_York", close=(16, 0)):
@@ -330,8 +369,8 @@ def rolling_max(prices, w):
 class Stock:
     """Prezzi allineati + somme prefisse per media mobile e volatilità in O(1)."""
 
-    def __init__(self, sym, prices, name="", ohlc=None):
-        self.sym, self.p, self.name = sym, prices, name
+    def __init__(self, sym, prices, name="", ohlc=None, min_vol=MIN_VOL):
+        self.sym, self.p, self.name, self.min_vol = sym, prices, name, min_vol
         n = len(prices)
         if ohlc is None:
             ohlc = [None if x is None else (x, x, x, x) for x in prices]
@@ -396,7 +435,7 @@ class Stock:
         m = self.mom(i)
         sma = self.sma(i)
         return {"score": m / v, "mom": m, "vol": v, "above": self.p[i] > sma,
-                "vs_sma": self.p[i] / sma - 1, "frozen": v < MIN_VOL}
+                "vs_sma": self.p[i] / sma - 1, "frozen": v < self.min_vol}
 
 
 def raw_features(s, i):
@@ -599,6 +638,16 @@ def outcome_stats(items):
     return slim(st)
 
 
+def consigliata(models, max_loss=MAX_LOSS_P10):
+    """La regola consigliata per una categoria: la probabilità di guadagno più alta (poi il guadagno
+    medio) tra le regole in cui, nel 10 % dei casi peggiori, non si è perso più di max_loss."""
+    ok = [(k, m) for k, m in models.items() if (m["tutti"].get("p10") or -1) >= -max_loss]
+    key = max(ok or list(models.items()), key=lambda km: (km[1]["tutti"].get("p_gain", 0), km[1]["tutti"].get("mean", 0)))[0]
+    return {"key": key, "max_perdita_p10": max_loss,
+            "criterio": "la probabilità di guadagno più alta tra le regole in cui, nel 10 %% dei casi peggiori, "
+                        "non si è perso più del %d %%" % round(max_loss * 100)}
+
+
 def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
     last = len(calendar) - 1
     start = min(s.first for s in stocks) + LOOKBACK
@@ -716,6 +765,7 @@ def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
                   "hold_names": {str(h): n for h, n in HOLD_NAMES.items()},
                   "default": {"style": DEFAULT_STYLE, "hold": DEFAULT_HOLD}},
         "groups": GROUPS, "models": models, "candidates": cands, "details": details,
+        "consigliata": consigliata(models),
     }
 
 
@@ -751,15 +801,21 @@ def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=pri
     calendar = sorted(parsed[index][1])
     closes = align({s: v[1] for s, v in parsed.items()}, calendar)
     ohlc = align_ohlc({s: v[2] for s, v in parsed.items()}, calendar)
-    stocks = [Stock(s, closes[s], parsed[s][0].get("shortName") or parsed[s][0].get("longName") or "", ohlc[s])
+    def nome(meta):
+        if meta.get("instrumentType") in ("ETF", "MUTUALFUND"):
+            return meta.get("longName") or meta.get("shortName") or ""
+        return meta.get("shortName") or meta.get("longName") or ""
+
+    stocks = [Stock(s, closes[s], nome(parsed[s][0]), ohlc[s], cfg.get("min_vol", MIN_VOL))
               for s in syms if s in closes]
     short = [s.sym for s in stocks if s.first >= len(calendar) - LOOKBACK]
     errors += ["%s: meno di 1 anno di dati" % x for x in short]
     stocks = [s for s in stocks if s.first < len(calendar) - LOOKBACK]
     for e in errors:
         log("[settimana] saltato: " + e)
-    if len(stocks) < top:
-        raise FetchError("servono almeno %d titoli con 1 anno di storia" % top)
+    if len(stocks) < 2:
+        raise FetchError("servono almeno 2 titoli con 1 anno di storia")
+    top = min(top, len(stocks))
 
     log("[settimana] %s: stima e verifica walk-forward su %d varianti della regola..." % (cfg["nome"], len(variants())))
     r = run(stocks, Stock(index, closes[index], cfg["indice_nome"], ohlc[index]), calendar, cost_pct / 100,
@@ -775,6 +831,10 @@ def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=pri
             live[sym] = {"price": m["regularMarketPrice"], "time": datetime.datetime.fromtimestamp(
                 m["regularMarketTime"] + m.get("gmtoffset", -18000), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")}
     r["live"] = live
+    rend = {s: div_yield(t) for s, t in texts.items()}
+    for c in r["candidates"]:
+        c["rendimento"] = rend.get(c["symbol"])
+        c["tipo"] = parsed[c["symbol"]][0].get("instrumentType") or ""
     r["generato"] = now_in(cfg["fuso"]).strftime("%Y-%m-%d %H:%M")
     return r
 

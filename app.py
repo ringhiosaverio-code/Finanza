@@ -100,7 +100,7 @@ def main(argv=None):
     a = ap.parse_args(argv)
     os.makedirs(TRADER, exist_ok=True)
     mercati = {}
-    for m in ("usa", "italia"):
+    for m in ("usa", "italia", "etf", "bond", "oro"):
         try:
             mercati[m] = settimana.analizza(None, a.asof, mercato=m)
         except settimana.FetchError as e:

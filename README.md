@@ -41,11 +41,21 @@ Codici di uscita: 0 PASS, 1 BLOCK o nessun ingresso, 2 fermato dal filtro.
 python3 app.py                                   # scarica i dati, stima, verifica, scrive trader/app.html
 python3 settimana.py                             # i 10 titoli USA, in testo
 python3 settimana.py --mercato italia --stile data --durata 63
+python3 settimana.py --mercato etf                # anche: bond, oro
 python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a quella data
 ```
 
-Cinque sezioni:
+Sezioni:
 
+- **Oggi**: i consigli del giorno su cinque categorie, in ordine di probabilità di guadagno:
+  ETF azionari, ETF obbligazionari (UCITS su Borsa Italiana, acquistabili dall'Italia), oro e
+  materie prime, azioni USA e italiane. Per ognuno: fino a che prezzo comprare, quanto tenere,
+  quando vendere, cedole o dividendi degli ultimi 12 mesi e affidabilità. Per ogni categoria la
+  regola consigliata è quella con più operazioni in guadagno dal 2017, tra quelle in cui nel 10 %
+  dei casi peggiori non si è perso più del 10 %. Oggi: ETF azionari tenuti 3 mesi 71 %, ETF
+  obbligazionari 58 % (guadagno tipico +0,4 %: servono per stabilità e cedole), oro 58 %,
+  azioni 55-56 % a 1 mese. Le singole obbligazioni non hanno prezzi gratuiti affidabili: ci sono
+  gli ETF obbligazionari.
 - **Titoli USA** e **Titoli italiani**: tre passi. (1) Scegli quanto tenere (2 settimane, 1 mese,
   3 mesi) e come uscire (Prudente, Equilibrato, Lascia correre, Solo data): su ogni bottone c'è
   quante operazioni sono finite in guadagno. (2) Per ogni titolo, **compra** il giorno indicato

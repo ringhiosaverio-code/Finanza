@@ -9,7 +9,7 @@
 :root{
   --bg:#f3f5f8;--surface:#ffffff;--surface2:#edf0f5;--ink:#10151d;--ink2:#465062;--muted:#737d8f;--line:#e0e4eb;
   --accent:#2453c9;--accent-ink:#ffffff;--accent-soft:#e7eefc;
-  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#6250d6;
   --good:#0ca30c;--crit:#d03b3b;--warn:#fab219;--neutral:#c3c2b7;
   --good-ink:#0a7a0a;--crit-ink:#b42c2c;--warn-soft:#fff6de;--good-soft:#e8f6e8;--crit-soft:#fbeaea;
   --band-out:#d3e5fb;--band-in:#8db9ef;--median:#184f95;
@@ -20,13 +20,13 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
   --bg:#0d1015;--surface:#151920;--surface2:#1c212a;--ink:#eef0f3;--ink2:#b5bcc8;--muted:#818b9a;--line:#262c37;
   --accent:#6f95f2;--accent-ink:#0d1015;--accent-soft:#1b2640;
-  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--neutral:#55575c;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#9085e9;--neutral:#55575c;
   --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;--good-soft:#14281a;--crit-soft:#301a1a;
   --band-out:#123a6b;--band-in:#1f5fae;--median:#c4dcf8;--shadow:none}}
 :root[data-theme="dark"]{color-scheme:dark;
   --bg:#0d1015;--surface:#151920;--surface2:#1c212a;--ink:#eef0f3;--ink2:#b5bcc8;--muted:#818b9a;--line:#262c37;
   --accent:#6f95f2;--accent-ink:#0d1015;--accent-soft:#1b2640;
-  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--neutral:#55575c;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#9085e9;--neutral:#55575c;
   --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;--good-soft:#14281a;--crit-soft:#301a1a;
   --band-out:#123a6b;--band-in:#1f5fae;--median:#c4dcf8;--shadow:none}
 *{box-sizing:border-box}
@@ -207,6 +207,12 @@ footer{color:var(--muted);font-size:12.5px}
 .ask{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
 .ask code{background:var(--surface2);padding:6px 10px;border-radius:8px;font-size:14px;user-select:all}
 
+/* oggi */
+.cat{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:var(--ink2);white-space:nowrap}
+.cat::before{content:"";width:9px;height:9px;border-radius:2px;background:var(--cc)}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chipb[aria-pressed="true"]{background:var(--accent-soft);border-color:var(--accent);color:var(--ink);font-weight:600}
+
 @media (max-width:760px){
   .opts.s{grid-template-columns:repeat(2,minmax(0,1fr))}
   .hz{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -226,6 +232,7 @@ footer{color:var(--muted);font-size:12.5px}
   <div class="wrap">
     <div class="brand"><b>Finanza</b><span id="meta"></span></div>
     <nav class="tabs" aria-label="Sezioni">
+      <a href="#oggi" data-v="oggi">Oggi</a>
       <a href="#consigli" data-v="consigli">Titoli USA</a>
       <a href="#italia" data-v="italia" id="nav-it">Titoli italiani</a>
       <a href="#simula" data-v="simula">Simula</a>
@@ -237,7 +244,8 @@ footer{color:var(--muted);font-size:12.5px}
 </header>
 
 <main class="wrap">
-  <section class="view" id="v-consigli"></section>
+  <section class="view" id="v-oggi"></section>
+  <section class="view" id="v-consigli" hidden></section>
   <section class="view" id="v-verifica" hidden></section>
   <section class="view" id="v-simula" hidden></section>
   <section class="view" id="v-daytrade" hidden></section>
@@ -280,22 +288,23 @@ if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
 if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
 /* ---------------- sezioni ---------------- */
-const VIEWS = ['consigli', 'italia', 'simula', 'verifica', 'daytrade', 'metodo'];
+const VIEWS = ['oggi', 'consigli', 'italia', 'simula', 'verifica', 'daytrade', 'metodo'];
 let view = null;
 function route() {
-  let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'consigli';
+  let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'oggi';
   if (v === 'italia' && !D.mercati.italia) v = 'consigli';
   if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
-  ['consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
+  ['oggi', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === v ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
+  else if (sec === 'oggi') renderOggi();
   else if (sec === 'simula') renderSimula();
   else if (sec === 'daytrade') renderDay();
   else renderMetodo();
-  $('#meta').textContent = sec === 'simula' ? `${Object.keys(D.simula || {}).length} titoli da simulare` : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
+  $('#meta').textContent = sec === 'oggi' ? 'Consigli di oggi' : sec === 'simula' ? `${Object.keys(D.simula || {}).length} titoli da simulare` : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
 function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
 window.addEventListener('hashchange', route);
@@ -610,7 +619,7 @@ function renderVerifica() {
   const mkts = Object.keys(D.mercati);
   const mae = o && o.calibrazione.length ? o.calibrazione.reduce((s, c) => s + Math.abs(c.stimata - c.osservata) * c.n, 0) / o.calibrazione.reduce((s, c) => s + c.n, 0) : null;
   v.innerHTML = `
-  <div><h1>Funziona? La verifica</h1><p class="sub" style="margin-top:4px">Tre domande, con i dati ${M.nome === 'Italia' ? 'dei titoli italiani' : 'dei titoli USA'}. Le risposte cambiano con la scelta di quanto tenere e come uscire.</p></div>
+  <div><h1>Funziona? La verifica</h1><p class="sub" style="margin-top:4px">Tre domande, con i dati della categoria scelta (${esc(M.nome)}). Le risposte cambiano con la scelta di quanto tenere e come uscire.</p></div>
   <div class="ctlrow">
     ${mkts.length > 1 ? `<div><span class="lab">Mercato</span><div class="seg" id="v-mkt">${mkts.map(x => `<button type="button" data-v="${x}" aria-pressed="${x === mkt}">${D.mercati[x].mercato.nome}</button>`).join('')}</div></div>` : ''}
     <div><span class="lab">Quanto tenere</span><div class="seg" id="v-hold">${S.rules.holds.map(h => `<button type="button" data-v="${h}" aria-pressed="${h === st.hold}">${holdName(h)}</button>`).join('')}</div></div>
@@ -814,6 +823,82 @@ function lineChart(box, dates, vals, c) {
 }
 
 
+/* ---------------- oggi: i consigli del giorno, tutte le categorie ---------------- */
+const CAT = [['etf', 'ETF azionario', 'ETF azionari', '--s1'], ['bond', 'ETF obbligazionario', 'ETF obbligazionari', '--s3'],
+             ['oro', 'Oro e materie prime', 'Oro e materie prime', '--s4'], ['usa', 'Azione USA', 'Azioni USA', '--s2'],
+             ['italia', 'Azione italiana', 'Azioni italiane', '--s5']].filter(c => D.mercati[c[0]]);
+const oggiSt = {cat: 'tutti', cedola: false};
+const fmtc = (x, cur) => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + cur;
+function catInfo(m) {
+  const M = D.mercati[m], key = M.consigliata.key, [sid, h] = key.split('|'), md = M.models[key];
+  const sty = M.rules.styles.find(s => s.id === sid);
+  const cal = (md.oos && md.oos.calibrazione) || [];
+  const n = cal.reduce((s, c) => s + c.n, 0);
+  const mae = n ? cal.reduce((s, c) => s + Math.abs(c.stimata - c.osservata) * c.n, 0) / n : null;
+  const aff = mae == null ? 'bassa' : mae <= .03 ? 'alta' : mae <= .06 ? 'media' : 'bassa';
+  return {M, key, sid, hold: Number(h), md, sty, mae, aff, prot: M.models[`equilibrato|${h}`]};
+}
+function oggiItems() {
+  const items = [];
+  for (const [m, one, , col] of CAT) {
+    const ci = catInfo(m);
+    const list = ci.M.candidates.slice().sort((a, b) => ci.md.p[b.g] - ci.md.p[a.g] || b.forza - a.forza);
+    (m === 'usa' || m === 'italia' ? list.slice(0, 5) : list).forEach(c => items.push({m, one, col, ci, c, p: ci.md.p[c.g], g: ci.md.gruppi[c.g]}));
+  }
+  return items.sort((a, b) => b.p - a.p || b.c.forza - a.c.forza);
+}
+function yieldBox(c, m) {
+  const y = c.rendimento;
+  if (y == null) return ['n/d', 'dato non disponibile'];
+  if (y <= 0) return ['Nessuna', m === 'usa' || m === 'italia' ? 'nessun dividendo negli ultimi 12 mesi' : 'non distribuisce: reinveste (accumulo)'];
+  return [pc(y, 1, false) + ' l’anno', 'pagati negli ultimi 12 mesi, sul prezzo di oggi'];
+}
+function renderOggi() {
+  const v = $('#v-oggi'), all = oggiItems(), ref = D.mercati[CAT[0][0]];
+  const items = all.filter(x => (oggiSt.cat === 'tutti' || x.m === oggiSt.cat) && (!oggiSt.cedola || (x.c.rendimento || 0) > 0));
+  const best = CAT.map(([m]) => ({m, ci: catInfo(m)})).sort((a, b) => b.ci.md.tutti.p_gain - a.ci.md.tutti.p_gain)[0];
+  const bond = D.mercati.bond ? catInfo('bond') : null;
+  v.innerHTML = `
+  <div><h1>Consigli di oggi</h1>
+    <p class="sub" style="margin-top:4px">Aggiornato alla chiusura di ${dtl(ref.asof)}. ${all.length} occasioni tra ETF azionari, ETF obbligazionari, oro e azioni, <b>in ordine di probabilità di guadagno</b>. Sono tutti strumenti in salita (sopra la media a 200 giorni), e per ognuno trovi quando comprare, quanto tenere e quando vendere.</p></div>
+  <ol class="steps">
+    <li><span><b>Compra il giorno indicato</b>, con un ordine al prezzo massimo indicato. Se costa di più, non comprare.</span></li>
+    <li><span><b>Tieni per il tempo indicato</b>: è quello che in passato ha dato più operazioni in guadagno per quella categoria.</span></li>
+    <li><span><b>Vendi alla data indicata</b>, alla chiusura. Le cedole e i dividendi pagati nel frattempo restano tuoi.</span></li>
+  </ol>
+  <div class="card"><h2>Cosa conviene, per categoria</h2>
+    <p class="sub" style="margin-top:4px">Per ogni categoria, la regola che dal 2017 ha dato più operazioni in guadagno, senza perdere più del 10 % in 1 caso su 10. Costi compresi, tasse escluse.</p>
+    <div class="scroll" style="margin-top:10px"><table>
+      <thead><tr><th class="l">Categoria</th><th class="l">Tenere</th><th>In guadagno</th><th>Di solito</th><th>1 su 10 sotto</th><th>Con protezione</th><th class="l">Affidabilità</th></tr></thead>
+      <tbody>${CAT.map(([m, , many, col]) => { const ci = catInfo(m), t = ci.md.tutti;
+        return `<tr><td class="l"><span class="cat" style="--cc:var(${col})">${many}</span></td><td class="l">${holdName(ci.hold)}${ci.sid === 'data' ? ', senza protezione' : ', ' + ci.sty.nome.toLowerCase()}</td><td><b>${p100(t.p_gain)}</b></td><td class="${t.median >= 0 ? 'pos' : 'neg'}">${pc(t.median)}</td><td class="neg">${pc(t.p10, 0)}</td><td>${ci.prot ? p100(ci.prot.tutti.p_gain) : '–'}</td><td class="l"><span class="chip ${ci.aff}">${ci.aff}</span>${ci.mae != null ? ` <span class="note">±${Math.round(ci.mae * 100)} punti</span>` : ''}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:8px"><b>Con protezione</b>: la stessa durata con lo stile Equilibrato (si vende anche se il prezzo scende di 3 oscillazioni giornaliere). Fa scattare l'uscita per il normale saliscendi, quindi le operazioni in guadagno sono di meno. <b>Affidabilità</b>: di quanti punti ha sbagliato in media la stima negli anni che non aveva visto (verifica dal 2021). Per ETF e oro la stima fatta con gli anni 2017-2020 era più bassa di com'è andata dopo: il 2021-2026 è stato più favorevole del solito.</p>
+    <p class="outcome" style="margin-top:10px">Le probabilità più alte sono state per gli <b>${CAT.find(c => c[0] === best.m)[2]}</b> tenuti ${holdName(best.ci.hold)} (${p100(best.ci.md.tutti.p_gain)}).${bond ? ` Gli <b>ETF obbligazionari</b> nel breve guadagnano poco (di solito ${pc(bond.md.tutti.median)} in ${holdName(bond.hold)}): servono per stabilità e cedole, non per guadagnare in fretta, e nel 2022 hanno perso molto.` : ''}</p></div>
+  <div class="filters">
+    ${[['tutti', 'Tutti']].concat(CAT.map(c => [c[0], c[2]])).map(([k, l]) => `<button type="button" class="chipb" data-c="${k}" aria-pressed="${oggiSt.cat === k}">${l}</button>`).join('')}
+    <label class="note" style="white-space:nowrap"><input type="checkbox" id="o-ced" ${oggiSt.cedola ? 'checked' : ''}> solo chi paga cedole o dividendi</label>
+  </div>
+  <div class="picks">${items.length ? items.map((x, i) => {
+    const c = x.c, M = x.ci.M, cur = M.mercato.valuta, sty = x.ci.sty, a = c.atr;
+    const lim = c.price + M.rules.limit_atr * a, stop = sty.ks ? c.price - sty.ks * a : null, tgt = sty.ks && sty.rr ? c.price + sty.rr * sty.ks * a : null;
+    const entryDay = M.future_days[0], exitDay = M.future_days[x.ci.hold - 1], today = M.generato.slice(0, 10) === entryDay;
+    const [yv, ys] = yieldBox(c, x.m);
+    return `<article class="pick">
+      <div class="hd"><span class="rk">${i + 1}</span>
+        <div class="id"><span class="cat" style="--cc:var(${x.col})">${x.one}</span><br><span class="tk">${esc(tk(c.symbol))}</span><span class="nm">${esc(c.name)}</span></div>
+        <div class="pr" title="Probabilità di guadagno"><span class="meter"><i style="width:${x.p * 100}%"></i></span><span class="pv">${p100(x.p)}</span><span class="pl">probabilità<br>di guadagno</span></div></div>
+      <div class="trio">
+        <div><span class="k">Compra</span><span class="big">fino a ${fmtc(lim, cur)}</span><small>${today ? 'oggi, ' : ''}${dt(entryDay)} · ultima chiusura ${fmtc(c.price, cur)}</small></div>
+        <div><span class="k">Tieni e vendi</span><span class="big">${holdName(x.ci.hold)}</span><small>vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
+        <div><span class="k">Cedole o dividendi</span><span class="big">${yv}</span><small>${ys}</small></div>
+      </div>
+      <p class="note">In passato, per ${({etf: 'gli ETF azionari', bond: 'gli ETF obbligazionari', oro: 'oro e materie prime', usa: 'le azioni USA', italia: 'le azioni italiane'})[x.m]} in salita con questa regola: di solito ${pc(x.g.median)} · 1 volta su 10 sotto ${pc(x.g.p10, 0)} · 1 volta su 10 sopra ${pc(x.g.p90, 0)} · ${nf(x.g.n, 0)} operazioni · affidabilità ${x.ci.aff}. Ultimo anno ${pc(c.info.anno, 0)}.</p>
+    </article>`; }).join('') : '<div class="card empty">Nessuno strumento con questi filtri oggi.</div>'}</div>
+  <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (dal 2017, prezzi corretti per dividendi e split, costi compresi, tasse escluse). Anche con il 71 % di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
+  v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
+  $('#o-ced').addEventListener('change', e => { oggiSt.cedola = e.target.checked; renderOggi(); });
+}
+
 /* ---------------- come funziona ---------------- */
 function renderMetodo() {
   const R = S.rules;
@@ -828,7 +913,9 @@ function renderMetodo() {
     <p>Per ogni settimana degli ultimi ~9 anni ha rifatto la stessa operazione su <b>tutti i titoli in salita</b>, con i soli prezzi disponibili quel giorno. Li ha divisi in cinque gruppi per <b>forza dell'ultimo anno</b> (rendimento da 12 a 1 mese fa diviso per la volatilità, Jegadeesh e Titman, 1993). La probabilità di un titolo è la frequenza con cui le operazioni del suo gruppo sono finite in guadagno, costi inclusi, leggermente avvicinata alla media per non fidarsi dei gruppi piccoli. In letteratura i titoli più forti non fanno peggio dei più deboli: se i dati dicono il contrario, è considerato rumore e la probabilità resta uguale per tutti.</p>
     <h3>4. Cosa è stato provato e scartato</h3>
     <p><b>Un modello con sei indizi</b> (forza, ultimo mese, vicinanza al massimo, calma del prezzo, distanza dalla media, mercato): sui dati che non aveva visto, quando diceva 57 % è andata bene il 46 %. Peggio del caso, quindi scartato. <b>La storia del singolo titolo</b>: chi è andato bene in passato non va meglio dopo. Scartata. <b>Il risultato:</b> con i soli prezzi, la probabilità di riuscita a poche settimane dipende pochissimo dal titolo; dipende soprattutto da quanto tieni e da come esci.</p>
-    <h3>5. Simula un titolo dall'ISIN</h3>
+    <h3>5. I consigli di oggi</h3>
+    <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
+    <h3>6. Simula un titolo dall'ISIN</h3>
     <p>Per ogni titolo usa fino a <b>25 anni</b> di prezzi giornalieri. <b>Com'è andata davvero</b>: su tutte le finestre reali della storia (ogni giorno, ogni settimana, ogni mese, ogni anno), quante volte il prezzo è salito. <b>Macchina del Tempo</b>: 10.000 futuri fatti di pezzi veri della storia; per 1 anno incolla 12 mesi veri presi a caso, così ottiene 10.000 anni possibili invece dei pochi reali. La crescita di fondo viene tolta e rimessa secondo tre scenari: <b>nessuna crescita</b>, <b>prudente</b> (la crescita passata ridotta: le vere differenze di crescita attesa tra grandi titoli sono di pochi punti l'anno, il resto è soprattutto fortuna) e <b>come in passato</b>.</p>
     <p><b>Affidabilità</b>: <b>alta</b> se ci sono almeno 100 periodi indipendenti nella storia e gli scenari di crescita cambiano il risultato di non più di 10 punti; <b>media</b> con almeno 20 periodi e non più di 20 punti; altrimenti <b>bassa</b>. A 1 anno è quasi sempre media o bassa: in 25 anni ci sono solo 25 anni indipendenti, e quanto crescerà un titolo è proprio la cosa più incerta.</p>
     <h3>Titoli italiani</h3>

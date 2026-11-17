@@ -143,6 +143,13 @@ class Stima(unittest.TestCase):
         self.assertEqual(est, sorted(est))
         self.assertTrue(0.4 < est[0] < 0.5 < est[-1] < 0.6)
 
+    def test_recommended_rule_respects_the_worst_case_limit(self):
+        m = {"data|63": {"tutti": {"p_gain": 0.59, "mean": 0.03, "p10": -0.13}},
+             "data|21": {"tutti": {"p_gain": 0.56, "mean": 0.01, "p10": -0.08}},
+             "equilibrato|21": {"tutti": {"p_gain": 0.51, "mean": 0.007, "p10": -0.07}}}
+        self.assertEqual(S.consigliata(m)["key"], "data|21")            # 59 % scartata: 1 su 10 sotto -13 %
+        self.assertEqual(S.consigliata(m, max_loss=0.15)["key"], "data|63")
+
     def test_group_of(self):
         self.assertEqual([S.group_of({"x": [1, v]}) for v in (-0.5, -0.2, 0.0, 0.2, 0.5)], [0, 1, 2, 3, 4])
 
