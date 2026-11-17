@@ -43,19 +43,24 @@ REGOLE = [
 def candele(sym, max_age=3600):
     os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, sym + ".json")
-    if not os.path.exists(path) or time.time() - os.path.getmtime(path) > max_age:
+    adesso = time.time()
+    # da riscaricare se vecchio, o se da allora si è chiusa un'altra candela oraria
+    if (not os.path.exists(path) or adesso - os.path.getmtime(path) > max_age
+            or int(adesso // 3600) > int(os.path.getmtime(path) // 3600)):
         url = "https://query2.finance.yahoo.com/v8/finance/chart/%s?range=730d&interval=1h" % sym
         req = urllib.request.Request(url, headers={"User-Agent": UA, "Accept": "application/json"})
         with urllib.request.urlopen(req, timeout=40) as r:
             text = r.read().decode("utf-8", "replace")
         with open(path, "w", encoding="utf-8") as fh:
             fh.write(text)
+    letto = os.path.getmtime(path)
     with open(path, encoding="utf-8") as fh:
         res = json.load(fh)["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
-    out = [(t, o, h, l, c) for t, o, h, l, c in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"])
-           if None not in (o, h, l, c)]
-    return out[:-1]                                          # l'ultima candela è ancora in corso
+    # solo candele orarie già chiuse quando sono state scaricate: Yahoo aggiunge la candela in corso
+    # e, in fondo, un punto con l'ora dell'ultimo scambio
+    return [(t, o, h, l, c) for t, o, h, l, c in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"])
+            if None not in (o, h, l, c) and t % 3600 == 0 and t + 3600 <= letto]
 
 
 def atr(B, i, n=24):
@@ -105,6 +110,58 @@ def esito(B, i, regola):
     return win[-1][4] / fill - 1 - 2 * COSTO
 
 
+def ora_piano(B, i):
+    """Il piano nasce alla chiusura della candela i (che si apre a B[i][0])."""
+    return datetime.datetime.fromtimestamp(B[i][0] + 3600, datetime.timezone.utc)
+
+
+def utc(d):
+    return d.strftime("%Y-%m-%d %H:%M UTC")
+
+
+def piani_recenti(B, ore=(17, 21)):
+    """Le candele chiuse alle 17 o alle 21 UTC delle ultime 24 ore, dalla più recente: i piani nascono
+    lì, come nella verifica, e ognuno vale 24 ore."""
+    out = [i for i in range(len(B) - 1, max(24, len(B) - 1 - ORE), -1) if ora_piano(B, i).hour in ore]
+    return out or [len(B) - 1]
+
+
+def fase(B, i, regola):
+    """A che punto è il piano nato alla candela i, rigiocando le candele orarie chiuse dopo:
+    attesa (l'entrata non è ancora scattata), dentro, obiettivo, protezione (chiuso),
+    scaduto (24 ore senza entrare), scaduto_dentro (24 ore passate: si vende)."""
+    win = B[i + 1:i + 1 + ORE]
+    if regola == "tempo":
+        if len(win) < ORE:
+            return {"fase": "dentro", "prezzo_entrata": B[i][4], "quando": utc(ora_piano(B, i))}
+        return {"fase": "scaduto_dentro", "prezzo_entrata": B[i][4], "quando": utc(ora_piano(B, i)),
+                "rendimento": win[-1][4] / B[i][4] - 1 - 2 * COSTO}
+    lv = livelli(B, i, regola)
+    e, stop, tgt = lv["entrata"], lv["protezione"], lv["obiettivo"]
+    fill, t_in = None, None
+    for b in win:
+        quando = utc(datetime.datetime.fromtimestamp(b[0], datetime.timezone.utc))
+        if fill is None:
+            if not ((regola == "ribasso" and b[3] <= e) or (regola == "rottura" and b[2] >= e)):
+                continue
+            fill, t_in = (min(e, b[1]) if regola == "ribasso" else max(e, b[1])), quando
+        for nome, tocca, px in (("protezione", b[3] <= stop, stop), ("obiettivo", b[2] >= tgt, tgt)):
+            if tocca:
+                return {"fase": nome, "prezzo_entrata": fill, "quando": t_in, "chiusura": quando,
+                        "rendimento": px / fill - 1 - 2 * COSTO}
+    if len(win) >= ORE:
+        if fill is None:
+            return {"fase": "scaduto"}
+        return {"fase": "scaduto_dentro", "prezzo_entrata": fill, "quando": t_in,
+                "rendimento": win[-1][4] / fill - 1 - 2 * COSTO}
+    return {"fase": "dentro", "prezzo_entrata": fill, "quando": t_in} if fill is not None else {"fase": "attesa"}
+
+
+def piano(B, i, regola):
+    rnd = lambda d: {k: (round(v, 6) if isinstance(v, float) else v) for k, v in d.items()}
+    return dict(rnd(livelli(B, i, regola)), **rnd(fase(B, i, regola)))
+
+
 def stat(xs):
     done = sorted(x for x in xs if x != "no")
     if not done:
@@ -115,11 +172,11 @@ def stat(xs):
             "p10": round(done[len(done) // 10], 5), "p90": round(done[9 * len(done) // 10], 5)}
 
 
-def analizza(log=print):
+def analizza(log=print, max_age=3600):
     per, tutti = {}, {r["id"]: {"anno1": [], "anno2": []} for r in REGOLE}
     for sym in simula.CRYPTO:
         try:
-            B = candele(sym)
+            B = candele(sym, max_age)
         except Exception as e:                               # rete, dati mancanti
             log("[intraday] %s saltato: %s" % (sym, e))
             continue
@@ -134,12 +191,14 @@ def analizza(log=print):
                 if x is not None:
                     storia[r["id"]].append(x)
                     tutti[r["id"]][meta].append(x)
-        i = len(B) - 1
-        ora = datetime.datetime.fromtimestamp(B[i][0] + 3600, datetime.timezone.utc)
-        per[sym] = {"prezzo": round(B[i][4], 6), "ora": ora.strftime("%Y-%m-%d %H:%M UTC"),
-                    "fino": (ora + datetime.timedelta(hours=ORE)).strftime("%Y-%m-%d %H:%M UTC"),
-                    "piani": {r["id"]: {k: (round(v, 6) if isinstance(v, float) else v)
-                                        for k, v in livelli(B, i, r["id"]).items()} for r in REGOLE},
+        rec = piani_recenti(B)
+        i, ora = rec[0], ora_piano(B, rec[0])
+        precedenti = [dict(piano(B, j, r), regola=r, ora=utc(ora_piano(B, j)),     # ancora nelle 24 ore:
+                           fino=utc(ora_piano(B, j) + datetime.timedelta(hours=ORE)))  # se sei dentro, vale ancora
+                      for j in rec[1:] for r in ("ribasso", "rottura")]
+        per[sym] = {"prezzo": round(B[-1][4], 6), "prezzo_ora": utc(ora_piano(B, len(B) - 1)),
+                    "ora": utc(ora), "fino": utc(ora + datetime.timedelta(hours=ORE)),
+                    "piani": {r["id"]: piano(B, i, r["id"]) for r in REGOLE}, "precedenti": precedenti,
                     "storia": {k: stat(v) for k, v in storia.items()}}
     verifica = {k: {"anno1": stat(v["anno1"]), "anno2": stat(v["anno2"]), "tutto": stat(v["anno1"] + v["anno2"])}
                 for k, v in tutti.items()}

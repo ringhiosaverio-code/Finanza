@@ -64,6 +64,7 @@ main{padding-block:22px 56px}
 .alert .ic{flex:none;width:22px;height:22px;border-radius:50%;background:var(--warn);color:#10151d;display:grid;place-items:center;font-weight:700;font-size:13px;margin-top:1px}
 .alert p{font-size:14px;color:var(--ink2)}
 .alert b{color:var(--ink)}
+.alert code{background:var(--surface2);padding:1px 6px;border-radius:6px;font-size:13px;user-select:all;white-space:nowrap}
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:10px;counter-reset:s}
 .steps li{list-style:none;display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--ink2)}
 .steps li::before{counter-increment:s;content:counter(s);flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:13px}
@@ -1260,6 +1261,10 @@ function intradayHTML() {
   const vtxt = s => s && s.n ? `${p100(s.p_gain)} in guadagno · media ${pc(s.media, 2)} · 1 su 10 sotto ${pc(s.p10, 1)}` : 'n/d';
   const nessuna = R.every(r => V[r.id].tutto.media < 0);
   const items = Object.entries(I.crypto).map(([sym, x]) => ({sym, x, s: SIM[sym]})).filter(o => o.s);
+  const stato = p => ({dentro: `<span class="note">scattato${p.quando ? ' ' + hhmm(p.quando) : ''} a ${f(p.prezzo_entrata)} €</span><br>`,
+    obiettivo: `<span class="note">già chiuso: obiettivo (${pc(p.rendimento, 1)})</span><br>`, protezione: `<span class="note">già chiuso: protezione (${pc(p.rendimento, 1)})</span><br>`,
+    scaduto: '<span class="note">scaduto</span><br>', scaduto_dentro: '<span class="note">scaduto: si vende</span><br>'})[p.fase] || '';
+  const aperti = items.flatMap(({x, s}) => (x.precedenti || []).filter(p => p.fase === 'dentro').map(p => ({p, s})));
   return `<div class="card"><h2>Intraday: le prossime 24 ore</h2>
     <p class="sub" style="margin-top:4px">Due piani per ogni crypto, validi 24 ore dall'ultimo aggiornamento, e com'è andata la stessa regola negli ultimi 2 anni (piani rifatti ogni giorno alle 18 e alle 22 ora italiana, 12 crypto, costi 0,2 % per operazione).</p>
     <div class="scroll" style="margin-top:10px"><table>
@@ -1269,11 +1274,13 @@ function intradayHTML() {
     <div class="scroll" style="margin-top:12px"><table>
       <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th class="l">Compra il ribasso</th><th class="l">Compra la rottura</th><th class="l">Fino a</th><th class="l">Su questa crypto (ribasso)</th></tr></thead>
       <tbody>${items.map(({sym, x, s}) => { const a = x.piani.ribasso, b = x.piani.rottura, st = x.storia.ribasso;
-        return `<tr><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(tk(sym))}</span></td><td>${f(x.prezzo)} €<br><span class="note">${hhmm(x.ora)}</span></td>
-          <td class="l">compra a <b>${f(a.entrata)}</b><br><span class="neg">protezione ${f(a.protezione)}</span> · <span class="pos">obiettivo ${f(a.obiettivo)}</span></td>
-          <td class="l">compra sopra <b>${f(b.entrata)}</b><br><span class="neg">protezione ${f(b.protezione)}</span> · <span class="pos">obiettivo ${f(b.obiettivo)}</span></td>
+        return `<tr><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(tk(sym))}</span></td><td>${f(x.prezzo)} €<br><span class="note">${hhmm(x.prezzo_ora || x.ora)}</span></td>
+          <td class="l">${stato(a)}compra a <b>${f(a.entrata)}</b><br><span class="neg">protezione ${f(a.protezione)}</span> · <span class="pos">obiettivo ${f(a.obiettivo)}</span></td>
+          <td class="l">${stato(b)}compra sopra <b>${f(b.entrata)}</b><br><span class="neg">protezione ${f(b.protezione)}</span> · <span class="pos">obiettivo ${f(b.obiettivo)}</span></td>
           <td class="l">${hhmm(x.fino)}</td><td class="l">${st.n ? `${p100(st.p_gain)} in guadagno, media ${pc(st.media, 2)} (${st.n})` : 'n/d'}</td></tr>`; }).join('')}</tbody></table></div>
-    <p class="note" style="margin-top:8px">Se l'ordine non scatta entro la scadenza, niente operazione; se scatta, chiudi al più tardi alla scadenza. I livelli valgono per i prezzi dell'ultimo aggiornamento (due volte al giorno): controlla il prezzo prima di entrare. Non è consulenza finanziaria.</p></div>`;
+    ${aperti.length ? `<p class="note" style="margin-top:8px"><b>Ancora aperti dal piano precedente</b> (l'entrata è scattata, protezione e obiettivo non ancora): ${aperti.map(({p, s}) => `${esc(s.name)}, ${p.regola === 'ribasso' ? 'compra il ribasso' : 'compra la rottura'}: entrato a ${f(p.prezzo_entrata)} €, protezione ${f(p.protezione)} €, obiettivo ${f(p.obiettivo)} €, chiudi entro ${hhmm(p.fino)}`).join(' · ')}.</p>` : ''}
+    <p class="note" style="margin-top:8px">Se l'ordine non scatta entro la scadenza, niente operazione; se scatta, chiudi al più tardi alla scadenza. I livelli valgono per i prezzi dell'ultimo aggiornamento (due volte al giorno): controlla il prezzo prima di entrare. Non è consulenza finanziaria.</p>
+    <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>Prezzi ogni secondo, con avvisi.</b> Questa pagina si aggiorna due volte al giorno: dentro Claude un'app non può collegarsi alle borse. Sul tuo computer, nella cartella del progetto, avvia <code>python3 crypto_live.py</code>: si apre una pagina con i prezzi di Kraken aggiornati ogni secondo, a che punto è ogni piano (in attesa, dentro, chiuso) e un avviso, anche con suono, quando scatta un'entrata, una protezione, un obiettivo o la scadenza. Serve solo Python 3; i prezzi sono pubblici e gratuiti.</p></div></div>`;
 }
 
 /* ---------------- 25 anni di verifica della probabilità e del giudizio ---------------- */
@@ -1330,7 +1337,7 @@ function renderMetodo() {
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
     <h3>Crypto intraday</h3>
-    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive.</p>
+    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
     <h3>La verifica di 25 anni</h3>
     <p>Ogni mese dal 2004, per tutti gli strumenti, la probabilità di guadagno è stata rifatta con i soli prezzi di quel giorno e confrontata con com'è andata (<code>python3 verifica.py</code>). In media è prudente di un paio di punti; i "Sì" sono andati in guadagno più spesso dei "Con cautela" e dei "Per ora no", con perdite più piccole. Tre modi per migliorarla (miscela con la frequenza del gruppo, ricalibratura per tutti e per gruppo) sono stati provati su anni mai visti e nessuno prevede meglio: la stima resta quella prudente, con un avviso sopra il 70 %, dove in passato è stata troppo ottimista.</p>
     <h3>Perché sì e perché no</h3>

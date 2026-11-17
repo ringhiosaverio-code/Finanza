@@ -167,10 +167,34 @@ i soli prezzi di quel giorno e la confronta con com'è andata (39.125 previsioni
 - tre miglioramenti provati su anni mai visti (miscela con la frequenza del gruppo, ricalibratura
   unica e per gruppo) non prevedono meglio: la stima resta quella prudente.
 
+## `crypto_live.py`: crypto in tempo reale, ogni secondo
+
+```bash
+python3 crypto_live.py                # apre http://127.0.0.1:8765 nel browser
+python3 crypto_live.py --terminale    # solo nel terminale
+```
+
+L'app pubblicata su Claude non può collegarsi alle borse (le app non possono raggiungere siti
+esterni) e si aggiorna al massimo due volte al giorno; il tempo reale gira quindi sul tuo computer,
+con la sola libreria standard di Python:
+
+- **prezzi** in euro da Kraken (dati pubblici gratuiti), una richiesta al secondo per tutte e 12
+  le crypto; se Kraken chiede di rallentare, il programma aspetta e riprova;
+- **piani**: gli stessi due di `intraday.py`, nati alle 17 e alle 21 UTC (18 e 22 in Italia d'inverno)
+  e ricalcolati poco dopo ogni ora dalle candele orarie di Yahoo (solo candele chiuse);
+- **stato** di ogni piano, seguito secondo per secondo come nella verifica: *in attesa*, *dentro*
+  (l'entrata è scattata), *chiuso* (protezione, obiettivo o 24 ore passate). Protezione e
+  obiettivo contano solo dopo l'entrata; il piano precedente resta visibile finché ci sei dentro;
+- **avvisi**, con suono e notifica se li attivi, a ogni passaggio. I livelli già superati prima
+  dell'avvio non fanno avviso: la tabella li mostra.
+
+La pagina è servita solo su 127.0.0.1. Nella verifica di 2 anni, con i costi, nessuna regola
+intraday ha guadagnato in media: è uno strumento per seguire i piani, non un motivo per usarli.
+
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana.py e simula.py, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday e crypto_live, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 
