@@ -175,8 +175,44 @@ details[open] > summary{margin-bottom:10px}
 .prose h3{color:var(--ink);margin-top:8px}
 footer{color:var(--muted);font-size:12.5px}
 
+/* simula */
+.simf{display:grid;grid-template-columns:minmax(0,1fr);gap:10px}
+.simf > *{min-width:0}
+.simrow{display:flex;gap:8px}
+.simrow input{flex:1;min-width:0;width:100%;font:inherit;font-size:17px;letter-spacing:.03em;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);border-radius:12px;padding:10px 14px}
+.simrow input:focus{border-color:var(--accent);outline:none}
+.go{border:0;background:var(--accent);color:var(--accent-ink);font-weight:600;border-radius:12px;padding:10px 20px;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chipb{border:1px solid var(--line);background:var(--surface2);border-radius:999px;padding:4px 12px;cursor:pointer;font-size:13px;color:var(--ink2)}
+.chipb:hover{border-color:var(--muted)}
+.chip{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;white-space:nowrap;color:var(--ink2);justify-self:start;background:var(--surface)}
+.chip::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.chip.alta::before{background:var(--good)}.chip.media::before{background:var(--warn)}.chip.bassa::before{background:var(--crit)}
+.simres{display:grid;gap:16px}
+.simres > *{min-width:0}
+.simhd{display:flex;flex-wrap:wrap;gap:10px 20px;justify-content:space-between;align-items:flex-start}
+.simhd .last{display:grid;text-align:right}
+.simhd .last .k{font-size:12px;color:var(--muted)}
+.simhd .last b{font-family:var(--f-head);font-size:22px}
+.simhd .last small{color:var(--muted);font-size:12px}
+.hz{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.hzc{background:var(--surface2);border-radius:12px;padding:12px 14px;display:grid;gap:6px;align-content:start;min-width:0}
+.hzc .k{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
+.hzc .pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+.hzc .pv{font-family:var(--f-head);font-weight:700;font-size:30px;line-height:1;white-space:nowrap}
+.hzc .pl{font-size:12px;color:var(--muted);line-height:1.3}
+.hzc small{color:var(--ink2);font-size:12.5px}
+.hzc small.note{color:var(--muted)}
+.hzc .meter{width:100%}
+.ask{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}
+.ask code{background:var(--surface2);padding:6px 10px;border-radius:8px;font-size:14px;user-select:all}
+
 @media (max-width:760px){
   .opts.s{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hz{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .hzc .pv{font-size:26px}
+  .hzc{padding:10px 12px}
+  .simhd .last{text-align:left}
   .trio{grid-template-columns:1fr}
   .oc .r{grid-template-columns:1fr 60px}
   .oc .r .t{grid-column:1/-1}
@@ -192,6 +228,7 @@ footer{color:var(--muted);font-size:12.5px}
     <nav class="tabs" aria-label="Sezioni">
       <a href="#consigli" data-v="consigli">Titoli USA</a>
       <a href="#italia" data-v="italia" id="nav-it">Titoli italiani</a>
+      <a href="#simula" data-v="simula">Simula</a>
       <a href="#verifica" data-v="verifica">Verifica</a>
       <a href="#daytrade" data-v="daytrade">Day trade</a>
       <a href="#metodo" data-v="metodo">Come funziona</a>
@@ -202,6 +239,7 @@ footer{color:var(--muted);font-size:12.5px}
 <main class="wrap">
   <section class="view" id="v-consigli"></section>
   <section class="view" id="v-verifica" hidden></section>
+  <section class="view" id="v-simula" hidden></section>
   <section class="view" id="v-daytrade" hidden></section>
   <section class="view" id="v-metodo" hidden></section>
 </main>
@@ -242,7 +280,7 @@ if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
 if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
 /* ---------------- sezioni ---------------- */
-const VIEWS = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo'];
+const VIEWS = ['consigli', 'italia', 'simula', 'verifica', 'daytrade', 'metodo'];
 let view = null;
 function route() {
   let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'consigli';
@@ -250,13 +288,14 @@ function route() {
   if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
-  ['consigli', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
+  ['consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === v ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
+  else if (sec === 'simula') renderSimula();
   else if (sec === 'daytrade') renderDay();
   else renderMetodo();
-  $('#meta').textContent = `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
+  $('#meta').textContent = sec === 'simula' ? `${Object.keys(D.simula || {}).length} titoli da simulare` : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
 function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
 window.addEventListener('hashchange', route);
@@ -343,7 +382,7 @@ function fanChart(box, bands, labels, lv, label, timeFmt) {
   el('path', {d: area(0, 4), fill: css('--band-out')}, svg);
   el('path', {d: area(1, 3), fill: css('--band-in')}, svg);
   el('path', {d: 'M' + bands.map((r, i) => x(i) + ',' + y(r[2])).join('L'), fill: 'none', stroke: css('--median'), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg);
-  [[lv.target, 'Obiettivo ', '--good', ''], [lv.entry, 'Entrata ', '--muted', '4 4'], [lv.stop, 'Protezione ', '--crit', '']].forEach(([v, lab, c, dash]) => {
+  [[lv.target, 'Obiettivo ', '--good', ''], [lv.entry, lv.entryLabel || 'Entrata ', '--muted', '4 4'], [lv.stop, 'Protezione ', '--crit', '']].forEach(([v, lab, c, dash]) => {
     if (v == null || !isFinite(v)) return;
     el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: css(c), 'stroke-width': 2, 'stroke-dasharray': dash}, svg);
     halo(svg, W - m.r, lab === 'Protezione ' ? y(v) + 15 : y(v) - 6, lab + nf(v));
@@ -637,6 +676,144 @@ function renderDay() {
 
 
 
+/* ---------------- simula un titolo dall'ISIN ---------------- */
+const SIM = D.simula || {};
+const SIM_LIST = Object.values(SIM).sort((a, b) => a.name.localeCompare(b.name));
+const simSt = {q: '', scen: 'prudente', cur: null};
+const SCEN = [['prudente', 'Prudente (consigliato)'], ['zero', 'Nessuna crescita'], ['passato', 'Come in passato']];
+const curSym = c => ({EUR: '€', USD: '$', GBP: '£', GBp: 'penny', CHF: 'CHF'}[c] || c || '');
+const cmoney = (x, c) => nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + curSym(c);
+const capf = s => s ? s[0].toUpperCase() + s.slice(1) : s;
+function isinOk(code) {
+  code = String(code).trim().toUpperCase();
+  if (!/^[A-Z]{2}[A-Z0-9]{9}[0-9]$/.test(code)) return false;
+  const digits = code.slice(0, 11).split('').map(ch => parseInt(ch, 36)).join('');
+  let sum = 0;
+  for (let i = 0; i < digits.length; i++) { let n = +digits[digits.length - 1 - i]; if (i % 2 === 0) { n *= 2; if (n > 9) n -= 9; } sum += n; }
+  return (10 - sum % 10) % 10 === +code[11];
+}
+function findSim(q) {
+  q = q.trim().toUpperCase(); if (!q) return null;
+  const isin = q.match(/[A-Z]{2}[A-Z0-9]{9}[0-9]/);
+  if (isin) { const s = SIM_LIST.find(x => x.isin === isin[0]); if (s) return s; }
+  const t = q.match(/\(([A-Z0-9.\-]+)\)\s*$/);
+  const sym = t ? t[1] : q;
+  const s = SIM_LIST.find(x => x.symbol === sym || tk(x.symbol) === sym); if (s) return s;
+  if (isin) return null;
+  const byName = SIM_LIST.filter(x => x.name.toUpperCase().includes(q));
+  return byName.length === 1 ? byName[0] : (byName.length ? {multi: byName.slice(0, 10)} : null);
+}
+function renderSimula() {
+  const v = $('#v-simula');
+  const ex = ['IT0003132476', 'US0378331005', 'IE00B4L5Y983', 'IT0000072618'].map(i => SIM_LIST.find(s => s.isin === i)).filter(Boolean);
+  v.innerHTML = `
+  <div><h1>Simula un titolo</h1><p class="sub" style="margin-top:4px">Scrivi il <b>codice ISIN</b> (12 caratteri, lo trovi nell'estratto conto o sul sito della banca), oppure il ticker o il nome. La Macchina del Tempo calcola quante probabilità ci sono di essere in guadagno dopo <b>1 giorno, 1 settimana, 1 mese e 1 anno</b>, e quanto ci si può fidare di ogni numero.</p></div>
+  <form class="card simf" id="sim-form" autocomplete="off">
+    <label for="sim-q" class="lab">Codice ISIN, ticker o nome</label>
+    <div class="simrow"><input id="sim-q" list="sim-list" placeholder="es. IT0003132476" value="${esc(simSt.q)}" spellcheck="false" autocapitalize="characters"><button type="submit" class="go">Simula</button></div>
+    <datalist id="sim-list">${SIM_LIST.map(s => `<option value="${esc((s.isin ? s.isin + ' — ' : '') + s.name + ' (' + tk(s.symbol) + ')')}"></option>`).join('')}</datalist>
+    <div class="chips"><span class="note">Prova:</span>${ex.map(s => `<button type="button" class="chipb" data-q="${s.isin}">${esc((n => n.length > 24 ? n.slice(0, 22) + '…' : n)(s.name.replace(/ (S\.p\.A\.|Inc\.|N\.V\.|plc)$/i, '')))}</button>`).join('')}<span class="note">· ${SIM_LIST.length} titoli pronti nell'app</span></div>
+  </form>
+  <div id="sim-out"></div>`;
+  $('#sim-form').addEventListener('submit', e => { e.preventDefault(); simSt.q = $('#sim-q').value; showSim(); });
+  v.querySelectorAll('.chipb').forEach(b => b.addEventListener('click', () => { simSt.q = b.dataset.q; $('#sim-q').value = simSt.q; showSim(); }));
+  if (simSt.q) showSim();
+}
+function showSim() {
+  const out = $('#sim-out'), q = simSt.q.trim();
+  simSt.cur = null;
+  if (!q) { out.innerHTML = ''; return; }
+  const r = findSim(q);
+  if (!r) {
+    const up = q.toUpperCase().replace(/\s/g, '');
+    if (up.length === 12 && /^[A-Z]{2}/.test(up) && !isinOk(up)) {
+      out.innerHTML = `<div class="card"><h2>Codice da ricontrollare</h2><p class="sub" style="margin-top:4px"><b>${esc(up)}</b> sembra un ISIN, ma l'ultima cifra (quella di controllo) non torna. Di solito è un carattere copiato male: per esempio la lettera O al posto dello zero.</p></div>`;
+      return;
+    }
+    const isIsin = isinOk(up), ask = `Aggiungi all'app ${isIsin ? 'l’ISIN ' + up : q}`;
+    out.innerHTML = `<div class="card"><h2>Non è ancora nell'app</h2>
+      <p class="sub" style="margin-top:4px">L'app ha già i prezzi di ${SIM_LIST.length} titoli (sono nei suggerimenti mentre scrivi). Per ${isIsin ? 'questo ISIN' : 'questo titolo'} servono i suoi prezzi, e l'app non può scaricarli da sola.</p>
+      <div class="ask"><span>Scrivi a Claude:</span><code id="ask-t">${esc(ask)}</code><button type="button" class="more" id="ask-c">Copia</button></div>
+      <p class="note" style="margin-top:8px">Oppure, nel repository: <code>python3 simula.py ${esc(isIsin ? up : q)}</code> e poi <code>python3 app.py</code>.</p></div>`;
+    $('#ask-c').addEventListener('click', () => {
+      const t = $('#ask-t'), sel = () => { const r = document.createRange(); r.selectNodeContents(t); const s = getSelection(); s.removeAllRanges(); s.addRange(r); };
+      try { navigator.clipboard.writeText(t.textContent).then(() => { $('#ask-c').textContent = 'Copiato'; }, sel); } catch (e) { sel(); }
+    });
+    return;
+  }
+  if (r.multi) {
+    out.innerHTML = `<div class="card"><h2>Quale intendi?</h2><div class="chips" style="margin-top:10px">${r.multi.map(s => `<button type="button" class="chipb" data-q="${esc(s.isin || s.symbol)}">${esc(s.name)} · ${esc(tk(s.symbol))}</button>`).join('')}</div></div>`;
+    out.querySelectorAll('.chipb').forEach(b => b.addEventListener('click', () => { simSt.q = b.dataset.q; $('#sim-q').value = simSt.q; showSim(); }));
+    return;
+  }
+  simSt.cur = r;
+  renderSimResult(r);
+}
+function renderSimResult(s) {
+  const out = $('#sim-out'), g = s.crescita, sc = simSt.scen, c = s.currency;
+  const anni = nf(s.anni, s.anni % 1 ? 1 : 0);
+  const desc = {
+    prudente: `Crescita di ${pc(g.prudente)} l'anno: quella degli ultimi ${anni} anni (${pc(g.passato)}) ridotta, perché la storia di un solo titolo non basta a dire se continuerà.`,
+    zero: `Il prezzo non cresce in media: restano solo i saliscendi veri del titolo. È lo scenario più severo.`,
+    passato: `Il titolo continua a crescere come negli ultimi ${anni} anni (${pc(g.passato)} l'anno). Di solito è ottimista: chi è andato molto bene raramente ripete.`,
+  }[sc];
+  const one = s.orizzonti[0].scenari[sc];
+  out.innerHTML = `<div class="card simres">
+    <div class="simhd"><div><h2>${esc(s.name)}</h2><p class="note">${esc(tk(s.symbol))}${s.exchange ? ' · ' + esc(s.exchange) : ''}${s.isin ? ' · ISIN ' + esc(s.isin) : ''}${c ? ' · prezzi in ' + esc(c) : ''}</p></div>
+      <div class="last"><span class="k">Ultima chiusura</span><b>${cmoney(s.prezzo, c)}</b><small>${dt(s.a, {year: 'numeric'})}</small></div></div>
+    <p class="sub">Calcolato su <b>${anni} anni</b> di prezzi (dal ${dtl(s.da)}). Il prezzo oscilla in media del ${pc(s.volatilita, 0, false)} in un anno.</p>
+    <div><span class="lab">Quanto crescerà, in media?</span><div class="seg" id="sim-scen">${SCEN.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === sc}">${l}</button>`).join('')}</div>
+      <p class="note" style="margin-top:6px">${desc}</p></div>
+    <div class="hz">${s.orizzonti.map(o => { const m = o.scenari[sc], a = o.affidabilita;
+      return `<div class="hzc"><span class="k">Tra ${o.orizzonte}</span>
+        <div class="pr"><span class="pv">${p100(m.p_gain)}</span><span class="pl">probabilità<br>di guadagno</span></div>
+        <span class="meter"><i style="width:${m.p_gain * 100}%"></i></span>
+        <small>di solito ${pc(m.median)} · 9 volte su 10 tra ${pc(m.p5, 0)} e ${pc(m.p95, 0)}</small>
+        <span class="chip ${a.livello}">affidabilità ${a.livello}</span>
+        <small class="note">${esc(capf(a.motivo))}.</small></div>`; }).join('')}</div>
+    ${Math.abs(one.p_gain - .5) < .03 ? '<p class="outcome">A 1 giorno è <b>quasi testa o croce</b>: il prezzo di domani dipende soprattutto dal caso. Le probabilità crescono con il tempo solo se il titolo cresce davvero in media.</p>' : ''}
+    <div><h3>Il prossimo anno, 10.000 volte</h3><p class="note">Ogni futuro è fatto di 12 mesi veri di ${esc(tk(s.symbol))} presi a caso dalla sua storia, con la crescita dello scenario scelto.</p>
+      <div class="chart" id="sim-fan"><div class="tip"></div></div>
+      <div class="legend"><span><i class="ln" style="background:var(--median)"></i>Il caso centrale</span><span><i style="background:var(--band-in)"></i>La metà dei casi</span><span><i style="background:var(--band-out)"></i>9 casi su 10</span></div></div>
+    <div class="two">
+      <div><h3>Com'è andata davvero</h3><p class="note">Tutte le finestre reali della storia, senza simulazioni.</p><div class="scroll"><table>
+        <thead><tr><th>Dopo</th><th>In guadagno</th><th>Di solito</th><th>9 su 10 tra</th><th>Casi indip.</th></tr></thead>
+        <tbody>${s.orizzonti.map(o => { const h = o.storico; return h ? `<tr><td>${o.orizzonte}</td><td>${p100(h.p_gain)}</td><td class="${h.median >= 0 ? 'pos' : 'neg'}">${pc(h.median)}</td><td>${pc(h.p5, 0)} e ${pc(h.p95, 0)}</td><td>${nf(h.indipendenti, 0)}</td></tr>` : `<tr><td>${o.orizzonte}</td><td colspan="4">storia troppo corta</td></tr>`; }).join('')}</tbody></table></div></div>
+      <div><h3>Prezzo negli ultimi 5 anni</h3><div class="chart" id="sim-line"><div class="tip"></div></div></div>
+    </div>
+    <p class="note">Prezzi corretti per dividendi e split, senza costi, tasse e cambio valuta${c && c !== 'EUR' ? ` (questo titolo è in ${esc(c)}: per chi investe in euro si aggiunge il rischio del cambio)` : ''}. Stime dal passato, non previsioni. Non è consulenza finanziaria.</p>
+  </div>`;
+  $('#sim-scen').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; simSt.scen = b.dataset.v; renderSimResult(s); });
+  drawSim(s);
+}
+function drawSim(s) {
+  const k = s.drift[simSt.scen], P = s.prezzo;
+  const bands = s.ventaglio.map((b, m) => b.map(x => P * x * Math.exp(k * 21 * m)));
+  const labels = bands.map((_, m) => m ? '+' + m + (m === 1 ? ' mese' : ' mesi') : 'oggi');
+  fanChart($('#sim-fan'), bands, labels, {entry: P, entryLabel: 'Oggi ', stop: null, target: null}, 'Ventaglio dei prezzi possibili tra un anno',
+    {every: m => m === 0 || m % 3 === 0, tip: m => m ? `Tra ${m} ${m === 1 ? 'mese' : 'mesi'}` : 'Oggi'});
+  lineChart($('#sim-line'), s.grafico.dates, s.grafico.close, s.currency);
+}
+function lineChart(box, dates, vals, c) {
+  const H = Math.max(200, Math.min(260, (box.clientWidth || 600) * .5));
+  const [svg, W] = frame(box, H, 'Prezzo negli ultimi 5 anni');
+  const m = {l: 52, r: 10, t: 12, b: 26}, n = vals.length;
+  let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * .06 || 1; lo -= pad; hi += pad;
+  const x = i => m.l + (W - m.l - m.r) * i / Math.max(1, n - 1), y = v => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo);
+  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 10 ? 2 : (v < 20 ? 1 : 0)));
+  xLabels(svg, n, x, H, i => dates[i].slice(0, 4), i => i > 0 && dates[i].slice(0, 4) !== dates[i - 1].slice(0, 4), 40);
+  el('line', {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css('--line')}, svg);
+  el('path', {d: 'M' + vals.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join('L'), fill: 'none', stroke: css('--s1'), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg);
+  el('circle', {cx: x(n - 1), cy: y(vals[n - 1]), r: 4, fill: css('--s1'), stroke: css('--surface'), 'stroke-width': 2}, svg);
+  const dot = el('circle', {r: 4, fill: css('--s1'), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg);
+  crosshair(svg, box, m, W, H, n, x, (i, on) => {
+    if (!on) { dot.setAttribute('visibility', 'hidden'); return ''; }
+    dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(vals[i])); dot.setAttribute('visibility', 'visible');
+    return `<div class="t">${dt(dates[i], {year: 'numeric'})}</div><div class="r"><span>Chiusura</span><span>${cmoney(vals[i], c)}</span></div>`;
+  });
+}
+
+
 /* ---------------- come funziona ---------------- */
 function renderMetodo() {
   const R = S.rules;
@@ -651,6 +828,9 @@ function renderMetodo() {
     <p>Per ogni settimana degli ultimi ~9 anni ha rifatto la stessa operazione su <b>tutti i titoli in salita</b>, con i soli prezzi disponibili quel giorno. Li ha divisi in cinque gruppi per <b>forza dell'ultimo anno</b> (rendimento da 12 a 1 mese fa diviso per la volatilità, Jegadeesh e Titman, 1993). La probabilità di un titolo è la frequenza con cui le operazioni del suo gruppo sono finite in guadagno, costi inclusi, leggermente avvicinata alla media per non fidarsi dei gruppi piccoli. In letteratura i titoli più forti non fanno peggio dei più deboli: se i dati dicono il contrario, è considerato rumore e la probabilità resta uguale per tutti.</p>
     <h3>4. Cosa è stato provato e scartato</h3>
     <p><b>Un modello con sei indizi</b> (forza, ultimo mese, vicinanza al massimo, calma del prezzo, distanza dalla media, mercato): sui dati che non aveva visto, quando diceva 57 % è andata bene il 46 %. Peggio del caso, quindi scartato. <b>La storia del singolo titolo</b>: chi è andato bene in passato non va meglio dopo. Scartata. <b>Il risultato:</b> con i soli prezzi, la probabilità di riuscita a poche settimane dipende pochissimo dal titolo; dipende soprattutto da quanto tieni e da come esci.</p>
+    <h3>5. Simula un titolo dall'ISIN</h3>
+    <p>Per ogni titolo usa fino a <b>25 anni</b> di prezzi giornalieri. <b>Com'è andata davvero</b>: su tutte le finestre reali della storia (ogni giorno, ogni settimana, ogni mese, ogni anno), quante volte il prezzo è salito. <b>Macchina del Tempo</b>: 10.000 futuri fatti di pezzi veri della storia; per 1 anno incolla 12 mesi veri presi a caso, così ottiene 10.000 anni possibili invece dei pochi reali. La crescita di fondo viene tolta e rimessa secondo tre scenari: <b>nessuna crescita</b>, <b>prudente</b> (la crescita passata ridotta: le vere differenze di crescita attesa tra grandi titoli sono di pochi punti l'anno, il resto è soprattutto fortuna) e <b>come in passato</b>.</p>
+    <p><b>Affidabilità</b>: <b>alta</b> se ci sono almeno 100 periodi indipendenti nella storia e gli scenari di crescita cambiano il risultato di non più di 10 punti; <b>media</b> con almeno 20 periodi e non più di 20 punti; altrimenti <b>bassa</b>. A 1 anno è quasi sempre media o bassa: in 25 anni ci sono solo 25 anni indipendenti, e quanto crescerà un titolo è proprio la cosa più incerta.</p>
     <h3>Titoli italiani</h3>
     <p>Prezzi in euro, calendario di Borsa Italiana (chiusa a Capodanno, Venerdì Santo, Pasquetta, 1° maggio, Ferragosto, 24, 25, 26 e 31 dicembre), costo 0,2 % per operazione perché sugli acquisti di azioni italiane si paga la <b>Tobin tax dello 0,1 %</b>. Sui guadagni si paga il 26 % di imposta, qui non considerato.</p>
     <h3>Limiti</h3>
@@ -666,6 +846,7 @@ const draw = {
   consigli: () => document.querySelectorAll('#picks .pick').forEach(a => { if (st.open[a.dataset.s]) { const c = S.candidates.find(x => x.symbol === a.dataset.s); const box = a.querySelector('.more-body'); if (box && box.innerHTML) drawMore(box, c, levels(c, st.entry[c.symbol] || c.price)); } }),
   verifica: () => { const o = model().oos; if (o) { calibChart($('#cal'), o.calibrazione); yearsChart($('#yrs'), o.anni); } },
   daytrade: () => { if (D.daytrade) renderDay(); },
+  simula: () => { if (simSt.cur) drawSim(simSt.cur); },
 };
 if (!D.mercati.italia) $('#nav-it').hidden = true;
 if (!D.mercati.usa) document.querySelector('nav.tabs a[data-v=consigli]').hidden = true;

@@ -10,6 +10,8 @@ Schede:
              data), la probabilità di guadagno storica e la Macchina del Tempo (10.000
              simulazioni nel browser) per qualsiasi variante della regola
   Verifica   come sarebbe andato l'algoritmo negli ultimi ~9 anni, tutte le varianti a confronto
+  Simula     scrivi un codice ISIN: probabilità di guadagno a 1 giorno, 1 settimana, 1 mese e
+             1 anno con la Macchina del Tempo e l'affidabilità di ogni numero (simula.py)
   Day trade  l'ultimo giro di finanza.py (entry -> exit -> Macchina del Tempo -> budget -> risk)
   Metodo     come funziona e i suoi limiti
 
@@ -23,6 +25,8 @@ import os
 import sys
 
 import settimana
+import simula
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 TRADER = os.path.join(ROOT, "trader")
@@ -48,6 +52,36 @@ def day_trade():
             "orders": load_json(os.path.join(TRADER, "orders.json")),
             "risk": {k: risk.get(k) for k in ("pass", "block", "results")} if risk else None,
             "demo": tm.get("source") == "offline"}
+
+
+def simulazioni(log=print):
+    """La simulazione per ISIN di tutti i titoli dell'app (fino a 25 anni di storia), più quelli
+    aggiunti con simula.py (simula_lista.json)."""
+    rev = {v: k for k, v in simula.load_isin_map().items()}
+    syms = settimana.UNIVERSE + settimana.UNIVERSE_IT
+
+    def one(sym):
+        try:
+            meta, dates, closes = simula.series(simula.fetch_max(sym))
+            s = simula.simulate(dates, closes)
+        except (simula.SimError, ValueError, KeyError) as e:
+            log("[app] simulazione di %s saltata: %s" % (sym, e))
+            return None
+        return {"isin": rev.get(sym), "symbol": sym, "name": meta.get("longName") or meta.get("shortName") or sym,
+                "exchange": meta.get("fullExchangeName") or meta.get("exchangeName") or "",
+                "type": meta.get("instrumentType") or "", "currency": meta.get("currency") or "", **s}
+
+    log("[app] simulazione di %d titoli per la sezione Simula..." % len(syms))
+    with ThreadPoolExecutor(max_workers=4) as ex:
+        out = {s["symbol"]: s for s in ex.map(one, syms) if s}
+    for code in simula.load_list():                      # aggiunti con simula.py, prezzi aggiornati
+        try:
+            s = simula.instrument(code)
+        except (simula.SimError, settimana.FetchError, ValueError, KeyError) as e:
+            log("[app] %s saltato: %s" % (code, e))
+            continue
+        out[s["symbol"]] = s
+    return out
 
 
 def build(data, out):
@@ -78,7 +112,7 @@ def main(argv=None):
     if not mercati:
         print("[app] nessun mercato disponibile")
         return 1
-    out = build({"mercati": mercati, "daytrade": day_trade()}, a.out)
+    out = build({"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni()}, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
 

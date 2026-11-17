@@ -54,6 +54,8 @@ Cinque sezioni:
   comprare, il grafico e 10.000 simulazioni nel browser.
 - **Verifica**: tre domande. Conta di più il titolo o la regola? Le probabilità dette sono quelle
   vere? I primi 10 hanno fatto meglio?
+- **Simula**: scrivi un codice ISIN e ottieni le probabilità di guadagno a 1 giorno, 1 settimana,
+  1 mese e 1 anno con la loro affidabilità (vedi `simula.py` qui sotto).
 - **Day trade**: l'ultimo giro di `finanza.py`.
 - **Come funziona**: metodo, cosa è stato scartato e limiti.
 
@@ -86,10 +88,34 @@ Titoli italiani: prezzi in euro, calendario di Borsa Italiana (verificato sui da
 (query1/query2.finance.yahoo.com) con cache di 12 ore in `trader/cache/daily/`. L'app è
 un'istantanea: per aggiornarla rilancia `python3 app.py`.
 
+## `simula.py`: simula un titolo dal codice ISIN
+
+```bash
+python3 simula.py IT0003132476                  # ENI
+python3 simula.py US0378331005 IE00B4L5Y983     # Apple e un ETF MSCI World
+python3 simula.py AAPL                          # anche dal ticker
+```
+
+Trova il ticker dall'ISIN (ricerca di Yahoo Finance, con controllo della cifra di controllo),
+scarica fino a 25 anni di prezzi giornalieri e calcola la **probabilità di guadagno a 1 giorno,
+1 settimana, 1 mese e 1 anno**:
+
+- **Com'è andata davvero**: su tutte le finestre reali della storia, quante volte il prezzo è salito.
+- **Macchina del Tempo**: 10.000 futuri fatti di pezzi veri della storia (per 1 anno, 12 mesi veri
+  presi a caso), con tre scenari di crescita: nessuna, **prudente** (la crescita passata ridotta,
+  perché le vere differenze tra grandi titoli sono di pochi punti l'anno) e come in passato.
+- **Affidabilità** alta, media o bassa per ogni orizzonte: almeno 100 periodi indipendenti e
+  scenari d'accordo entro 10 punti per "alta"; almeno 20 ed entro 20 punti per "media".
+
+Nell'app, la sezione **Simula** fa lo stesso scrivendo l'ISIN, il ticker o il nome, per i 147 titoli
+già dentro (S&P 100, FTSE MIB e quelli aggiunti). Per un ISIN nuovo, `simula.py` lo aggiunge a
+`simula_lista.json` e `python3 app.py` lo mette nell'app con prezzi aggiornati. `isin.json` contiene
+la corrispondenza ISIN → ticker dei titoli dell'app, verificata uno per uno con la ricerca di Yahoo.
+
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana.py e la regola, offline
+python3 -m unittest discover -s tests                         # settimana.py e simula.py, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 
