@@ -39,13 +39,14 @@ Codici di uscita: 0 PASS, 1 BLOCK o nessun ingresso, 2 fermato dal filtro.
 
 ```bash
 python3 app.py                       # scarica i dati, analizza, scrive trader/app.html
-python3 settimana.py                 # gli stessi 10 titoli, solo in testo
+python3 settimana.py                 # i 10 titoli USA, solo in testo
+python3 settimana.py --mercato italia # i 10 titoli italiani
 python3 settimana.py --asof 2025-06-30
 ```
 
-Un unico file HTML con quattro schede:
+Un unico file HTML con cinque schede:
 
-- **Consigli**: i 10 titoli della settimana. Per ognuno **quando entrare** (ordine limite alla
+- **Titoli USA** e **Titoli italiani**: i 10 titoli della settimana dell'S&P 100 e del FTSE MIB. Per ognuno **quando entrare** (ordine limite alla
   prossima seduta a ultima chiusura + 0,5 ATR; se non si esegue, niente operazione), **quando
   vendere** (alla prima tra stop-loss, target e una data precisa di borsa) e **quante azioni**
   per il tuo capitale e il tuo rischio massimo. La **probabilità di guadagno** viene da tre fonti:
@@ -53,22 +54,30 @@ Un unico file HTML con quattro schede:
   dell'algoritmo, e la **Macchina del Tempo** (10.000 simulazioni nel browser con candele vere
   dell'ultimo anno). Stop (1,5 / 2 / 3 ATR / nessuno), target (1,5R / 2R / 3R / nessuno) e durata
   (2 settimane / 1 mese / 3 mesi) si cambiano e tutto si ricalcola.
-- **Verifica**: la scelta rifatta ogni settimana dal 2017 con i soli dati di allora, contro il
-  paniere e SPY, anno per anno, con il test statistico (t) e tutte le 39 varianti della regola.
+- **Verifica**: la scelta rifatta ogni settimana dal 2017 con i soli dati di allora, per ciascun
+  mercato, contro il paniere e l'indice (SPY o FTSE MIB), anno per anno, con il test statistico (t) e tutte le 39 varianti della regola.
 - **Day trade**: l'ultimo giro di `finanza.py`.
 - **Metodo**: come funziona e i suoi limiti.
 
 L'**algoritmo** è il momentum 12-1 (rendimento da 12 a 1 mese fa) diviso per la volatilità a
-3 mesi, solo per i titoli sopra la media a 200 giorni, sull'S&P 100. I parametri sono quelli
-standard della letteratura e non sono adattati ai dati.
+3 mesi, solo per i titoli sopra la media a 200 giorni e con volatilità almeno del 10 % annuo
+(sotto, il prezzo è di solito bloccato da un'offerta di acquisto, come Iveco). I parametri sono
+quelli standard della letteratura e non sono adattati ai dati.
+
+**Titoli italiani**: FTSE MIB più qualche grande titolo vicino all'indice (43 in tutto), prezzi in
+euro, calendario di Borsa Italiana (Venerdì Santo, Pasquetta, Ferragosto, 24-26 e 31 dicembre
+inclusi, verificato sui dati), costo 0,2 % per operazione perché c'è la Tobin tax dello 0,1 %
+sugli acquisti. L'indice FTSE MIB di Yahoo è senza dividendi: il confronto giusto è con il paniere.
 
 Cosa dicono i dati, senza abbellimenti:
 
-- Il vantaggio storico sul paniere **non è statisticamente significativo** (t < 2).
+- Il vantaggio storico sul paniere **non è statisticamente significativo** (t < 2), né per gli
+  USA (+5 % l'anno, t = 0,9) né per l'Italia (+1,7 % l'anno, t = 0,4).
 - Gli stop stretti peggiorano i risultati: con 2 ATR lo stop scatta quasi una volta su due.
   Per questo lo stop predefinito è 3 ATR, ma anche così "compra e tieni" ha una probabilità di
   guadagno più alta. Lo stop serve a limitare le perdite grosse, non ad aumentare i guadagni.
-- L'universo è l'S&P 100 di oggi (bias di sopravvivenza): i numeri assoluti sono ottimistici.
+- L'universo è la composizione di oggi degli indici (bias di sopravvivenza): i numeri assoluti
+  sono ottimistici.
 
 L'app è un'istantanea: per aggiornarla rilancia `python3 app.py`. I dati vengono da Yahoo Finance
 (query1/query2.finance.yahoo.com) con una cache di 12 ore in `trader/cache/daily/`.

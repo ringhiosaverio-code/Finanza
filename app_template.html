@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Finanza</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -175,7 +176,8 @@ footer{color:var(--muted);font-size:12.5px;margin-top:8px}
   <div class="wrap">
     <div class="brand"><b>Finanza</b><span id="meta"></span></div>
     <nav class="tabs" aria-label="Sezioni">
-      <a href="#consigli" data-v="consigli">Consigli</a>
+      <a href="#consigli" data-v="consigli">Titoli USA</a>
+      <a href="#italia" data-v="italia" id="nav-it">Titoli italiani</a>
       <a href="#verifica" data-v="verifica">Verifica</a>
       <a href="#daytrade" data-v="daytrade">Day trade</a>
       <a href="#metodo" data-v="metodo">Metodo</a>
@@ -194,16 +196,21 @@ footer{color:var(--muted);font-size:12.5px;margin-top:8px}
 <script>
 "use strict";
 const D = JSON.parse(document.getElementById('data').textContent);
-const S = D.settimana;
+let mkt = 'usa';
+let S = D.mercati ? (D.mercati.usa || D.mercati.italia) : D.settimana;
+if (D.mercati && !D.mercati.usa) mkt = 'italia';
+function setMkt(m) { if (D.mercati && D.mercati[m]) { mkt = m; S = D.mercati[m]; } }
 const $ = (s, r = document) => r.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const nf = (x, d = 2) => Number(x).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
 const pc = (x, d = 1, sign = true) => { if (x == null) return 'n/d'; let v = x * 100; if (Math.abs(v) < 0.5 * Math.pow(10, -d)) v = 0; return (sign && v > 0 ? '+' : '') + nf(v, d) + ' %'; };
 const usd = x => x == null ? '–' : nf(x, 2) + ' $';
+const money = x => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + (S && S.mercato ? S.mercato.valuta : '$');
+const tk = s => String(s).replace(/\.MI$/, '');
 const dt = (s, o) => new Date(s + 'T12:00:00Z').toLocaleDateString('it-IT', Object.assign({timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'}, o || {}));
 const dtl = s => dt(s, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
-const COST = S ? S.backtest.costo_andata_ritorno : 0.001;
+const cost = () => S ? S.backtest.costo_andata_ritorno : 0.001;
 
 /* ---------------- stato (ricordato solo in questo browser) ---------------- */
 const DEF = S ? {ks: S.rules.default[0], rr: S.rules.default[1], hold: S.rules.default[2]} : {ks: 3, rr: 2, hold: 21};
@@ -216,13 +223,22 @@ const stopName = k => k ? nf(k, k % 1 ? 1 : 0) + ' ATR' : 'nessuno';
 const tgtName = r => r ? nf(r, r % 1 ? 1 : 0) + 'R' : 'nessuno';
 
 /* ---------------- routing ---------------- */
-const VIEWS = ['consigli', 'verifica', 'daytrade', 'metodo'];
+const VIEWS = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo'];
+let view = null;
 function route() {
-  const v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'consigli';
-  VIEWS.forEach(x => { $('#v-' + x).hidden = x !== v; });
+  let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'consigli';
+  if (v === 'italia' && !(D.mercati && D.mercati.italia)) v = 'consigli';
+  view = v;
+  const sec = v === 'italia' ? 'consigli' : v;
+  ['consigli', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === v ? 'page' : 'false'));
-  draw[v] && draw[v]();
+  if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
+  else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
+  else if (sec === 'daytrade') renderDay();
+  else renderMetodo();
+  if (S && S.mercato) $('#meta').textContent = `Dati al ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
+function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
 window.addEventListener('hashchange', route);
 
 /* ---------------- grafici ---------------- */
@@ -266,12 +282,12 @@ const swatch = c => `<i style="display:inline-block;width:9px;height:9px;border-
 /* Grafico del prezzo: chiusure, media a 200 giorni, livelli della regola */
 function priceChart(box, p, lv) {
   const H = Math.max(230, Math.min(320, (box.clientWidth || 600) * 0.42));
-  const [svg, W] = frame(box, H, 'Prezzo di ' + p.symbol + ' negli ultimi 6 mesi');
+  const [svg, W] = frame(box, H, 'Prezzo di ' + tk(p.symbol) + ' negli ultimi 6 mesi');
   const m = {l: 52, r: 10, t: 14, b: 26}, C = p.chart, n = C.close.length;
   const vals = C.close.concat(C.sma.filter(v => v != null), [lv.limit, lv.stop, lv.target].filter(v => v != null));
   let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * .06; lo -= pad; hi += pad;
   const x = i => m.l + (W - m.l - m.r) * i / (n - 1), y = v => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo);
-  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 20 ? 1 : 0));
+  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 10 ? 2 : (v < 20 ? 1 : 0)));
   xLabels(svg, n, x, H, i => dt(C.dates[i], {weekday: undefined, day: undefined, month: 'short'}), i => i === 0 || C.dates[i].slice(5, 7) !== C.dates[i - 1].slice(5, 7), W < 520 ? 52 : 40);
   el('line', {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css('--line')}, svg);
   const path = arr => { let d = '', pen = false; arr.forEach((v, i) => { if (v == null) { pen = false; return; } d += (pen ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(v).toFixed(1); pen = true; }); return d; };
@@ -287,8 +303,8 @@ function priceChart(box, p, lv) {
   crosshair(svg, box, m, W, H, n, x, (i, on) => {
     if (!on) { dot.setAttribute('visibility', 'hidden'); return ''; }
     dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(C.close[i])); dot.setAttribute('visibility', 'visible');
-    return `<div class="t">${dt(C.dates[i], {year: 'numeric'})}</div><div class="r"><span>${swatch(css('--s1'))}Chiusura</span><span>${usd(C.close[i])}</span></div>` +
-      (C.sma[i] != null ? `<div class="r"><span>Media 200 giorni</span><span>${usd(C.sma[i])}</span></div>` : '');
+    return `<div class="t">${dt(C.dates[i], {year: 'numeric'})}</div><div class="r"><span>${swatch(css('--s1'))}Chiusura</span><span>${money(C.close[i])}</span></div>` +
+      (C.sma[i] != null ? `<div class="r"><span>Media 200 giorni</span><span>${money(C.sma[i])}</span></div>` : '');
   });
 }
 
@@ -300,7 +316,7 @@ function fanChart(box, bands, labels, lv, label, timeFmt) {
   const vals = bands.flatMap(b => [b[0], b[4]]).concat([lv.stop, lv.target, lv.entry].filter(v => v != null && isFinite(v)));
   let lo = Math.min(...vals), hi = Math.max(...vals); const pad = (hi - lo) * .06; lo -= pad; hi += pad;
   const x = i => m.l + (W - m.l - m.r) * i / Math.max(1, n - 1), y = v => m.t + (H - m.t - m.b) * (hi - v) / (hi - lo);
-  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 20 ? 1 : 0));
+  yGrid(svg, m, W, y, lo, hi, v => nf(v, v < 10 ? 2 : (v < 20 ? 1 : 0)));
   xLabels(svg, n, x, H, i => labels[i], timeFmt.every, W < 520 ? 60 : 44);
   el('line', {x1: m.l, x2: W - m.r, y1: H - m.b, y2: H - m.b, stroke: css('--line')}, svg);
   const area = (a, b) => 'M' + bands.map((r, i) => x(i) + ',' + y(r[a])).join('L') + 'L' + bands.map((r, i) => [i, r]).reverse().map(([i, r]) => x(i) + ',' + y(r[b])).join('L') + 'Z';
@@ -358,7 +374,7 @@ function timeMachine(p, entry, lv, trend) {
       }
       prev = c;
     }
-    rets[n] = ret - COST;
+    rets[n] = ret - cost();
   }
   const q = (arr, f) => arr[Math.min(arr.length - 1, Math.floor(f * (arr.length - 1)))];
   const bands = [[entry, entry, entry, entry, entry]];
@@ -390,7 +406,10 @@ function renderConsigli() {
   if (!S) { v.innerHTML = '<div class="card empty">Nessun dato. Esegui <code>python3 app.py</code>.</div>'; return; }
   const m = S.backtest.metrics, t = m.t_eccesso;
   const R = S.rules;
+  const M = S.mercato || {nome: 'USA', universo_nome: 'S&P 100', valuta_nome: 'dollari', citta: 'New York'};
   v.innerHTML = `
+  <div><h1 style="font-size:26px">${M.nome === 'Italia' ? 'Titoli italiani' : 'Titoli USA'} della settimana</h1>
+    <p class="sub">I ${S.picks.length} punteggi migliori del ${esc(M.universo_nome)} (${S.universo} titoli) · dati alla chiusura di ${dtl(S.asof)} · prezzi in ${esc(M.valuta_nome)}${M.nome === 'Italia' ? ' · costi 0,2 % per operazione, Tobin tax compresa' : ''}</p></div>
   <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità vere, non promesse.</b> Ogni numero è quante volte una cosa è successa nel passato. Negli ultimi ${Math.round(m.settimane / 52)} anni l'algoritmo ha battuto il paniere di ${pc(m.eccesso_annuo)} l'anno, ma con t = ${nf(t)} il vantaggio ${t > 2 ? 'è statisticamente significativo' : '<b>non si distingue dal caso</b>'}. Non è consulenza finanziaria.</p></div>
   <div class="card">
     <h2>La tua regola</h2>
@@ -399,7 +418,7 @@ function renderConsigli() {
       <div class="ctl"><span class="lab">Stop-loss sotto l'entrata</span>${seg('c-ks', R.stops_atr.map(k => [k, stopName(k)]), st.ks)}</div>
       <div class="ctl"><span class="lab">Target (multipli del rischio)</span>${seg('c-rr', R.targets_r.map(r => [r, tgtName(r)]), st.rr, r => !st.ks && r)}</div>
       <div class="ctl"><span class="lab">Durata massima</span>${seg('c-hold', R.holds.map(h => [h, holdName(h)]), st.hold)}</div>
-      <div class="ctl acct"><span class="lab">Il tuo conto (in dollari)</span><div class="money">
+      <div class="ctl acct"><span class="lab">Il tuo conto (in ${esc(M.valuta_nome)})</span><div class="money">
         <div class="f"><small>Capitale</small><input id="c-cap" type="number" min="0" step="100" inputmode="decimal" value="${st.cap}"></div>
         <div class="f"><small>Rischio max per titolo</small><input id="c-risk" type="number" min="0" step="10" inputmode="decimal" value="${st.risk}"></div>
         <div class="f"><small>Peso max %</small><input id="c-pct" type="number" min="1" max="100" step="1" inputmode="decimal" value="${st.maxpct}"></div></div></div>
@@ -407,10 +426,10 @@ function renderConsigli() {
   </div>
   <div class="sum" id="sum"></div>
   <div class="list" id="list"></div>
-  <details class="card"><summary><b>Classifica completa</b> · i primi 25 punteggi dell'S&amp;P 100</summary><div class="scroll" style="margin-top:10px"><table>
+  <details class="card"><summary><b>Classifica completa</b> · i primi 25 punteggi del ${esc(M.universo_nome)}</summary><div class="scroll" style="margin-top:10px"><table>
     <thead><tr><th>#</th><th style="text-align:left">Titolo</th><th>Punteggio</th><th>Momentum 12-1</th><th>Volatilità</th><th>Sopra la media 200</th></tr></thead>
-    <tbody>${S.classifica.map((x, i) => `<tr><td>${i + 1}</td><td style="text-align:left;font-weight:600">${esc(x.symbol)}</td><td>${nf(x.score)}</td><td>${pc(x.mom)}</td><td>${pc(x.vol, 1, false)}</td><td>${x.above ? 'sì' : '<span class="neg">no</span>'}</td></tr>`).join('')}</tbody></table></div></details>
-  <footer>Dati Yahoo Finance fino alla chiusura del ${dtl(S.asof)} · app generata il ${S.generato.replace(' ', ' alle ')} (New York) · prezzi in dollari · non è consulenza finanziaria.</footer>`;
+    <tbody>${S.classifica.map((x, i) => `<tr><td>${i + 1}</td><td style="text-align:left;font-weight:600">${esc(tk(x.symbol))}</td><td>${nf(x.score)}</td><td>${pc(x.mom)}</td><td>${pc(x.vol, 1, false)}</td><td>${x.frozen ? '<span class="neg">esclusa: prezzo fermo</span>' : (x.above ? 'sì' : '<span class="neg">no</span>')}</td></tr>`).join('')}</tbody></table></div></details>
+  <footer>Dati Yahoo Finance fino alla chiusura del ${dtl(S.asof)} · app generata il ${S.generato.replace(' ', ' alle ')} (ora di ${esc(M.citta)}) · prezzi in ${esc(M.valuta_nome)} · non è consulenza finanziaria.</footer>`;
   const bind = (id, f) => $('#' + id).addEventListener('click', e => { const b = e.target.closest('button'); if (!b || b.disabled) return; f(Number(b.dataset.v)); save(); renderConsigli(); });
   bind('c-ks', k => { st.ks = k; if (!k) st.rr = 0; else if (!st.rr) st.rr = DEF.rr; });
   bind('c-rr', r => { st.rr = r; });
@@ -430,11 +449,11 @@ function renderList() {
     const lv = levels(p, p.price), s = p.rule[k];
     return `<div class="row" role="button" tabindex="0" aria-expanded="${st.open === p.symbol}" data-s="${p.symbol}">
       <span class="rk">${i + 1}</span>
-      <span class="who"><span class="tk">${esc(p.symbol)}</span><span class="nm">${esc(p.name)}</span></span>
-      <span class="n"><span class="lbl">Chiusura</span>${usd(p.price)}</span>
-      <span class="n"><span class="lbl">Entrata max</span>${usd(lv.limit)}</span>
-      <span class="n neg"><span class="lbl">Stop</span>${usd(lv.stop)}</span>
-      <span class="n pos"><span class="lbl">Target</span>${usd(lv.target)}</span>
+      <span class="who"><span class="tk">${esc(tk(p.symbol))}</span><span class="nm">${esc(p.name)}</span></span>
+      <span class="n"><span class="lbl">Chiusura</span>${money(p.price)}</span>
+      <span class="n"><span class="lbl">Entrata max</span>${money(lv.limit)}</span>
+      <span class="n neg"><span class="lbl">Stop</span>${money(lv.stop)}</span>
+      <span class="n pos"><span class="lbl">Target</span>${money(lv.target)}</span>
       <span class="n"><span class="lbl">Esci entro</span>${dt(lv.exitDay)}</span>
       <span class="n"><span class="lbl">Prob. guadagno</span><span class="prob"><span class="meter"><i style="width:${(s.p_gain || 0) * 100}%"></i></span><b>${s.n ? pc(s.p_gain, 0, false) : 'n/d'}</b></span></span>
       <span class="n ${s.median >= 0 ? 'pos' : 'neg'}"><span class="lbl">Tipico</span>${s.n ? pc(s.median) : 'n/d'}</span>
@@ -462,40 +481,40 @@ function renderDetail(p) {
   let liveTxt = '';
   if (live) {
     const ok = live.price <= lim;
-    liveTxt = `<p>Ultimo prezzo visto: <b>${usd(live.price)}</b> (${live.time.slice(11)} del ${dt(live.time.slice(0, 10))}, in ritardo). ${ok ? 'È <b class="pos">sotto il limite</b>: l’ordine si eseguirebbe.' : 'È <b class="neg">sopra il limite</b>: non inseguirlo, l’ordine resta in attesa.'}</p>`;
+    liveTxt = `<p>Ultimo prezzo visto: <b>${money(live.price)}</b> (${live.time.slice(11)} del ${dt(live.time.slice(0, 10))}, in ritardo). ${ok ? 'È <b class="pos">sotto il limite</b>: l’ordine si eseguirebbe.' : 'È <b class="neg">sopra il limite</b>: non inseguirlo, l’ordine resta in attesa.'}</p>`;
   }
   box.innerHTML = `
     <div class="plan">
       <div class="step"><div class="h"><span class="dot" style="background:var(--accent)"></span>Quando entrare</div>
-        <p><b>${today ? 'Oggi, ' : ''}${dtl(lv.entryDay)}</b>, con un <b>ordine limite a ${usd(lim)}</b> valido solo per quella seduta (ultima chiusura ${usd(p.price)} + ${nf(S.rules.limit_atr, 1)} ATR).</p>
+        <p><b>${today ? 'Oggi, ' : ''}${dtl(lv.entryDay)}</b>, con un <b>ordine limite a ${money(lim)}</b> valido solo per quella seduta (ultima chiusura ${money(p.price)} + ${nf(S.rules.limit_atr, 1)} ATR).</p>
         <p>Se il prezzo non scende fino al limite, non comprare: il giorno dopo i numeri cambiano.</p>${liveTxt}
         <div class="entry-in"><label for="c-entry">Il tuo prezzo di entrata</label><input id="c-entry" type="number" step="0.01" min="0" value="${entry.toFixed(2)}"><span>stop, target e simulazione si spostano con lui</span></div>
       </div>
       <div class="step"><div class="h"><span class="dot" style="background:var(--crit)"></span>Quando vendere</div>
         <p>Alla prima di queste tre cose:</p>
-        <p>${lv.stop != null ? `<b class="neg">Stop-loss a ${usd(lv.stop)}</b> (${pctOf(lv.stop)}, ${stopName(st.ks)} sotto l'entrata)` : '<b>Nessuno stop</b>: nessuna protezione dalle discese'}</p>
-        <p>${lv.target != null ? `<b class="pos">Target a ${usd(lv.target)}</b> (${pctOf(lv.target)}, ${tgtName(st.rr)})` : '<b>Nessun target</b>: lasci correre il guadagno'}</p>
+        <p>${lv.stop != null ? `<b class="neg">Stop-loss a ${money(lv.stop)}</b> (${pctOf(lv.stop)}, ${stopName(st.ks)} sotto l'entrata)` : '<b>Nessuno stop</b>: nessuna protezione dalle discese'}</p>
+        <p>${lv.target != null ? `<b class="pos">Target a ${money(lv.target)}</b> (${pctOf(lv.target)}, ${tgtName(st.rr)})` : '<b>Nessun target</b>: lasci correre il guadagno'}</p>
         <p><b>Alla chiusura di ${dtl(lv.exitDay)}</b>, se nessuno dei due è scattato (${st.hold} sedute).</p>
       </div>
       <div class="step"><div class="h"><span class="dot" style="background:var(--s1)"></span>Quante azioni</div>
-        <p>Con ${usd(st.cap)} di capitale, al massimo ${nf(st.maxpct, 0)} % per titolo e ${usd(st.risk)} di rischio:</p>
-        <p><b style="font-size:20px;font-family:var(--f-head)">${sz.sh} azioni</b> = ${usd(sz.amount)}</p>
-        <p>${lv.stop != null ? `Perdita se scatta lo stop: <b class="neg">${usd(sz.loss)}</b>. Limita ${sz.binds === 'rischio' ? 'il rischio massimo' : 'il peso massimo per titolo'}.` : 'Senza stop la perdita possibile è tutto l’importo investito.'}</p>
+        <p>Con ${money(st.cap)} di capitale, al massimo ${nf(st.maxpct, 0)} % per titolo e ${money(st.risk)} di rischio:</p>
+        <p><b style="font-size:20px;font-family:var(--f-head)">${sz.sh} azioni</b> = ${money(sz.amount)}</p>
+        <p>${lv.stop != null ? `Perdita se scatta lo stop: <b class="neg">${money(sz.loss)}</b>. Limita ${sz.binds === 'rischio' ? 'il rischio massimo' : 'il peso massimo per titolo'}.` : 'Senza stop la perdita possibile è tutto l’importo investito.'}</p>
         <p class="note">Uno stop è un ordine, non una garanzia: con un salto di prezzo può eseguirsi più in basso.</p>
       </div>
     </div>
     <div class="two">
       <div><h3>Prezzo, ultimi 6 mesi</h3><div class="chart" id="pc"><div class="tip"></div></div>
         <div class="legend"><span><i class="ln" style="background:var(--s1)"></i>Chiusura</span><span style="color:var(--muted)"><i class="dash"></i>Media a 200 giorni</span><span><i class="ln" style="background:var(--accent)"></i>Limite di entrata</span><span><i class="ln" style="background:var(--crit)"></i>Stop</span><span><i class="ln" style="background:var(--good)"></i>Target</span></div>
-        <p class="note" style="margin-top:8px">Momentum 12-1 ${pc(p.signal.mom)} · volatilità ${pc(p.signal.vol, 1, false)} · ${pc(p.signal.vs_sma)} sopra la media a 200 giorni · ATR ${usd(p.atr)} (${pc(p.atr / p.price, 1, false)} al giorno)</p></div>
+        <p class="note" style="margin-top:8px">Momentum 12-1 ${pc(p.signal.mom)} · volatilità ${pc(p.signal.vol, 1, false)} · ${pc(p.signal.vs_sma)} sopra la media a 200 giorni · ATR ${money(p.atr)} (${pc(p.atr / p.price, 1, false)} al giorno)</p></div>
       <div><h3>Probabilità di guadagno con questa regola</h3>
-        <div class="oc">${outcomeRow('Storia di ' + esc(p.symbol), own.n ? `${own.n} casi simili, ${own.indipendenti} indipendenti · affidabilità ${own.affidabilita}` : 'nessun caso simile', own)}
+        <div class="oc">${outcomeRow('Storia di ' + esc(tk(p.symbol)), own.n ? `${own.n} casi simili, ${own.indipendenti} indipendenti · affidabilità ${own.affidabilita}` : 'nessun caso simile', own)}
         ${outcomeRow('Tutte le scelte', `${nf(pool.n, 0)} operazioni dell'algoritmo dal ${dt(S.backtest.da, {weekday: undefined, year: 'numeric'})}`, pool)}
         <div id="mc-row">${outcomeRow('Macchina del Tempo', 'calcolo in corso…', null)}</div></div>${ocLegend}
-        <p class="note" style="margin-top:8px">Storia: la stessa regola rifatta ogni volta che ${esc(p.symbol)} era tra il 20 % migliore del punteggio e sopra la media a 200 giorni. Costi inclusi (${pc(COST, 2, false)} per operazione).</p></div>
+        <p class="note" style="margin-top:8px">Storia: la stessa regola rifatta ogni volta che ${esc(tk(p.symbol))} era tra il 20 % migliore del punteggio e sopra la media a 200 giorni. Costi inclusi (${pc(cost(), 2, false)} per operazione).</p></div>
     </div>
     <div><h3>Macchina del Tempo: 10.000 volte le prossime ${st.hold} sedute</h3>
-      <p class="sub" style="font-size:14px">Ogni giorno è una candela vera di ${esc(p.symbol)} presa a caso dall'ultimo anno. <label style="white-space:nowrap"><input type="checkbox" id="c-trend" ${st.trend ? 'checked' : ''}> includi la tendenza dell'ultimo anno</label> <span class="note">(più ottimista: suppone che la corsa continui)</span></p>
+      <p class="sub" style="font-size:14px">Ogni giorno è una candela vera di ${esc(tk(p.symbol))} presa a caso dall'ultimo anno. <label style="white-space:nowrap"><input type="checkbox" id="c-trend" ${st.trend ? 'checked' : ''}> includi la tendenza dell'ultimo anno</label> <span class="note">(più ottimista: suppone che la corsa continui)</span></p>
       <div class="chart" id="fan"><div class="tip"></div></div>
       <div class="legend"><span><i class="ln" style="background:var(--median)"></i>Mediana</span><span><i style="background:var(--band-in)"></i>50 % centrale</span><span><i style="background:var(--band-out)"></i>90 % centrale</span></div></div>
     <div><h3>Se invece compri e tieni</h3><div class="scroll"><table><thead><tr><th>Per</th><th>Prob. di guadagno</th><th>Tipico</th><th>8 casi su 10 tra</th><th>Casi (indip.)</th><th>Affidabilità</th></tr></thead><tbody>
@@ -516,25 +535,25 @@ function runMC(p, lv) {
 }
 
 /* ---------------- Verifica ---------------- */
-const SER = [['strategia', 'I 10 titoli, ogni settimana', '--s1'], ['paniere', 'Paniere: tutti, stesso peso', '--s2'], ['spy', 'SPY (S&P 500)', '--s3']];
+const SER = () => [['strategia', 'I 10 titoli, ogni settimana', '--s1', 'I 10 titoli'], ['paniere', 'Paniere: tutti, stesso peso', '--s2', 'Paniere'], ['spy', S.mercato ? S.mercato.indice_nome : 'SPY (S&P 500)', '--s3', S.mercato ? S.mercato.indice_breve : 'SPY']];
 function equityChart(box) {
   const B = S.backtest, H = Math.max(260, Math.min(380, (box.clientWidth || 700) * .45));
   const [svg, W] = frame(box, H, 'Crescita di 1 dollaro investito');
   const narrow = W < 560, m = {l: 46, r: narrow ? 10 : 132, t: 12, b: 26}, C = B.curves, dates = B.dates, n = dates.length;
-  const all = SER.flatMap(([k]) => C[k]); const lo = Math.min(...all) * .97, hi = Math.max(...all) * 1.03;
+  const all = SER().flatMap(([k]) => C[k]); const lo = Math.min(...all) * .97, hi = Math.max(...all) * 1.03;
   const L = Math.log, x = i => m.l + (W - m.l - m.r) * i / (n - 1), y = v => m.t + (H - m.t - m.b) * (L(hi) - L(v)) / (L(hi) - L(lo));
   for (const v of [.75, 1, 1.5, 2, 3, 4, 5, 6, 8, 10]) { if (v < lo || v > hi) continue;
     el('line', {x1: m.l, x2: W - m.r, y1: y(v), y2: y(v), stroke: v === 1 ? css('--muted') : css('--line'), 'stroke-width': 1}, svg);
     text(svg, m.l - 8, y(v) + 4, '×' + nf(v, v % 1 ? 2 : 0), {'text-anchor': 'end'}); }
   xLabels(svg, n, x, H, i => dates[i].slice(0, 4), i => i > 0 && dates[i].slice(0, 4) !== dates[i - 1].slice(0, 4), narrow ? 56 : 40);
-  SER.slice().reverse().forEach(([k, , c]) => el('path', {d: 'M' + C[k].map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join('L'), fill: 'none', stroke: css(c), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg));
-  if (!narrow) { const ends = SER.map(([k, lab, c]) => ({lab: lab.split(':')[0].replace(', ogni settimana', ''), v: C[k][n - 1], yy: y(C[k][n - 1])})).sort((a, b) => a.yy - b.yy);
+  SER().slice().reverse().forEach(([k, , c]) => el('path', {d: 'M' + C[k].map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join('L'), fill: 'none', stroke: css(c), 'stroke-width': 2, 'stroke-linejoin': 'round'}, svg));
+  if (!narrow) { const ends = SER().map(([k, , , short]) => ({lab: short, v: C[k][n - 1], yy: y(C[k][n - 1])})).sort((a, b) => a.yy - b.yy);
     for (let i = 1; i < ends.length; i++) if (ends[i].yy - ends[i - 1].yy < 15) ends[i].yy = ends[i - 1].yy + 15;
     ends.forEach(e => text(svg, W - m.r + 8, e.yy + 4, e.lab + ' ×' + nf(e.v, 1), {'font-size': 12, fill: css('--ink')})); }
-  const dots = SER.map(([, , c]) => el('circle', {r: 4, fill: css(c), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg));
+  const dots = SER().map(([, , c]) => el('circle', {r: 4, fill: css(c), stroke: css('--surface'), 'stroke-width': 2, visibility: 'hidden'}, svg));
   crosshair(svg, box, m, W, H, n, x, (i, on) => {
-    dots.forEach((d, j) => { if (!on) { d.setAttribute('visibility', 'hidden'); return; } d.setAttribute('cx', x(i)); d.setAttribute('cy', y(C[SER[j][0]][i])); d.setAttribute('visibility', 'visible'); });
-    return on ? `<div class="t">${dt(dates[i], {year: 'numeric'})}</div>` + SER.map(([k, lab, c]) => `<div class="r"><span>${swatch(css(c))}${lab.split(':')[0]}</span><span>×${nf(C[k][i], 2)}</span></div>`).join('') : '';
+    dots.forEach((d, j) => { if (!on) { d.setAttribute('visibility', 'hidden'); return; } d.setAttribute('cx', x(i)); d.setAttribute('cy', y(C[SER()[j][0]][i])); d.setAttribute('visibility', 'visible'); });
+    return on ? `<div class="t">${dt(dates[i], {year: 'numeric'})}</div>` + SER().map(([k, , c, short]) => `<div class="r"><span>${swatch(css(c))}${short}</span><span>×${nf(C[k][i], 2)}</span></div>`).join('') : '';
   });
 }
 function yearChart(box) {
@@ -560,12 +579,13 @@ function renderVerifica() {
   const variants = [];
   R.stops_atr.forEach(ks => R.targets_r.forEach(rr => { if (ks || !rr) variants.push([ks, rr]); }));
   v.innerHTML = `
-  <div class="card"><h2>Come sarebbe andata</h2>
-    <p class="sub">Ogni settimana dal ${dtl(S.backtest.da)} al ${dtl(S.backtest.a)}: stessa regola di scelta, solo i dati disponibili in quel momento, ${pc(COST, 2, false)} di costo per ogni titolo cambiato. Scala logaritmica.</p>
+  ${D.mercati && Object.keys(D.mercati).length > 1 ? `<div class="ctl" style="max-width:320px"><span class="lab">Mercato</span>${seg('v-mkt', Object.keys(D.mercati).map(m => [m, D.mercati[m].mercato.nome]), mkt)}</div>` : ''}
+  <div class="card"><h2>Come sarebbe andata${S.mercato ? ' · ' + esc(S.mercato.nome) : ''}</h2>
+    <p class="sub">Ogni settimana dal ${dtl(S.backtest.da)} al ${dtl(S.backtest.a)}: stessa regola di scelta, solo i dati disponibili in quel momento, ${pc(cost(), 2, false)} di costo per ogni titolo cambiato. Scala logaritmica.</p>
     <div class="chart" id="eq"><div class="tip"></div></div>
-    <div class="legend">${SER.map(([, lab, c]) => `<span><i class="ln" style="background:var(${c})"></i>${lab}</span>`).join('')}</div>
+    <div class="legend">${SER().map(([, lab, c]) => `<span><i class="ln" style="background:var(${c})"></i>${lab}</span>`).join('')}</div>
     <div class="scroll" style="margin-top:12px"><table><thead><tr><th>Portafoglio</th><th>All'anno</th><th>Calo massimo</th><th>Totale</th></tr></thead><tbody>
-      ${SER.map(([k, lab]) => `<tr><td>${lab}</td><td>${pc(m[k].cagr)}</td><td class="neg">${pc(m[k].max_drawdown)}</td><td>${pc(m[k].totale, 0)}</td></tr>`).join('')}</tbody></table></div>
+      ${SER().map(([k, lab]) => `<tr><td>${lab}</td><td>${pc(m[k].cagr)}</td><td class="neg">${pc(m[k].max_drawdown)}</td><td>${pc(m[k].totale, 0)}</td></tr>`).join('')}</tbody></table></div>
     <p class="note" style="margin-top:8px">Settimane in guadagno ${pc(m.settimane_positive, 0, false)} · settimane meglio del paniere ${pc(m.settimane_sopra_paniere, 0, false)} · vantaggio medio ${pc(m.eccesso_annuo)} l'anno, <b>t = ${nf(t)}</b>: ${t > 2 ? 'significativo' : 'non distinguibile dal caso (servirebbe almeno 2)'}.</p></div>
   <div class="card"><h2>Anno per anno</h2><p class="sub">Un vantaggio vero dovrebbe ripetersi quasi ogni anno. * = anno parziale.</p>
     <div class="chart" id="yr"><div class="tip"></div></div>
@@ -580,6 +600,7 @@ function renderVerifica() {
   <div class="card"><h2>Comprare e tenere i titoli scelti</h2><div class="scroll"><table><thead><tr><th>Per</th><th>Scelte in guadagno</th><th>Tipico</th><th>Paniere in guadagno</th><th>Paniere tipico</th><th>Settimane sopra il paniere</th><th>Casi indip.</th></tr></thead><tbody>
     ${Object.entries(S.record).map(([h, x]) => `<tr><td>${h}</td><td>${pc(x.algoritmo.p_gain, 0, false)}</td><td>${pc(x.algoritmo.median)}</td><td>${pc(x.paniere.p_gain, 0, false)}</td><td>${pc(x.paniere.median)}</td><td>${pc(x.batte_paniere, 0, false)}</td><td>${x.indipendenti}</td></tr>`).join('')}</tbody></table></div></div>`;
   $('#v-hold').addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.hold = Number(b.dataset.v); save(); renderVerifica(); });
+  $('#v-mkt')?.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; st.vmkt = b.dataset.v; setMkt(st.vmkt); renderVerifica(); });
   equityChart($('#eq')); yearChart($('#yr'));
 }
 
@@ -617,13 +638,15 @@ function renderMetodo() {
   v.innerHTML = `<div class="card"><div class="prose">
     <h2>Come funziona</h2>
     <h3>1. La scelta dei titoli</h3>
-    <p>Per ogni titolo dell'S&amp;P 100 si misura quanto è salito <b>da 12 mesi fa a 1 mese fa</b> (momentum 12-1, Jegadeesh e Titman, 1993) e lo si divide per la sua <b>volatilità degli ultimi 3 mesi</b>. Si tengono solo i titoli sopra la loro <b>media a 200 giorni</b> e si scelgono i ${M ? M.top : 10} punteggi più alti. I parametri sono quelli standard della letteratura e non sono stati adattati ai dati.</p>
+    <p>Per ogni titolo dell'indice (S&amp;P 100 per gli USA, FTSE MIB per l'Italia) si misura quanto è salito <b>da 12 mesi fa a 1 mese fa</b> (momentum 12-1, Jegadeesh e Titman, 1993) e lo si divide per la sua <b>volatilità degli ultimi 3 mesi</b>. Si tengono solo i titoli sopra la loro <b>media a 200 giorni</b> e con volatilità almeno del 10 % annuo (sotto quella soglia il prezzo è quasi fermo, di solito perché un'offerta pubblica di acquisto lo blocca), e si scelgono i ${M ? M.top : 10} punteggi più alti. I parametri sono quelli standard della letteratura e non sono stati adattati ai dati.</p>
     <h3>2. Quando entrare e quando vendere</h3>
     <p>Entrata con un <b>ordine limite</b> alla seduta successiva all'ultima chiusura, a chiusura + ${R ? nf(R.limit_atr, 1) : '0,5'} ATR: se il prezzo scappa, non si compra. L'<b>ATR</b> è l'oscillazione media giornaliera degli ultimi ${R ? R.atr_win : 14} giorni. Uscita alla prima tra <b>stop-loss</b> (multipli di ATR sotto l'entrata), <b>target</b> (multipli del rischio, "2R" = il doppio di quanto rischi) e <b>data</b> (dopo 2 settimane, 1 mese o 3 mesi di borsa, festività della Borsa di New York comprese).</p>
     <h3>3. Le probabilità</h3>
     <p><b>Storia del titolo</b>: la regola rifatta ogni volta che quel titolo era tra il 20 % migliore del punteggio e sopra la media a 200 giorni. <b>Tutte le scelte</b>: la regola su ogni titolo scelto ogni settimana dal 2017. <b>Macchina del Tempo</b>: 10.000 futuri costruiti con candele vere dell'ultimo anno prese a caso, di solito senza la tendenza. Le "casi indipendenti" sono le finestre che non si sovrappongono: sono le osservazioni che contano davvero.</p>
+    <h3>Titoli italiani</h3>
+    <p>Stesso metodo sul FTSE MIB e su qualche grande titolo vicino all'indice, prezzi in euro, calendario di <b>Borsa Italiana</b> (chiusa a Capodanno, Venerdì Santo, Pasquetta, 1° maggio, Ferragosto, 24, 25, 26 e 31 dicembre; orario 9:00–17:30). Il costo per operazione è <b>0,2 %</b> perché sugli acquisti di azioni italiane si paga la <b>Tobin tax dello 0,1 %</b>. L'indice FTSE MIB di riferimento non comprende i dividendi, mentre i titoli sì: il confronto giusto è con il paniere. Sui guadagni in Italia si paga il 26 % di imposta, che qui non è considerato.</p>
     <h3>Limiti</h3>
-    <p>L'universo è l'S&amp;P 100 di <b>oggi</b>: nel passato contiene solo aziende sopravvissute e cresciute, quindi i numeri sono ottimistici; il confronto con il paniere è più affidabile dei valori assoluti. Nel passato si vede un'esecuzione ideale ai prezzi giornalieri; nella realtà ci sono spread, salti di prezzo e tasse. Il momentum può crollare all'improvviso nei rimbalzi dopo un mercato ribassista. Oggi il vantaggio storico dell'algoritmo <b>non è statisticamente significativo</b>.</p>
+    <p>L'universo è la composizione <b>di oggi</b> degli indici: nel passato contiene solo aziende sopravvissute e cresciute, quindi i numeri sono ottimistici; il confronto con il paniere è più affidabile dei valori assoluti. Nel passato si vede un'esecuzione ideale ai prezzi giornalieri; nella realtà ci sono spread, salti di prezzo e tasse. Il momentum può crollare all'improvviso nei rimbalzi dopo un mercato ribassista. Oggi il vantaggio storico dell'algoritmo <b>non è statisticamente significativo</b>.</p>
     <h3>Aggiornare l'app</h3>
     <p>L'app è un'istantanea dei dati al momento in cui è stata generata. Per aggiornarla: <code>python3 app.py</code> nel repository, oppure chiedi a Claude di rigenerarla e ripubblicarla.</p>
     <p class="note">Dati: Yahoo Finance (non ufficiale, può avere ritardi o errori). Non è consulenza finanziaria: decidi tu e, se serve, parla con un consulente abilitato. Prova prima con un conto simulato.</p>
@@ -632,8 +655,8 @@ function renderMetodo() {
 
 /* ---------------- avvio ---------------- */
 const draw = {consigli: () => { if (st.open) renderDetail(S.picks.find(p => p.symbol === st.open)); }, verifica: () => { if (S) { equityChart($('#eq')); yearChart($('#yr')); } }, daytrade: () => { if (D.daytrade) renderDay(); }};
-if (S) $('#meta').textContent = `Dati al ${dt(S.asof, {year: 'numeric'})} · ${S.universo} titoli USA`;
-renderConsigli(); renderVerifica(); renderDay(); renderMetodo(); route();
-let rt; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(route, 150); });
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', route);
+if (!(D.mercati && D.mercati.italia)) $('#nav-it').hidden = true;
+route();
+let rt, lastW = window.innerWidth; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; redraw(); } }, 150); });
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 </script>

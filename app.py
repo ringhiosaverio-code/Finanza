@@ -5,7 +5,8 @@
     python3 app.py --asof 2025-06-30
 
 Schede:
-  Consigli   i 10 titoli della settimana, con quando entrare, quando vendere (stop, target,
+  Consigli USA e Titoli italiani
+             i 10 titoli della settimana dell'S&P 100 e del FTSE MIB, con quando entrare, quando vendere (stop, target,
              data), la probabilità di guadagno storica e la Macchina del Tempo (10.000
              simulazioni nel browser) per qualsiasi variante della regola
   Verifica   come sarebbe andato l'algoritmo negli ultimi ~9 anni, tutte le varianti a confronto
@@ -61,18 +62,23 @@ def build(data, out):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--asof", help="usa solo i dati fino a questa data (YYYY-MM-DD)")
-    ap.add_argument("--tickers", help="lista separata da virgole al posto dell'S&P 100")
     ap.add_argument("--out", default=os.path.join(TRADER, "app.html"))
     a = ap.parse_args(argv)
-    try:
-        r = settimana.analizza(a.tickers.split(",") if a.tickers else None, a.asof)
-    except settimana.FetchError as e:
-        print("[app] " + str(e))
-        return 1
     os.makedirs(TRADER, exist_ok=True)
-    with open(os.path.join(TRADER, "settimana.json"), "w", encoding="utf-8") as fh:
-        json.dump(r, fh)
-    out = build({"settimana": r, "daytrade": day_trade()}, a.out)
+    mercati = {}
+    for m in ("usa", "italia"):
+        try:
+            mercati[m] = settimana.analizza(None, a.asof, mercato=m)
+        except settimana.FetchError as e:
+            print("[app] %s saltato: %s" % (m, e))
+            continue
+        name = "settimana.json" if m == "usa" else "settimana-%s.json" % m
+        with open(os.path.join(TRADER, name), "w", encoding="utf-8") as fh:
+            json.dump(mercati[m], fh)
+    if not mercati:
+        print("[app] nessun mercato disponibile")
+        return 1
+    out = build({"mercati": mercati, "daytrade": day_trade()}, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
 

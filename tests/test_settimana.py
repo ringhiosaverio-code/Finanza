@@ -104,6 +104,32 @@ class Rule(unittest.TestCase):
         self.assertEqual(days, ["2026-11-25", "2026-11-27", "2026-11-30"])
 
 
+class Italia(unittest.TestCase):
+    def test_easter(self):
+        self.assertEqual(S.easter(2026).isoformat(), "2026-04-05")
+        self.assertEqual(S.easter(2027).isoformat(), "2027-03-28")
+
+    def test_borsa_italiana_holidays_match_the_closed_days_seen_in_the_data(self):
+        h = S.borsa_italiana_holidays(2026)
+        for d in ("2026-04-03", "2026-04-06", "2026-05-01", "2026-08-14", "2026-12-24", "2026-12-31"):
+            self.assertEqual(d in h, d != "2026-08-14", d)
+        self.assertIn("2026-08-15", h)
+
+    def test_italian_trading_days(self):
+        # 24, 25 e 26 dicembre chiusa; 8 dicembre (Immacolata) aperta
+        self.assertEqual(S.trading_days_after("2026-12-22", 3, "italia"), ["2026-12-23", "2026-12-28", "2026-12-29"])
+        self.assertIn("2026-12-08", S.trading_days_after("2026-12-04", 3, "italia"))
+
+    def test_frozen_price_is_never_picked(self):
+        n = 400
+        calm = S.Stock("OPA", [100 * (1 + 0.0004 * i) for i in range(n)])      # sale piano, quasi senza oscillare
+        others = [S.Stock("R%d" % k, walk(n, 0.0005, 0.015, 40 + k)) for k in range(6)]
+        picks, similar, sig = S.rank_day([calm] + others, n - 1, top=3)
+        self.assertTrue(sig["OPA"]["frozen"])
+        self.assertNotIn("OPA", picks)
+        self.assertNotIn("OPA", similar)
+
+
 class Stats(unittest.TestCase):
     def test_stats(self):
         st = S.stats([-0.1, 0.0, 0.1, 0.2])

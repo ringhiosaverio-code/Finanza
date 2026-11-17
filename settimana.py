@@ -7,8 +7,9 @@ COSA FA
      ~100 grandi titoli USA (l'S&P 100) più SPY come riferimento di mercato.
   2. Punteggio di ogni titolo (regola nota in letteratura, parametri standard, non ottimizzati):
        momentum 12-1 = rendimento da 12 mesi fa a 1 mese fa (Jegadeesh e Titman, 1993)
-       diviso per la volatilità degli ultimi 3 mesi, solo sopra la media a 200 giorni.
-     Sceglie i 10 punteggi più alti.
+       diviso per la volatilità degli ultimi 3 mesi, solo sopra la media a 200 giorni e con
+     volatilità almeno del 10 % annuo (sotto, il prezzo è di solito bloccato da un'offerta di
+     acquisto). Sceglie i 10 punteggi più alti. Mercati: USA (S&P 100) e Italia (FTSE MIB).
   3. Per ogni titolo una REGOLA precisa:
        entrata  ordine limite per la prossima seduta a ultima chiusura + 0,5 ATR (se non si
                 esegue, niente operazione: non si insegue il prezzo)
@@ -59,6 +60,21 @@ NOW NVDA ORCL PEP PFE PG PLTR PM PYPL QCOM RTX SBUX SCHW SO SPG T TGT TMO TMUS T
 USB V VZ WFC WMT XOM""".split()
 MARKET = "SPY"
 
+# FTSE MIB (composizione recente), più qualche grande titolo vicino all'indice. Suffisso .MI di Yahoo.
+UNIVERSE_IT = """A2A.MI AMP.MI AZM.MI BAMI.MI BMED.MI BMPS.MI BPE.MI BZU.MI CPR.MI DIA.MI ENEL.MI ENI.MI ERG.MI FBK.MI
+G.MI HER.MI IG.MI INW.MI ISP.MI IP.MI IVG.MI LDO.MI MB.MI MONC.MI NEXI.MI PIRC.MI PRY.MI PST.MI RACE.MI REC.MI
+SPM.MI SRG.MI STLAM.MI STMMI.MI TEN.MI TIT.MI TRN.MI UCG.MI UNI.MI BC.MI BGN.MI LTMC.MI AVIO.MI""".split()
+
+MERCATI = {
+    "usa": {"nome": "USA", "universo": UNIVERSE, "indice": "SPY", "indice_nome": "SPY (S&P 500)", "indice_breve": "SPY",
+            "universo_nome": "S&P 100", "valuta": "$", "valuta_nome": "dollari", "costo": 0.1,
+            "fuso": "America/New_York", "citta": "New York", "chiusura": (16, 0), "borsa": "NYSE"},
+    # Costo 0,2 %: 0,1 % di Tobin tax italiana sugli acquisti + commissioni e spread.
+    "italia": {"nome": "Italia", "universo": UNIVERSE_IT, "indice": "FTSEMIB.MI", "indice_nome": "FTSE MIB (senza dividendi)", "indice_breve": "FTSE MIB",
+               "universo_nome": "FTSE MIB", "valuta": "€", "valuta_nome": "euro", "costo": 0.2,
+               "fuso": "Europe/Rome", "citta": "Milano", "chiusura": (17, 30), "borsa": "Borsa Italiana"},
+}
+
 HORIZONS = [("7 giorni", 5), ("1 mese", 21), ("1 anno", 252)]
 LOOKBACK = 252     # 12 mesi di borsa
 SKIP = 21          # salta l'ultimo mese (inversione di breve periodo)
@@ -68,6 +84,7 @@ ATR_WIN = 14       # oscillazione media giornaliera
 STEP = 5           # ribilanciamento settimanale
 TOP = 10
 TOP_PCT = 0.20     # "condizioni simili" = nel 20 % migliore del punteggio
+MIN_VOL = 0.10     # sotto il 10 % annuo il prezzo è quasi fermo: di solito un'offerta di acquisto lo blocca
 
 # la regola di entrata e uscita, con le varianti che l'app permette di provare
 LIMIT_ATR = 0.5            # entrata: limite a ultima chiusura + 0,5 ATR
@@ -107,10 +124,36 @@ def _nyse_holidays():
         return set(), set()
 
 
-def trading_days_after(day, n):
-    """I prossimi n giorni di borsa NYSE dopo `day` (YYYY-MM-DD)."""
-    hol, _ = _nyse_holidays()
+def easter(year):
+    """Domenica di Pasqua (calendario gregoriano, algoritmo anonimo)."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = b // 4, b % 4
+    g = (8 * b + 13) // 25
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = c // 4, c % 4
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month = (h + l - 7 * m + 114) // 31
+    return datetime.date(year, month, (h + l - 7 * m + 114) % 31 + 1)
+
+
+def borsa_italiana_holidays(year):
+    """Chiusure di Borsa Italiana: confermate sui giorni mancanti del FTSE MIB 2017-2026."""
+    e = easter(year)
+    fixed = ["01-01", "05-01", "08-15", "12-24", "12-25", "12-26", "12-31"]
+    return {"%d-%s" % (year, x) for x in fixed} | {(e - datetime.timedelta(days=2)).isoformat(),
+                                                    (e + datetime.timedelta(days=1)).isoformat()}
+
+
+def trading_days_after(day, n, mercato="usa"):
+    """I prossimi n giorni di borsa dopo `day` (YYYY-MM-DD), con le festività del mercato."""
     d = datetime.date.fromisoformat(day)
+    if mercato == "italia":
+        hol = set()
+        for y in range(d.year, d.year + 3):
+            hol |= borsa_italiana_holidays(y)
+    else:
+        hol, _ = _nyse_holidays()
     out = []
     while len(out) < n:
         d += datetime.timedelta(days=1)
@@ -119,12 +162,17 @@ def trading_days_after(day, n):
     return out
 
 
-def now_new_york():
+def now_in(tz):
     try:
         from zoneinfo import ZoneInfo
-        return datetime.datetime.now(ZoneInfo("America/New_York")).replace(tzinfo=None)
+        return datetime.datetime.now(ZoneInfo(tz)).replace(tzinfo=None)
     except Exception:
-        return datetime.datetime.utcnow() - datetime.timedelta(hours=5)
+        off = 1 if tz == "Europe/Rome" else -5
+        return datetime.datetime.utcnow() + datetime.timedelta(hours=off)
+
+
+def now_new_york():
+    return now_in("America/New_York")
 
 
 # ------------------------------------------------------------------ dati
@@ -162,7 +210,7 @@ def fetch(sym, max_age_hours=12):
     raise FetchError("%s: %s" % (sym, last))
 
 
-def parse(text, cut=None):
+def parse(text, cut=None, tz="America/New_York", close=(16, 0)):
     """-> (meta, {data: chiusura corretta}, {data: (apertura, massimo, minimo, chiusura) corretti}).
     Scarta la barra di oggi se la borsa non ha ancora chiuso, e tutto ciò che è dopo `cut`."""
     res = json.loads(text)["chart"]["result"][0]
@@ -189,9 +237,9 @@ def parse(text, cut=None):
         else:
             o, h, lo = (v * f for v in vals)
             ohlc[d] = (o, max(h, o, c), min(lo, o, c), c)
-    now = now_new_york()
+    now = now_in(tz)
     today = now.strftime("%Y-%m-%d")
-    if today in closes and now.hour < 16:
+    if today in closes and (now.hour, now.minute) < tuple(close):
         del closes[today]                       # barra di oggi ancora in formazione
         ohlc.pop(today, None)
     if cut:
@@ -294,7 +342,7 @@ class Stock:
         m = self.mom(i)
         sma = self.sma(i)
         return {"score": m / v, "mom": m, "vol": v, "above": self.p[i] > sma,
-                "vs_sma": self.p[i] / sma - 1}
+                "vs_sma": self.p[i] / sma - 1, "frozen": v < MIN_VOL}
 
 
 def rank_day(stocks, i, top=TOP):
@@ -306,8 +354,9 @@ def rank_day(stocks, i, top=TOP):
             sig[s.sym] = x
     order = sorted(sig, key=lambda k: -sig[k]["score"])
     cut = max(1, int(round(len(order) * TOP_PCT)))
-    similar = {k for k in order[:cut] if sig[k]["above"]}
-    picks = [k for k in order if sig[k]["above"]][:top]
+    ok = lambda k: sig[k]["above"] and not sig[k]["frozen"]
+    similar = {k for k in order[:cut] if ok(k)}
+    picks = [k for k in order if ok(k)][:top]
     return picks, similar, sig
 
 
@@ -420,7 +469,7 @@ def slim(st):
 
 # ------------------------------------------------------------------ analisi
 
-def run(stocks, market, calendar, cost_rt, top=TOP):
+def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
     last = len(calendar) - 1
     start = min(s.first for s in stocks) + LOOKBACK
     sched = list(range(last, start - 1, -STEP))[::-1]       # settimanale, allineato a oggi
@@ -483,7 +532,7 @@ def run(stocks, market, calendar, cost_rt, top=TOP):
         pooled[rule_key(ks, rr, h)] = slim(trade_stats(res, h))
 
     # 4. ogni titolo scelto: regola in condizioni simili, comprare e tenere, dati per l'app
-    future = trading_days_after(calendar[last], max(HOLDS) + 1)
+    future = trading_days_after(calendar[last], max(HOLDS) + 1, mercato)
     detail = []
     for k in picks:
         s = smap[k]
@@ -556,11 +605,20 @@ def run(stocks, market, calendar, cost_rt, top=TOP):
     }
 
 
-def analizza(tickers=None, asof=None, cost_pct=0.1, top=TOP, workers=4, log=print):
-    """Scarica, allinea e analizza. -> il dizionario dei risultati (vedi run)."""
-    syms = [x.strip().upper().replace(".", "-") for x in tickers] if tickers else UNIVERSE
+def analizza(tickers=None, asof=None, cost_pct=None, top=TOP, workers=4, log=print, mercato="usa"):
+    """Scarica, allinea e analizza un mercato. -> il dizionario dei risultati (vedi run)."""
+    cfg = MERCATI[mercato]
+    MARKET = cfg["indice"]
+    if cost_pct is None:
+        cost_pct = cfg["costo"]
+    if tickers:
+        syms = [x.strip().upper() for x in tickers]
+        syms = [x if x.endswith(".MI") else x.replace(".", "-") for x in syms]
+    else:
+        syms = cfg["universo"]
     syms = [s for s in dict.fromkeys(syms) if s and s != MARKET]
-    log("[settimana] scarico %d titoli + %s (10 anni, giornaliero; cache 12 ore)..." % (len(syms), MARKET))
+    log("[settimana] %s: scarico %d titoli + %s (10 anni, giornaliero; cache 12 ore)..."
+        % (cfg["nome"], len(syms), MARKET))
 
     def get(sym):
         try:
@@ -575,7 +633,7 @@ def analizza(tickers=None, asof=None, cost_pct=0.1, top=TOP, workers=4, log=prin
     if MARKET not in texts:
         raise FetchError("non riesco a scaricare %s: %s" % (MARKET, "; ".join(errors)))
 
-    parsed = {s: parse(t, asof) for s, t in texts.items()}
+    parsed = {s: parse(t, asof, cfg["fuso"], cfg["chiusura"]) for s, t in texts.items()}
     calendar = sorted(parsed[MARKET][1])
     closes = align({s: v[1] for s, v in parsed.items()}, calendar)
     ohlc = align_ohlc({s: v[2] for s, v in parsed.items()}, calendar)
@@ -589,8 +647,12 @@ def analizza(tickers=None, asof=None, cost_pct=0.1, top=TOP, workers=4, log=prin
     if len(stocks) < top:
         raise FetchError("servono almeno %d titoli con 1 anno di storia" % top)
 
-    r = run(stocks, Stock(MARKET, closes[MARKET], "SPY", ohlc[MARKET]), calendar, cost_pct / 100, top)
+    r = run(stocks, Stock(MARKET, closes[MARKET], cfg["indice_nome"], ohlc[MARKET]), calendar, cost_pct / 100,
+            top, mercato)
     r["saltati"] = errors
+    r["mercato"] = {k: cfg[k] for k in ("nome", "indice_nome", "indice_breve", "universo_nome", "valuta",
+                                         "valuta_nome", "citta", "borsa", "costo")}
+    r["mercato"]["id"] = mercato
     live = {}
     for p in r["picks"]:
         m = parsed[p["symbol"]][0]
@@ -598,7 +660,7 @@ def analizza(tickers=None, asof=None, cost_pct=0.1, top=TOP, workers=4, log=prin
             live[p["symbol"]] = {"price": m["regularMarketPrice"], "time": datetime.datetime.fromtimestamp(
                 m["regularMarketTime"] + m.get("gmtoffset", -18000), datetime.timezone.utc).strftime("%Y-%m-%d %H:%M")}
     r["live"] = live
-    r["generato"] = now_new_york().strftime("%Y-%m-%d %H:%M")
+    r["generato"] = now_in(cfg["fuso"]).strftime("%Y-%m-%d %H:%M")
     return r
 
 
@@ -622,10 +684,12 @@ def plan_for(p, r, rule=DEFAULT_RULE):
 
 def print_report(r):
     ks, rr, hold = DEFAULT_RULE
-    print("\nI %d TITOLI DELLA SETTIMANA  (dati fino al %s, universo %d titoli)" % (r["top"], r["asof"], r["universo"]))
+    mk = r.get("mercato", {"nome": "USA", "indice_nome": "SPY", "valuta": "$"})
+    print("\nI %d TITOLI DELLA SETTIMANA - %s  (dati fino al %s, universo %d titoli, prezzi in %s)"
+          % (r["top"], mk["nome"].upper(), r["asof"], r["universo"], mk["valuta"]))
     if r["regime"]:
         g = r["regime"]
-        print("Mercato (SPY): %s la media a 200 giorni (%s)" % (
+        print("Indice %s: %s la media a 200 giorni (%s)" % (mk["indice_nome"],
             "sopra" if g["spy_sopra_media200"] else "SOTTO", f_pct(g["spy_vs_media200"])))
     print("Regola: entrata con limite a chiusura + %g ATR, stop %g ATR, target %gR, uscita dopo %d sedute.\n"
           % (LIMIT_ATR, ks, rr, hold))
@@ -637,7 +701,8 @@ def print_report(r):
         pl = plan_for(p, r)
         st = p["rule"][key]
         print(" %2d  %-6s %9.2f %9.2f %s %s  %-10s %8s %8s %10s" % (
-            n, p["symbol"], p["price"], pl["limite"], num(pl["stop"]), num(pl["target"]), pl["uscita_giorno"],
+            n, p["symbol"].replace(".MI", ""), p["price"], pl["limite"], num(pl["stop"]), num(pl["target"]),
+            pl["uscita_giorno"],
             f_pct(st.get("p_gain"), 0, False), f_pct(st.get("median")),
             "%d (%d)" % (st.get("n", 0), st.get("indipendenti", 0))))
     pool = r["pooled"][key]
@@ -649,9 +714,9 @@ def print_report(r):
         f_pct(pool.get("p_tempo"), 0, False)))
 
     b = r["backtest"]["metrics"]
-    print("\nVERIFICA (%s - %s, %d settimane): annuo %s contro paniere %s e SPY %s" % (
+    print("\nVERIFICA (%s - %s, %d settimane): annuo %s contro paniere %s e " % (
         r["backtest"]["da"], r["backtest"]["a"], b["settimane"], f_pct(b["strategia"]["cagr"]),
-        f_pct(b["paniere"]["cagr"]), f_pct(b["spy"]["cagr"])))
+        f_pct(b["paniere"]["cagr"])) + "%s %s" % (mk["indice_nome"], f_pct(b["spy"]["cagr"])))
     if b.get("t_eccesso") is not None:
         t = b["t_eccesso"]
         print("  vantaggio sul paniere %s l'anno, t = %.2f: %s" % (
@@ -663,23 +728,26 @@ def print_report(r):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--tickers", help="lista separata da virgole al posto dell'S&P 100")
+    ap.add_argument("--mercato", choices=sorted(MERCATI), default="usa", help="usa (S&P 100) o italia (FTSE MIB)")
+    ap.add_argument("--tickers", help="lista separata da virgole al posto dell'universo del mercato")
     ap.add_argument("--asof", help="usa solo i dati fino a questa data (YYYY-MM-DD)")
     ap.add_argument("--top", type=int, default=TOP, help="quanti titoli (default 10)")
-    ap.add_argument("--costo", type=float, default=0.1,
-                    help="costo in %% per ogni operazione, andata e ritorno (default 0.1)")
+    ap.add_argument("--costo", type=float, default=None,
+                    help="costo in %% per operazione, andata e ritorno (default 0,1 USA, 0,2 Italia)")
     ap.add_argument("--workers", type=int, default=4)
     a = ap.parse_args(argv)
     try:
-        r = analizza(a.tickers.split(",") if a.tickers else None, a.asof, a.costo, a.top, a.workers)
+        r = analizza(a.tickers.split(",") if a.tickers else None, a.asof, a.costo, a.top, a.workers,
+                     mercato=a.mercato)
     except FetchError as e:
         print("[settimana] " + str(e))
         return 1
     print_report(r)
     os.makedirs(TRADER, exist_ok=True)
-    with open(os.path.join(TRADER, "settimana.json"), "w", encoding="utf-8") as fh:
+    name = "settimana.json" if a.mercato == "usa" else "settimana-%s.json" % a.mercato
+    with open(os.path.join(TRADER, name), "w", encoding="utf-8") as fh:
         json.dump(r, fh)
-    print("\n[settimana] scritto trader/settimana.json  (per l'app: python3 app.py)")
+    print("\n[settimana] scritto trader/%s  (per l'app: python3 app.py)" % name)
     return 0
 
 
