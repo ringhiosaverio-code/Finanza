@@ -24,6 +24,7 @@ import datetime
 import json
 import math
 import os
+import random
 import sys
 
 import numpy as np
@@ -79,6 +80,119 @@ def previsioni(log=print, orizzonti=False):
                 rows.append({"g": GRUPPO[m], "h": k, "d": dts[t], "fine": dts[t + h], "p": float(np.mean(shifted > 0)),
                              "p10": float(np.percentile(shifted, 10)), "y": float(W[t] > 0), "r": float(math.expm1(W[t]))})
     return rows
+
+
+PACCHETTI = [
+    ("primo", "Solo il primo per probabilità"),
+    ("prob10", "I primi 10 per probabilità"),
+    ("forza5", "I primi 5 per forza"),
+    ("forza10", "I primi 10 per forza"),
+    ("forza20", "I primi 20 per forza"),
+    ("caso10", "10 a caso tra i candidati"),
+    ("tutti", "Tutti i candidati"),
+    ("etf5", "Solo ETF: i primi 5 per forza"),
+    ("etf", "Solo ETF: tutti i candidati"),
+]
+PAC_DURATE = [("3 mesi", 63), ("6 mesi", 126), ("1 anno", 252)]
+PAC_SCELTO = "forza10"          # il pacchetto dell'app: la sua classifica per forza, i primi 10, in parti uguali
+
+
+def pacchetti(log=print):
+    """Il pacchetto: ogni mese (primo giorno di borsa), tra i candidati dell'app (sopra la media a 200
+    giorni, prezzo non bloccato) di azioni, ETF, obbligazionari e oro, si compra in parti uguali secondo
+    il disegno e si tiene 3 mesi, 6 mesi o 1 anno. Costi inclusi, tasse escluse. Si guarda fino al 2016 e
+    dal 2017. La durata del pacchetto dell'app è quella con più volte in guadagno nel peggiore dei due
+    periodi, tra quelle in cui 1 volta su 10 non si è perso più del 10 % in nessuno dei due."""
+    rows = []
+    for m in ("usa", "italia", "etf", "bond", "oro"):
+        cfg = settimana.MERCATI[m]
+        costo, min_vol = cfg["costo"] / 100, cfg.get("min_vol", settimana.MIN_VOL)
+        for sym in cfg["universo"]:
+            try:
+                meta, dates, closes = simula.series(simula.fetch_max(sym))
+            except (simula.SimError, ValueError, KeyError) as e:
+                log("[verifica] %s saltato: %s" % (sym, e))
+                continue
+            A = 252
+            c = np.array(closes[-(simula.YEARS_MAX * A + 1):])
+            dts = dates[-len(c):]
+            lr = np.diff(np.log(c))
+            N = len(lr)
+            S = np.concatenate([[0.0], np.cumsum(lr)])
+            S2 = np.concatenate([[0.0], np.cumsum(lr * lr)])
+            for t in range(max(3 * A, 1), N):
+                if dts[t][:7] == dts[t - 1][:7]:
+                    continue                                 # solo il primo giorno di borsa del mese
+                v63 = float(np.std(lr[t - 63:t], ddof=1) * math.sqrt(A))
+                mu = S[t] / t
+                sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
+                base = {"m": m, "mese": dts[t][:7], "cand": bool(c[t] > c[t - 199:t + 1].mean() and v63 >= min_vol),
+                        "forza": (c[t - 21] / c[t - 252] - 1) / max(v63, 1e-6)}
+                for k, (nome, h) in enumerate(PAC_DURATE):
+                    if t + h > N:
+                        continue
+                    W = S[h:] - S[:-h]
+                    sh = W[:t - h + 1] - mu * h + prudente(mu, sd, t, A) * h
+                    rows.append(dict(base, k=k, p=float(np.mean(sh > 0)), p10=float(np.percentile(sh, 10)),
+                                     r=float(math.expm1(S[t + h] - S[t])) - costo))
+    etf = ("etf", "bond", "oro")
+
+    def scegli(C, d, rnd):
+        forza = sorted(C, key=lambda r: -r["forza"])
+        prob = sorted(C, key=lambda r: (-r["p"], -r["p10"]))
+        X = {"primo": prob[:1], "prob10": prob[:10], "forza5": forza[:5], "forza10": forza[:10], "forza20": forza[:20],
+             "caso10": None, "tutti": C, "etf5": [r for r in forza if r["m"] in etf][:5],
+             "etf": [r for r in C if r["m"] in etf]}[d]
+        return rnd.sample(C, min(10, len(C))) if d == "caso10" else X
+
+    def numeri(xs, quando, n, h):
+        x = np.array(xs)
+        if len(x) < 24:
+            return {"n": len(x)}
+        j = int(np.argmin(x))
+        return {"n": len(x), "p_gain": round(float(np.mean(x > 0)), 4), "tipico": round(float(np.median(x)), 4),
+                "media": round(float(x.mean()), 4), "p10": round(float(np.percentile(x, 10)), 4),
+                "peggiore": round(float(x[j]), 4), "quando": quando[j], "strumenti": round(float(np.mean(n)), 1),
+                "indipendenti": round(len(set(quando)) * 21 / h, 1)}
+
+    out = {"disegni": [], "durate": [n for n, _ in PAC_DURATE], "scelto": PAC_SCELTO,
+           "da": min(r["mese"] for r in rows), "a": max(r["mese"] for r in rows)}
+    per = {}
+    for r in rows:
+        per.setdefault((r["k"], r["mese"]), []).append(r)
+    for d, nome in PACCHETTI:
+        dur = {}
+        for k, (nd, h) in enumerate(PAC_DURATE):
+            res = {"prima": ([], [], []), "dopo": ([], [], [])}
+            for (kk, mese), A_ in sorted(per.items()):
+                C = [r for r in A_ if r["cand"]]
+                if kk != k or len(C) < 10:
+                    continue
+                rnd = random.Random(int(mese.replace("-", "")))
+                for _ in range(20 if d == "caso10" else 1):
+                    X = scegli(C, d, rnd)
+                    if X:
+                        x = res["prima" if mese < "2017" else "dopo"]
+                        x[0].append(sum(r["r"] for r in X) / len(X)), x[1].append(mese), x[2].append(len(X))
+            dur[nd] = {p: numeri(*res[p], h) for p in ("prima", "dopo")}
+        out["disegni"].append({"id": d, "nome": nome, "durate": dur})
+    singolo = {}
+    for k, (nd, h) in enumerate(PAC_DURATE):
+        xs = {"prima": ([], [], []), "dopo": ([], [], [])}
+        for (kk, mese), A_ in per.items():
+            if kk == k:
+                for r in A_:
+                    if r["cand"]:
+                        x = xs["prima" if mese < "2017" else "dopo"]
+                        x[0].append(r["r"]), x[1].append(mese), x[2].append(1)
+        singolo[nd] = {p: numeri(*xs[p], h) for p in ("prima", "dopo")}
+    out["disegni"].insert(0, {"id": "uno", "nome": "Uno qualsiasi tra i candidati", "durate": singolo})
+    sc = next(x for x in out["disegni"] if x["id"] == PAC_SCELTO)["durate"]
+    ok = [(min(sc[nd][p]["p_gain"] for p in ("prima", "dopo")), nd, h) for nd, h in PAC_DURATE
+          if all(sc[nd][p].get("p10", -1) >= -0.10 for p in ("prima", "dopo"))]
+    best = max(ok) if ok else (None, PAC_DURATE[0][0], PAC_DURATE[0][1])
+    out["durata"], out["giorni"] = best[1], best[2]
+    return out
 
 
 def per_durata(rows):
@@ -181,7 +295,8 @@ def main():
            "prima_2017": riassunto([r for r in rows if r["d"] < "2017"]),
            "dal_2017": riassunto([r for r in rows if r["d"] >= "2017"]),
            "alternative": alternative(rows),
-           "durate": per_durata(previsioni(log=lambda m: None, orizzonti=True))}
+           "durate": per_durata(previsioni(log=lambda m: None, orizzonti=True)),
+           "pacchetti": pacchetti(log=lambda m: None)}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=1)
     t = out["tutto"]
@@ -196,6 +311,12 @@ def main():
         print("  a %-12s detta %.1f%%, vera %.1f%% · stime più basse %.0f%% -> %.0f%%, più alte %.0f%% -> %.0f%%" % (
             d["durata"], 100 * d["stimata"], 100 * d["vera"], 100 * d["basse"]["stimata"], 100 * d["basse"]["vera"],
             100 * d["alte"]["stimata"], 100 * d["alte"]["vera"]))
+    P = out["pacchetti"]
+    for x in P["disegni"]:
+        d = x["durate"][P["durata"]]
+        print("  pacchetto %-32s %s: in guadagno %.0f%% / %.0f%%, 1 su 10 sotto %+.1f%% / %+.1f%%, peggiore %+.0f%% (%s)" % (
+            x["nome"], P["durata"], 100 * d["prima"]["p_gain"], 100 * d["dopo"]["p_gain"], 100 * d["prima"]["p10"],
+            100 * d["dopo"]["p10"], 100 * min(d["prima"]["peggiore"], d["dopo"]["peggiore"]), d["prima"]["quando"]))
     print("[verifica] scritto verifica.json")
     return 0
 

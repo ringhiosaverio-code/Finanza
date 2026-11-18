@@ -579,5 +579,799 @@
     }
    ]
   }
- ]
+ ],
+ "pacchetti": {
+  "disegni": [
+   {
+    "id": "uno",
+    "nome": "Uno qualsiasi tra i candidati",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 12346,
+       "p_gain": 0.6217,
+       "tipico": 0.0268,
+       "media": 0.0317,
+       "p10": -0.1012,
+       "peggiore": -0.7131,
+       "quando": "2011-09",
+       "strumenti": 1.0,
+       "indipendenti": 48.3
+      },
+      "dopo": {
+       "n": 12810,
+       "p_gain": 0.6101,
+       "tipico": 0.0244,
+       "media": 0.0348,
+       "p10": -0.1127,
+       "peggiore": -0.5853,
+       "quando": "2020-01",
+       "strumenti": 1.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 12346,
+       "p_gain": 0.6702,
+       "tipico": 0.0571,
+       "media": 0.0647,
+       "p10": -0.1363,
+       "peggiore": -0.8801,
+       "quando": "2008-10",
+       "strumenti": 1.0,
+       "indipendenti": 24.2
+      },
+      "dopo": {
+       "n": 12455,
+       "p_gain": 0.6554,
+       "tipico": 0.0537,
+       "media": 0.0752,
+       "p10": -0.1335,
+       "peggiore": -0.7076,
+       "quando": "2021-11",
+       "strumenti": 1.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 12346,
+       "p_gain": 0.7253,
+       "tipico": 0.1181,
+       "media": 0.1362,
+       "p10": -0.1733,
+       "peggiore": -0.8011,
+       "quando": "2008-10",
+       "strumenti": 1.0,
+       "indipendenti": 12.1
+      },
+      "dopo": {
+       "n": 11767,
+       "p_gain": 0.6849,
+       "tipico": 0.0959,
+       "media": 0.1513,
+       "p10": -0.1708,
+       "peggiore": -0.7631,
+       "quando": "2021-07",
+       "strumenti": 1.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "primo",
+    "nome": "Solo il primo per probabilit\u00e0",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.6099,
+       "tipico": 0.0117,
+       "media": 0.0142,
+       "p10": -0.069,
+       "peggiore": -0.3076,
+       "quando": "2009-11",
+       "strumenti": 1.0,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.5862,
+       "tipico": 0.0054,
+       "media": 0.0119,
+       "p10": -0.0314,
+       "peggiore": -0.1775,
+       "quando": "2022-07",
+       "strumenti": 1.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.6241,
+       "tipico": 0.0332,
+       "media": 0.0179,
+       "p10": -0.1881,
+       "peggiore": -0.5613,
+       "quando": "2008-09",
+       "strumenti": 1.0,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.6018,
+       "tipico": 0.0114,
+       "media": 0.0372,
+       "p10": -0.0548,
+       "peggiore": -0.1434,
+       "quando": "2022-01",
+       "strumenti": 1.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7447,
+       "tipico": 0.0491,
+       "media": 0.0763,
+       "p10": -0.1595,
+       "peggiore": -0.511,
+       "quando": "2008-02",
+       "strumenti": 1.0,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.7009,
+       "tipico": 0.0331,
+       "media": 0.0679,
+       "p10": -0.0682,
+       "peggiore": -0.3619,
+       "quando": "2022-10",
+       "strumenti": 1.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "prob10",
+    "nome": "I primi 10 per probabilit\u00e0",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.6596,
+       "tipico": 0.0226,
+       "media": 0.0177,
+       "p10": -0.0518,
+       "peggiore": -0.3379,
+       "quando": "2008-09",
+       "strumenti": 10.0,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.7155,
+       "tipico": 0.0206,
+       "media": 0.0202,
+       "p10": -0.0253,
+       "peggiore": -0.1153,
+       "quando": "2020-01",
+       "strumenti": 10.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7518,
+       "tipico": 0.0512,
+       "media": 0.038,
+       "p10": -0.0869,
+       "peggiore": -0.3206,
+       "quando": "2008-09",
+       "strumenti": 10.0,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.7611,
+       "tipico": 0.0361,
+       "media": 0.0468,
+       "p10": -0.0261,
+       "peggiore": -0.1088,
+       "quando": "2022-04",
+       "strumenti": 10.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.8156,
+       "tipico": 0.1051,
+       "media": 0.0866,
+       "p10": -0.1468,
+       "peggiore": -0.3611,
+       "quando": "2007-12",
+       "strumenti": 10.0,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.8598,
+       "tipico": 0.0676,
+       "media": 0.0824,
+       "p10": -0.0077,
+       "peggiore": -0.122,
+       "quando": "2022-01",
+       "strumenti": 10.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "forza5",
+    "nome": "I primi 5 per forza",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7376,
+       "tipico": 0.0582,
+       "media": 0.0472,
+       "p10": -0.0904,
+       "peggiore": -0.2892,
+       "quando": "2008-08",
+       "strumenti": 5.0,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.7069,
+       "tipico": 0.0442,
+       "media": 0.0566,
+       "p10": -0.052,
+       "peggiore": -0.2173,
+       "quando": "2020-01",
+       "strumenti": 5.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7447,
+       "tipico": 0.1124,
+       "media": 0.1076,
+       "p10": -0.0969,
+       "peggiore": -0.3976,
+       "quando": "2008-05",
+       "strumenti": 5.0,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.8142,
+       "tipico": 0.1215,
+       "media": 0.1331,
+       "p10": -0.0745,
+       "peggiore": -0.2447,
+       "quando": "2022-01",
+       "strumenti": 5.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.8298,
+       "tipico": 0.172,
+       "media": 0.1899,
+       "p10": -0.0912,
+       "peggiore": -0.4816,
+       "quando": "2007-12",
+       "strumenti": 5.0,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.8785,
+       "tipico": 0.2237,
+       "media": 0.2726,
+       "p10": -0.0253,
+       "peggiore": -0.264,
+       "quando": "2021-10",
+       "strumenti": 5.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "forza10",
+    "nome": "I primi 10 per forza",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7163,
+       "tipico": 0.06,
+       "media": 0.0402,
+       "p10": -0.0767,
+       "peggiore": -0.2772,
+       "quando": "2008-09",
+       "strumenti": 10.0,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.7414,
+       "tipico": 0.0464,
+       "media": 0.0509,
+       "p10": -0.0503,
+       "peggiore": -0.2212,
+       "quando": "2020-01",
+       "strumenti": 10.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7801,
+       "tipico": 0.1026,
+       "media": 0.0859,
+       "p10": -0.0792,
+       "peggiore": -0.3529,
+       "quando": "2008-05",
+       "strumenti": 10.0,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.8053,
+       "tipico": 0.0967,
+       "media": 0.1129,
+       "p10": -0.0498,
+       "peggiore": -0.2027,
+       "quando": "2022-01",
+       "strumenti": 10.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.8156,
+       "tipico": 0.1519,
+       "media": 0.1655,
+       "p10": -0.0545,
+       "peggiore": -0.4494,
+       "quando": "2008-03",
+       "strumenti": 10.0,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.8972,
+       "tipico": 0.2161,
+       "media": 0.2334,
+       "p10": -0.0022,
+       "peggiore": -0.2704,
+       "quando": "2021-10",
+       "strumenti": 10.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "forza20",
+    "nome": "I primi 20 per forza",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7305,
+       "tipico": 0.0453,
+       "media": 0.037,
+       "p10": -0.0502,
+       "peggiore": -0.3133,
+       "quando": "2008-09",
+       "strumenti": 19.9,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.7328,
+       "tipico": 0.0481,
+       "media": 0.0443,
+       "p10": -0.0418,
+       "peggiore": -0.1819,
+       "quando": "2020-01",
+       "strumenti": 20.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.766,
+       "tipico": 0.0776,
+       "media": 0.0703,
+       "p10": -0.0598,
+       "peggiore": -0.3168,
+       "quando": "2008-06",
+       "strumenti": 19.9,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.8407,
+       "tipico": 0.0998,
+       "media": 0.1032,
+       "p10": -0.0359,
+       "peggiore": -0.197,
+       "quando": "2022-01",
+       "strumenti": 20.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.844,
+       "tipico": 0.1672,
+       "media": 0.1478,
+       "p10": -0.0729,
+       "peggiore": -0.3989,
+       "quando": "2007-12",
+       "strumenti": 19.9,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.9065,
+       "tipico": 0.1777,
+       "media": 0.2137,
+       "p10": 0.004,
+       "peggiore": -0.1821,
+       "quando": "2021-07",
+       "strumenti": 20.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "caso10",
+    "nome": "10 a caso tra i candidati",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 2820,
+       "p_gain": 0.7213,
+       "tipico": 0.0382,
+       "media": 0.0283,
+       "p10": -0.0675,
+       "peggiore": -0.3793,
+       "quando": "2008-09",
+       "strumenti": 10.0,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 2320,
+       "p_gain": 0.7517,
+       "tipico": 0.0393,
+       "media": 0.0377,
+       "p10": -0.0479,
+       "peggiore": -0.3124,
+       "quando": "2020-01",
+       "strumenti": 10.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 2820,
+       "p_gain": 0.7624,
+       "tipico": 0.0726,
+       "media": 0.0583,
+       "p10": -0.0824,
+       "peggiore": -0.4607,
+       "quando": "2008-09",
+       "strumenti": 10.0,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 2260,
+       "p_gain": 0.8212,
+       "tipico": 0.0776,
+       "media": 0.0781,
+       "p10": -0.0394,
+       "peggiore": -0.2798,
+       "quando": "2022-01",
+       "strumenti": 10.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 2820,
+       "p_gain": 0.8096,
+       "tipico": 0.1496,
+       "media": 0.1259,
+       "p10": -0.1201,
+       "peggiore": -0.4655,
+       "quando": "2008-04",
+       "strumenti": 10.0,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 2140,
+       "p_gain": 0.8453,
+       "tipico": 0.1465,
+       "media": 0.1555,
+       "p10": -0.0343,
+       "peggiore": -0.244,
+       "quando": "2021-10",
+       "strumenti": 10.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "tutti",
+    "nome": "Tutti i candidati",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.7305,
+       "tipico": 0.0431,
+       "media": 0.0284,
+       "p10": -0.0675,
+       "peggiore": -0.3187,
+       "quando": "2008-09",
+       "strumenti": 87.5,
+       "indipendenti": 47.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.7931,
+       "tipico": 0.0448,
+       "media": 0.037,
+       "p10": -0.0343,
+       "peggiore": -0.204,
+       "quando": "2020-01",
+       "strumenti": 110.4,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.8014,
+       "tipico": 0.0835,
+       "media": 0.0586,
+       "p10": -0.0734,
+       "peggiore": -0.3745,
+       "quando": "2008-09",
+       "strumenti": 87.5,
+       "indipendenti": 23.5
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.8496,
+       "tipico": 0.0826,
+       "media": 0.0777,
+       "p10": -0.0148,
+       "peggiore": -0.1602,
+       "quando": "2022-01",
+       "strumenti": 110.2,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 141,
+       "p_gain": 0.844,
+       "tipico": 0.1606,
+       "media": 0.1272,
+       "p10": -0.0587,
+       "peggiore": -0.346,
+       "quando": "2008-03",
+       "strumenti": 87.5,
+       "indipendenti": 11.8
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.8785,
+       "tipico": 0.1629,
+       "media": 0.1554,
+       "p10": -0.0144,
+       "peggiore": -0.1181,
+       "quando": "2021-10",
+       "strumenti": 110.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "etf5",
+    "nome": "Solo ETF: i primi 5 per forza",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 72,
+       "p_gain": 0.5694,
+       "tipico": 0.0056,
+       "media": 0.01,
+       "p10": -0.0331,
+       "peggiore": -0.102,
+       "quando": "2011-05",
+       "strumenti": 4.8,
+       "indipendenti": 24.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.6724,
+       "tipico": 0.0128,
+       "media": 0.0128,
+       "p10": -0.0297,
+       "peggiore": -0.1298,
+       "quando": "2020-01",
+       "strumenti": 5.0,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 72,
+       "p_gain": 0.7083,
+       "tipico": 0.0175,
+       "media": 0.01,
+       "p10": -0.0427,
+       "peggiore": -0.2323,
+       "quando": "2011-04",
+       "strumenti": 4.8,
+       "indipendenti": 12.0
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.7168,
+       "tipico": 0.0282,
+       "media": 0.0302,
+       "p10": -0.0309,
+       "peggiore": -0.0839,
+       "quando": "2022-09",
+       "strumenti": 5.0,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 72,
+       "p_gain": 0.7083,
+       "tipico": 0.0229,
+       "media": 0.0336,
+       "p10": -0.0701,
+       "peggiore": -0.2228,
+       "quando": "2011-05",
+       "strumenti": 4.8,
+       "indipendenti": 6.0
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.7383,
+       "tipico": 0.0644,
+       "media": 0.0576,
+       "p10": -0.0591,
+       "peggiore": -0.0907,
+       "quando": "2017-11",
+       "strumenti": 5.0,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   },
+   {
+    "id": "etf",
+    "nome": "Solo ETF: tutti i candidati",
+    "durate": {
+     "3 mesi": {
+      "prima": {
+       "n": 72,
+       "p_gain": 0.6111,
+       "tipico": 0.0182,
+       "media": 0.0151,
+       "p10": -0.0336,
+       "peggiore": -0.102,
+       "quando": "2011-05",
+       "strumenti": 11.0,
+       "indipendenti": 24.0
+      },
+      "dopo": {
+       "n": 116,
+       "p_gain": 0.7155,
+       "tipico": 0.0188,
+       "media": 0.013,
+       "p10": -0.0236,
+       "peggiore": -0.0995,
+       "quando": "2020-01",
+       "strumenti": 17.4,
+       "indipendenti": 38.7
+      }
+     },
+     "6 mesi": {
+      "prima": {
+       "n": 72,
+       "p_gain": 0.7083,
+       "tipico": 0.0333,
+       "media": 0.0207,
+       "p10": -0.0505,
+       "peggiore": -0.2323,
+       "quando": "2011-04",
+       "strumenti": 11.0,
+       "indipendenti": 12.0
+      },
+      "dopo": {
+       "n": 113,
+       "p_gain": 0.7434,
+       "tipico": 0.0339,
+       "media": 0.029,
+       "p10": -0.0329,
+       "peggiore": -0.0873,
+       "quando": "2019-10",
+       "strumenti": 17.2,
+       "indipendenti": 18.8
+      }
+     },
+     "1 anno": {
+      "prima": {
+       "n": 72,
+       "p_gain": 0.6667,
+       "tipico": 0.0416,
+       "media": 0.0419,
+       "p10": -0.0578,
+       "peggiore": -0.2228,
+       "quando": "2011-05",
+       "strumenti": 11.0,
+       "indipendenti": 6.0
+      },
+      "dopo": {
+       "n": 107,
+       "p_gain": 0.757,
+       "tipico": 0.0739,
+       "media": 0.0573,
+       "p10": -0.0417,
+       "peggiore": -0.0958,
+       "quando": "2022-01",
+       "strumenti": 16.9,
+       "indipendenti": 8.9
+      }
+     }
+    }
+   }
+  ],
+  "durate": [
+   "3 mesi",
+   "6 mesi",
+   "1 anno"
+  ],
+  "scelto": "forza10",
+  "da": "2004-12",
+  "a": "2026-08",
+  "durata": "1 anno",
+  "giorni": 252
+ }
 }

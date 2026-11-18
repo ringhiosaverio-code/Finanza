@@ -198,6 +198,10 @@ def series(text):
         if dates[-1] == today:
             dates.pop()
             closes.pop()
+    extra = settimana.chiusura_mancante(meta, dates[-1] if dates else None)
+    if extra:                                        # ultima seduta con la barra vuota: chiusura dai metadati
+        dates.append(extra[0])
+        closes.append(extra[1])
     return meta, dates, closes
 
 

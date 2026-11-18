@@ -128,6 +128,24 @@ Titoli italiani: prezzi in euro, calendario di Borsa Italiana (verificato sui da
 (query1/query2.finance.yahoo.com) con cache di 12 ore in `trader/cache/daily/`. L'app è
 un'istantanea: per aggiornarla rilancia `python3 app.py`.
 
+### Il pacchetto (in cima a Oggi)
+
+I 10 strumenti più forti del giorno (crescita 12-1 mesi divisa per la volatilità a 3 mesi, la stessa
+"forza" della classifica) tra azioni USA e italiane, ETF azionari, obbligazionari e oro sopra la media
+a 200 giorni, in parti uguali, tenuti per la durata scelta da `verifica.py` (oggi 1 anno). Verifica:
+ogni mese dal 2004, con i soli prezzi di quel giorno e i costi, fino al 2016 e dal 2017:
+
+| Cosa si compra, tenuto 1 anno | In guadagno | 1 su 10 sotto | Il peggiore |
+|---|---|---|---|
+| Uno qualsiasi tra i candidati | 73 % · 68 % | -17 % · -17 % | -80 % · -76 % |
+| Solo il primo per probabilità | 74 % · 70 % | -16 % · -7 % | -51 % · -36 % |
+| I primi 10 per probabilità | 82 % · 86 % | -15 % · -1 % | -36 % · -12 % |
+| 10 a caso tra i candidati | 81 % · 85 % | -12 % · -3 % | -47 % · -24 % |
+| **I primi 10 per forza (il pacchetto)** | **82 % · 90 %** | **-5 % · 0 %** | **-45 % · -27 %** |
+
+Dividere e dare tempo conta più che scegliere; la probabilità più alta va spesso agli obbligazionari,
+che guadagnano poco. Le azioni sono quelle negli indici oggi (numeri un po' ottimisti); tasse escluse.
+
 ## `simula.py`: simula un titolo dal codice ISIN
 
 ```bash
@@ -156,7 +174,7 @@ la corrispondenza ISIN → ticker dei titoli dell'app, verificata uno per uno co
 ## `verifica.py`: 22 anni di verifica della probabilità e del giudizio
 
 ```bash
-python3 verifica.py      # richiede numpy; scrive verifica.json, che l'app mostra in Funziona?
+python3 verifica.py      # richiede numpy; scrive verifica.json (probabilità, durate, pacchetto), che l'app mostra in Funziona?
 ```
 
 Per tutti gli strumenti dell'app, ogni mese dal 2004, rifà la probabilità prudente di guadagno con

@@ -206,3 +206,41 @@ class Run(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def utc(*a):
+    import datetime
+    return int(datetime.datetime(*a, tzinfo=datetime.timezone.utc).timestamp())
+
+
+class ChiusuraMancante(unittest.TestCase):
+    """Yahoo a volte lascia vuota la barra dell'ultima seduta: la chiusura si prende dai metadati."""
+    # Milano: seduta del 17 novembre 2026 chiusa alle 17:35 italiane, adesso è il 18 prima dell'apertura
+    META = {"regularMarketTime": utc(2026, 11, 17, 16, 35, 21), "regularMarketPrice": 82.95, "gmtoffset": 3600,
+            "regularMarketDayHigh": 83.4, "regularMarketDayLow": 82.6,
+            "currentTradingPeriod": {"regular": {"start": utc(2026, 11, 18, 8), "end": utc(2026, 11, 18, 16, 30)}}}
+    MATTINO = utc(2026, 11, 18, 7, 40)
+
+    def test_aggiunge_la_seduta_finita_che_manca(self):
+        self.assertEqual(S.chiusura_mancante(self.META, "2026-11-16", self.MATTINO), ("2026-11-17", 82.95, 83.4, 82.6))
+
+    def test_niente_se_la_seduta_c_e_gia(self):
+        self.assertIsNone(S.chiusura_mancante(self.META, "2026-11-17", self.MATTINO))
+
+    def test_niente_se_la_seduta_di_oggi_e_in_corso(self):
+        meta = dict(self.META, regularMarketTime=utc(2026, 11, 18, 9))          # 10 italiane: borsa aperta
+        self.assertIsNone(S.chiusura_mancante(meta, "2026-11-17", utc(2026, 11, 18, 9, 1)))
+
+    def test_parse_usa_la_chiusura_dei_metadati(self):
+        ts = [utc(2026, 11, 12, 8), utc(2026, 11, 13, 8), utc(2026, 11, 16, 8), utc(2026, 11, 17, 8)]
+        text = json.dumps({"chart": {"result": [{"meta": self.META, "timestamp": ts, "indicators": {
+            "quote": [{"open": [1, 1, 1, None], "high": [1, 1, 1, None], "low": [1, 1, 1, None], "close": [84.5, 84.4, 84.4, None]}],
+            "adjclose": [{"adjclose": [84.5, 84.4, 84.4, None]}]}}]}})
+        orig = S.time.time
+        S.time.time = lambda: self.MATTINO
+        try:
+            meta, closes, ohlc = S.parse(text, tz="Europe/Rome", close=(17, 30))
+        finally:
+            S.time.time = orig
+        self.assertEqual(max(closes), "2026-11-17")
+        self.assertEqual(closes["2026-11-17"], 82.95)

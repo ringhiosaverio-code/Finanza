@@ -65,6 +65,7 @@ main{padding-block:22px 56px}
 .alert p{font-size:14px;color:var(--ink2)}
 .alert b{color:var(--ink)}
 .alert code{background:var(--surface2);padding:1px 6px;border-radius:6px;font-size:13px;user-select:all;white-space:nowrap}
+@media (max-width:560px){.pac .nm2{display:none}.pac td,.pac th{padding-left:4px;padding-right:4px}}
 .steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(220px,100%),1fr));gap:10px;counter-reset:s}
 .steps li{list-style:none;display:flex;gap:10px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;font-size:14px;color:var(--ink2)}
 .steps li::before{counter-increment:s;content:counter(s);flex:none;width:24px;height:24px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:700;font-size:13px}
@@ -1009,6 +1010,8 @@ function renderOggi() {
   v.innerHTML = `
   <div><h1>Consigli di oggi</h1>
     <p class="sub" style="margin-top:4px">${D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))} alle ${D.aggiornato.slice(11, 16)} (ora italiana), con i prezzi di chiusura di ${dtl(ref.asof)}.` : `Prezzi di chiusura di ${dtl(ref.asof)}.`} ${all.length} occasioni tra ETF, obbligazioni, oro e azioni, <b>dalla più probabile</b>, con quando comprare, quanto tenere e quando vendere, e il perché.</p></div>
+  ${pacchettoHTML()}
+  <h2 style="margin-top:6px">Oppure scegli tu, strumento per strumento</h2>
   <ol class="steps">
     <li><span><b>Compra il giorno indicato</b>, con un ordine al prezzo massimo indicato. Se costa di più, non comprare.</span></li>
     <li><span><b>Tieni per il tempo indicato</b>: è quello che in passato ha dato più operazioni in guadagno per quella categoria.</span></li>
@@ -1047,6 +1050,7 @@ function renderOggi() {
   v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
   $('#o-ced').addEventListener('change', e => { oggiSt.cedola = e.target.checked; renderOggi(); });
   $('#o-tutti')?.addEventListener('click', () => { oggiSt.tutti = true; renderOggi(); });
+  pacchettoEventi();
 }
 
 /* ---------------- archivio personale: portafoglio e conto demo ---------------- */
@@ -1183,6 +1187,88 @@ function renderPortafoglio() {
   }));
 }
 
+/* ---------------- il pacchetto: i più forti di oggi, in parti uguali ---------------- */
+let PAC_CAP = (() => { try { return Number(localStorage.getItem('pac-capitale')) || 10000; } catch (e) { return 10000; } })();
+function pacchetto() {
+  const P = D.verifica25 && D.verifica25.pacchetti; if (!P || !P.durata) return null;
+  const n = Number((P.scelto.match(/\d+/) || [10])[0]), C = [];
+  for (const m of ['usa', 'italia', 'etf', 'bond', 'oro']) { const M = D.mercati[m]; if (!M) continue;
+    for (const c of M.candidates) if (c.punteggio != null && SIM[c.symbol]) C.push({m, c, s: SIM[c.symbol]}); }
+  const g = id => { const x = P.disegni.find(d => d.id === id); return x && x.durate[P.durata]; };
+  const sc = P.disegni.find(d => d.id === P.scelto);
+  return {P, n, L: C.sort((a, b) => b.c.punteggio - a.c.punteggio).slice(0, n), d: g(P.scelto), tutte: sc.durate,
+          primo: g('primo'), caso: g('caso10'), uno: g('uno'), etf: g('etf5'), candidati: C.length};
+}
+const mese = s => new Date(s + '-15T12:00:00Z').toLocaleDateString('it-IT', {month: 'long', year: 'numeric'});
+function pacchettoHTML() {
+  const K = pacchetto(); if (!K || K.L.length < K.n || !K.d.prima.p_gain) return '';
+  const {P, L, d} = K, quota = PAC_CAP / L.length;
+  const fine = new Date(oggiData() + 'T12:00:00Z'); fine.setUTCDate(fine.getUTCDate() + Math.round(P.giorni * 365 / 252));
+  const catOf = m => CAT.find(x => x[0] === m) || [m, m, m, '--s1'];
+  const righe = L.map(({m, c, s}, i) => { const px = prezzoEur(s), q = Math.floor(quota / (px * (1 + COSTI(s).acq)));
+    return {m, c, s, px, q, i}; });
+  const minimo = Math.max(...righe.map(r => r.px * (1 + COSTI(r.s).acq))) * L.length;
+  const pegg = d.prima.peggiore <= d.dopo.peggiore ? d.prima : d.dopo;
+  const tile = (k, a, b, f) => `<div class="stat"><div class="k">${k}</div><div class="v">${f(a)} <span class="note">·</span> ${f(b)}</div><div class="d">fino al 2016 · dal 2017</div></div>`;
+  return `<section class="card pac" aria-labelledby="pac-t">
+    <div><span class="chip alta">il consiglio più verificato</span><h2 id="pac-t" style="margin-top:6px">Il pacchetto di oggi</h2>
+      <p class="sub" style="margin-top:4px">I <b>${L.length} strumenti più forti</b> di oggi tra azioni, ETF, obbligazioni e oro (crescita dell'ultimo anno divisa per le oscillazioni, tra i ${K.candidati} sopra la media a 200 giorni), <b>in parti uguali</b>, da tenere <b>${P.durata}</b>: vendi tutto intorno al ${dt(fine.toISOString().slice(0, 10), {year: 'numeric'})}.</p></div>
+    <div class="tiles">
+      ${tile(`In guadagno dopo ${P.durata}`, d.prima.p_gain, d.dopo.p_gain, p100)}
+      ${tile('Di solito', d.prima.tipico, d.dopo.tipico, x => pc(x, 0))}
+      ${tile('1 volta su 10 sotto', d.prima.p10, d.dopo.p10, x => pc(x, 1))}
+      <div class="stat"><div class="k">Il caso peggiore</div><div class="v neg">${pc(pegg.peggiore, 0)}</div><div class="d">il pacchetto di ${mese(pegg.quando)}</div></div>
+    </div>
+    <p class="outcome">Un pacchetto così, fatto ogni mese dal ${(P.da || '2004').slice(0, 4)} e tenuto ${P.durata}, è finito in guadagno <b>${p100(d.prima.p_gain)}</b> e <b>${p100(d.dopo.p_gain)}</b> delle volte. Un solo strumento a caso tra i candidati: ${p100(K.uno.prima.p_gain)} e ${p100(K.uno.dopo.p_gain)}, con 1 volta su 10 sotto ${pc(K.uno.prima.p10, 0)}. Solo il primo della lista per probabilità: ${p100(K.primo.prima.p_gain)} e ${p100(K.primo.dopo.p_gain)}.</p>
+    <div class="acct"><label class="f" for="pac-cap">Quanto vuoi investire (€)<input id="pac-cap" type="number" min="100" step="100" inputmode="decimal" value="${PAC_CAP}"></label>
+      <button type="button" class="go" id="pac-demo">Prova il pacchetto nel conto demo</button></div>
+    <div class="scroll"><table><thead><tr><th class="l">Strumento</th><th>Prezzo</th><th>Quante</th></tr></thead>
+      <tbody>${righe.map(({m, s, px, q, i}) => { const k = catOf(m);
+        return `<tr><td class="l" style="white-space:normal"><b>${i + 1}. ${esc(tk(s.symbol))}</b> <span class="note nm2">${esc(s.name.slice(0, 30))}</span><br><span class="cat" style="--cc:var(${k[3]})">${k[1]}</span></td><td>${cmoney(s.prezzo, s.currency)}</td><td>${q > 0 ? `<b>${nf(q, 0)}</b><br><span class="note">${eur(q * px * (1 + COSTI(s).acq))}</span>` : '<span class="note">costa più<br>della quota</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+    ${righe.some(r => r.q < 1) ? `<p class="note">Con ${eur(PAC_CAP)} la quota è ${eur(quota)}: per comprarli tutti servono almeno ${eur(Math.ceil(minimo / 100) * 100)}.</p>` : `<p class="note">${eur(quota)} per strumento, costi inclusi; i titoli in dollari convertiti al cambio di oggi.</p>`}
+    <details><summary>Perché un pacchetto, e i limiti</summary><div class="prose" style="margin-top:6px">
+      <p><b>Dividere conta più che scegliere.</b> Dieci strumenti presi a caso tra i candidati sono andati quasi come il pacchetto (${p100(K.caso.prima.p_gain)} e ${p100(K.caso.dopo.p_gain)} in guadagno): quello che fa la differenza è non puntare su uno solo e dare tempo. Lo stesso pacchetto tenuto 3 mesi era in guadagno ${p100(K.tutte['3 mesi'].prima.p_gain)} e ${p100(K.tutte['3 mesi'].dopo.p_gain)} delle volte.</p>
+      <p><b>La classifica per forza</b> ha aggiunto guadagno soprattutto dal 2017 (di solito ${pc(d.dopo.tipico, 0)} contro ${pc(K.caso.dopo.tipico, 0)} dei 10 a caso); tra i soli ETF non ha aiutato. Per questo il numero che conta è "in guadagno", non il guadagno medio.</p>
+      <p><b>I limiti.</b> Le azioni sono quelle negli indici oggi: chi è uscito perché è andato male non c'è, quindi i numeri sono un po' ottimisti. Nel caso peggiore (${mese(pegg.quando)}) il pacchetto ha perso il ${pc(-pegg.peggiore, 0, false)} in un anno: investi solo soldi che puoi lasciare fermi tutto il periodo. Sono circa ${nf(d.prima.indipendenti + d.dopo.indipendenti, 0)} anni indipendenti di storia: i numeri possono spostarsi di qualche punto. Costi inclusi, tasse escluse (26 %, 12,5 % sui titoli di Stato); i titoli in dollari hanno anche il rischio del cambio. Non è consulenza finanziaria.</p>
+      <p><a href="#verifica" style="color:var(--accent)">Tutti i pacchetti provati</a> sono in "Funziona?".</p></div></details>
+  </section>`;
+}
+function pacchettoEventi() {
+  const i = $('#pac-cap'); if (!i) return;
+  i.addEventListener('change', () => { const v = Number(i.value); if (v > 0) { PAC_CAP = v; try { localStorage.setItem('pac-capitale', String(v)); } catch (e) {} renderOggi(); } });
+  $('#pac-demo').addEventListener('click', demoPacchetto);
+}
+function demoPacchetto() {
+  const K = pacchetto(); if (!K) return;
+  if (DEMO === null) { avviso('Il conto demo si sta ancora caricando: riprova tra un momento.'); return; }
+  const quota = Math.min(PAC_CAP, DEMO.cassa) / K.L.length;
+  let cassa = DEMO.cassa, n = 0, tot = 0;
+  const pos = Object.assign({}, DEMO.posizioni), mov = (DEMO.movimenti || []).slice();
+  for (const {s} of K.L) {
+    const c = COSTI(s), px = prezzoEur(s), qty = Math.floor(quota / (px * (1 + c.acq)));
+    const speso = qty * px * (1 + c.acq);
+    if (!(qty > 0) || speso > cassa + 1e-9) continue;
+    cassa -= speso; tot += speso; n++;
+    const old = pos[s.symbol];
+    pos[s.symbol] = old ? {qty: old.qty + qty, speso: old.speso + speso, data: old.data, hold: old.hold} : {qty, speso, data: s.a, hold: K.P.giorni};
+    mov.push({d: s.a, tipo: 'Compra', sym: s.symbol, qty, prezzo: s.prezzo, eur: Math.round(speso * 100) / 100, esito: 'pacchetto'});
+  }
+  if (!n) { avviso(`Nel conto demo non c'è abbastanza liquidità per il pacchetto (servono almeno ${eur(Math.max(...K.L.map(x => prezzoEur(x.s))) * K.L.length)}).`); return; }
+  Store.save('demo', Object.assign({}, DEMO, {cassa, posizioni: pos, movimenti: mov.slice(-300)}));
+  avviso(`Pacchetto comprato nel conto demo: ${n} strumenti per ${eur(tot)}. Piano: tienili ${K.P.durata}. Lo trovi in Esercitati.`);
+}
+function pacchettiHTML(V) {
+  const P = V && V.pacchetti; if (!P || !P.durata) return '';
+  const sc = P.disegni.find(d => d.id === P.scelto), cell = (x, f) => x && x.n >= 24 ? f(x) : 'n/d';
+  return `<h3 style="margin-top:14px">Un pacchetto invece di uno strumento</h3>
+    <p class="note">Ogni mese dal ${(P.da || '2004').slice(0, 4)}, tra i candidati dell'app (sopra la media a 200 giorni, prezzo non bloccato), si compra in parti uguali e si tiene ${P.durata}, costi inclusi. Due numeri per casella: fino al 2016 e dal 2017. L'app usa "${esc(sc.nome)}".</p>
+    <div class="scroll"><table><thead><tr><th class="l">Cosa si compra</th><th>Quanti</th><th>In guadagno</th><th>Di solito</th><th>1 su 10 sotto</th><th>Il peggiore</th></tr></thead>
+      <tbody>${P.disegni.map(x => { const a = x.durate[P.durata].prima, b = x.durate[P.durata].dopo;
+        return `<tr${x.id === P.scelto ? ' style="background:var(--surface2)"' : ''}><td class="l">${esc(x.nome)}${x.id === P.scelto ? ' <span class="note">(nell\'app)</span>' : ''}</td><td>${cell(b, y => nf(y.strumenti, 0))}</td><td><b>${cell(a, y => p100(y.p_gain))}</b> · <b>${cell(b, y => p100(y.p_gain))}</b></td><td>${cell(a, y => pc(y.tipico, 0))} · ${cell(b, y => pc(y.tipico, 0))}</td><td>${cell(a, y => pc(y.p10, 0))} · ${cell(b, y => pc(y.p10, 0))}</td><td class="neg">${cell(a, y => pc(y.peggiore, 0))} · ${cell(b, y => pc(y.peggiore, 0))}</td></tr>`; }).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:6px">Lo stesso pacchetto per durata: ${P.durate.map(k => `${k} in guadagno ${cell(sc.durate[k].prima, y => p100(y.p_gain))} e ${cell(sc.durate[k].dopo, y => p100(y.p_gain))}, 1 su 10 sotto ${cell(sc.durate[k].prima, y => pc(y.p10, 0))} e ${cell(sc.durate[k].dopo, y => pc(y.p10, 0))}`).join(' · ')}. La durata scelta è quella con più volte in guadagno nel peggiore dei due periodi, tra quelle in cui 1 volta su 10 non si è perso più del 10 %.</p>
+    <p class="outcome" style="margin-top:8px">Dividere e dare tempo conta molto più che scegliere: il primo della lista per probabilità da solo è andato peggio di 10 strumenti a caso. La probabilità più alta va spesso agli strumenti che si muovono poco (obbligazionari), che guadagnano poco.</p>`;
+}
+
 /* ---------------- esercitati: conto demo ---------------- */
 let DEMO = null, demoSnap = false;
 const DEMO_START = 10000;
@@ -1214,8 +1300,8 @@ function renderDemo() {
     <p class="note" id="dm-msg">Costi: 0,1 % per operazione; +0,1 % di Tobin tax sugli acquisti di azioni italiane; 0,2 % sulle crypto. I titoli in dollari si convertono al cambio di ${D.cambio ? nf(1 / D.cambio.USD, 4) : 'n/d'} $ per euro.</p></form>
   ${pos.length ? `<div class="card"><h2>I tuoi titoli finti</h2><div class="scroll" style="margin-top:8px"><table>
     <thead><tr><th class="l">Titolo</th><th>Quantità</th><th>Pagato</th><th>Oggi</th><th>Risultato</th><th class="l">Piano</th><th></th></tr></thead>
-    <tbody>${pos.map(([sym, p]) => { const s = SIM[sym], val = p.qty * prezzoEur(s), r = val / p.speso - 1, usc = giorniPiu(s, p.data, s.hold);
-      return `<tr><td class="l"><b>${esc(tk(sym))}</b> <span class="note">${esc(s.name.slice(0, 28))}</span></td><td>${nf(p.qty, p.qty % 1 ? 4 : 0)}</td><td>${eur(p.speso)}</td><td>${eur(val)}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r)}</td><td class="l">${usc ? (s.a >= usc ? '<b>da vendere</b>' : 'vendi il ' + dt(usc)) : ''}</td><td><button type="button" class="more" data-sell="${esc(sym)}">Vendi</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
+    <tbody>${pos.map(([sym, p]) => { const s = SIM[sym], val = p.qty * prezzoEur(s), r = val / p.speso - 1, usc = giorniPiu(s, p.data, p.hold || s.hold);
+      return `<tr><td class="l"><b>${esc(tk(sym))}</b> <span class="note">${esc(s.name.slice(0, 28))}</span></td><td>${nf(p.qty, p.qty % 1 ? 4 : 0)}</td><td>${eur(p.speso)}</td><td>${eur(val)}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r)}</td><td class="l">${usc ? (s.a >= usc ? '<b>da vendere</b>' : 'vendi il ' + dt(usc, usc.slice(0, 4) !== s.a.slice(0, 4) ? {year: 'numeric'} : undefined)) : ''}${p.hold ? ' <span class="note">(pacchetto)</span>' : ''}</td><td><button type="button" class="more" data-sell="${esc(sym)}">Vendi</button></td></tr>`; }).join('')}</tbody></table></div></div>` : ''}
   ${(DEMO.movimenti || []).length ? `<details class="card"><summary><b>Movimenti</b> (${DEMO.movimenti.length})</summary><div class="scroll"><table><thead><tr><th class="l">Data</th><th class="l">Operazione</th><th>Quantità</th><th>Prezzo</th><th>Euro</th><th class="l">Esito</th></tr></thead>
     <tbody>${DEMO.movimenti.slice().reverse().map(m => `<tr><td class="l">${dt(m.d, {weekday: undefined})}</td><td class="l">${m.tipo} ${esc(tk(m.sym))}</td><td>${nf(m.qty, m.qty % 1 ? 4 : 0)}</td><td>${nf(m.prezzo, dec(m.prezzo))}</td><td>${eur(m.eur)}</td><td class="l">${m.esito ? esc(m.esito) : ''}</td></tr>`).join('')}</tbody></table></div></details>` : ''}
   ${(DEMO.storico || []).length > 1 ? `<div class="card"><h2>Andamento del conto</h2><div class="chart" id="dm-line"><div class="tip"></div></div></div>` : ''}
@@ -1240,11 +1326,11 @@ function renderDemo() {
   v.querySelectorAll('[data-sell]').forEach(b => b.addEventListener('click', () => {
     const sym = b.dataset.sell, s = SIM[sym], p = DEMO.posizioni[sym]; if (!s || !p) return;
     const ricavo = p.qty * prezzoEur(s) * (1 - COSTI(s).ven), r = ricavo / p.speso - 1, n = giorniTra(s, p.data, s.a);
-    const esito = `${pc(r)} in ${n} giorni${s.calendario === 'sempre' ? '' : ' di borsa'} (piano: ${holdTxt(s)})`;
+    const piano = p.hold || s.hold, esito = `${pc(r)} in ${n} giorni${s.calendario === 'sempre' ? '' : ' di borsa'} (piano: ${holdTxt({hold: piano})}${p.hold ? ', pacchetto' : ''})`;
     const pos = Object.assign({}, DEMO.posizioni); delete pos[sym];
     Store.save('demo', Object.assign({}, DEMO, {cassa: DEMO.cassa + ricavo, posizioni: pos,
       movimenti: (DEMO.movimenti || []).concat([{d: s.a, tipo: 'Vendi', sym, qty: p.qty, prezzo: s.prezzo, eur: Math.round(ricavo * 100) / 100, esito}]).slice(-300)}));
-    const lez = n < (s.hold * (s.calendario === 'sempre' ? 1 : 1)) * 0.5 ? ` Hai venduto molto prima del tempo consigliato: nei dati, uscire presto ha ridotto le operazioni in guadagno.` : '';
+    const lez = n < piano * 0.5 ? ` Hai venduto molto prima del tempo consigliato: nei dati, uscire presto ha ridotto le operazioni in guadagno.` : '';
     avviso(`Venduto ${tk(sym)}: ${esito}.${lez}`);
   }));
   $('#dm-reset').addEventListener('click', e => {
@@ -1350,6 +1436,7 @@ function verifica25HTML() {
         <tbody>${T.gruppi.map(g => `<tr><td class="l">${esc(g.gruppo)}</td><td>${p100(g.stimata)}</td><td><b>${p100(g.vera)}</b></td></tr>`).join('')}</tbody></table></div></div>
     </div>
     ${durateHTML(V)}
+    ${pacchettiHTML(V)}
     ${alt.length ? `<h3 style="margin-top:14px">Miglioramenti provati</h3><p class="note">Valutati anno per anno su anni che non avevano visto. Il numero è quanto prevedono meglio di chi dice sempre la media (0 = uguale).</p>
       <ul class="note" style="margin:6px 0 0;padding-left:18px">${alt.map(a => `<li><b>${esc(a.nome)}</b>: ${(a.skill >= 0 ? '+' : '') + nf(a.skill * 100, 2)} %${a.nome === 'attuale' ? ' (quella in uso)' : att && a.skill <= att.skill + 0.001 ? ', non migliora: scartato' : ', differenza troppo piccola per cambiare'}</li>`).join('')}</ul>
       <p class="note" style="margin-top:6px">Nessuna variante prevede in modo apprezzabilmente migliore: le differenze tra strumenti dello stesso gruppo sono soprattutto rumore. Quello che conta, e che il giudizio usa, è la categoria, il tempo e il rischio.</p>` : ''}
@@ -1429,6 +1516,8 @@ function renderMetodo() {
     <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
+    <h3>Il pacchetto</h3>
+    <p>Il consiglio più verificato dell'app: i <b>10 strumenti più forti</b> del giorno tra azioni, ETF, obbligazionari e oro (crescita dell'ultimo anno, senza l'ultimo mese, divisa per le oscillazioni degli ultimi 3 mesi; solo quelli sopra la media a 200 giorni e con il prezzo non bloccato), <b>in parti uguali</b>, tenuti per il periodo scelto dalla verifica (oggi 1 anno). Rifatto ogni mese dal 2004 con i soli prezzi di quel giorno e costi inclusi, è finito in guadagno molto più spesso di un solo strumento, anche del primo della lista per probabilità. La verifica mostra anche che dividere conta più che scegliere: 10 strumenti presi a caso tra i candidati sono andati quasi uguale. Il caso peggiore resta pesante (il pacchetto di marzo 2008 ha perso il 45 % in un anno) e le azioni sono quelle negli indici oggi, quindi i numeri sono un po' ottimisti.</p>
     <h3>Crypto intraday</h3>
     <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Lo stesso per 9 varianti provate allo stesso modo (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni): scelta la migliore sul primo anno, sul secondo ha perso ancora. Anche le regole dei libri più famosi (candele giapponesi, rotture, RSI, primo intervallo) sono state provate sulle candele orarie di crypto e azioni USA: nessuna resta in guadagno dopo i costi (vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>). Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
     <h3>La verifica di 25 anni</h3>

@@ -282,6 +282,26 @@ def div_yield(text):
     return round(tot / last, 4)
 
 
+def chiusura_mancante(meta, ultima, adesso=None):
+    """Yahoo a volte lascia vuota la barra dell'ultima seduta (prezzo None) ma ne dà la chiusura nei
+    metadati. -> (data, prezzo, massimo, minimo) se quella seduta è finita ed è più recente di `ultima`,
+    altrimenti None. Il prezzo non è corretto per i dividendi: per l'ultimo giorno coincide."""
+    t, p = meta.get("regularMarketTime"), meta.get("regularMarketPrice")
+    if not t or not p or p <= 0:
+        return None
+    off = meta.get("gmtoffset", 0)
+    giorno = lambda x: datetime.datetime.fromtimestamp(x + off, datetime.timezone.utc).strftime("%Y-%m-%d")
+    d = giorno(t)
+    if ultima and d <= ultima:
+        return None
+    adesso = time.time() if adesso is None else adesso
+    end = ((meta.get("currentTradingPeriod") or {}).get("regular") or {}).get("end")
+    if d == giorno(adesso) and (not end or adesso < end):
+        return None                                  # seduta di oggi non ancora finita: è un prezzo in corso
+    h, lo = meta.get("regularMarketDayHigh") or p, meta.get("regularMarketDayLow") or p
+    return d, float(p), float(max(h, p)), float(min(lo, p))
+
+
 def parse(text, cut=None, tz="America/New_York", close=(16, 0)):
     """-> (meta, {data: chiusura corretta}, {data: (apertura, massimo, minimo, chiusura) corretti}).
     Scarta la barra di oggi se la borsa non ha ancora chiuso, e tutto ciò che è dopo `cut`."""
@@ -314,6 +334,10 @@ def parse(text, cut=None, tz="America/New_York", close=(16, 0)):
     if today in closes and (now.hour, now.minute) < tuple(close):
         del closes[today]                       # barra di oggi ancora in formazione
         ohlc.pop(today, None)
+    extra = chiusura_mancante(meta, max(closes) if closes else None)
+    if extra:
+        d, c, h, lo = extra
+        closes[d], ohlc[d] = c, (c, h, lo, c)
     if cut:
         closes = {d: c for d, c in closes.items() if d <= cut}
         ohlc = {d: v for d, v in ohlc.items() if d <= cut}
@@ -738,7 +762,7 @@ def run(stocks, market, calendar, cost_rt, top=TOP, mercato="usa"):
         s, sg, raw = c["s"], c["sig"], c["raw"]
         cands.append({
             "symbol": s.sym, "name": s.name, "price": round(s.p[last], 4), "atr": r4(s.atr(last)),
-            "g": group_of(c), "forza": r4(c["x"][1] + 0.5),
+            "g": group_of(c), "forza": r4(c["x"][1] + 0.5), "punteggio": r4(sg["score"]),   # crescita / oscillazione
             "info": {"anno": r4(s.p[last] / s.p[last - LOOKBACK] - 1), "mese": r4(raw[1]),
                      "dal_massimo": r4(raw[2]), "vol": r4(sg["vol"]), "sopra_media": r4(sg["vs_sma"])}})
 
