@@ -277,47 +277,19 @@ notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la 
 
 ### Il robot: compra e vende da solo, in conti finti
 
-Nella sezione In giornata (e riassunto in Esercitati) il robot segue gli algoritmi dell'app senza
-interventi, con un conto finto da 10.000 € per ogni strategia e niente soldi veri:
+Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10.000 € per strategia e niente soldi veri. Non invia ordini a nessun broker: le operazioni sono simulate a prezzi reali (Yahoo Finance).
 
-- **azioni USA, di notte** (verificata): per ogni giorno della sessione rifà la lista del momento
-  notturno (i 10 titoli con le 21 notti migliori fino all'apertura), compra all'asta di chiusura e
-  vende a quella di apertura dopo, ai prezzi ufficiali. Commissioni a scelta: 0,02 % o 0,10 %;
-- **azioni italiane, di notte** (sperimentale): lo stesso sui titoli di Borsa Italiana, i 5 migliori,
-  con la Tobin tax dello 0,1 % in più (regge solo dal 2014, non nella prima metà dei dati);
-- **azioni in giornata, "Oops!"** (esercitazione, in media perde): sui 14 titoli più scambiati di USA
-  e Milano, se la seduta apre sotto il minimo di ieri compra quando il prezzo risale lì (dal massimo
-  della seduta, o dal vivo) e vende in chiusura; 1/14 del capitale per titolo;
-- **crypto, piani di 24 ore** (esercitazione, in media perde): ogni piano "compra il ribasso" e "compra
-  la rottura" ha 1/24 del capitale; entra al livello ed esce alla protezione, all'obiettivo o alla
-  scadenza.
+- **Azioni in seduta** (esercitazione, in media perde): sui 14 titoli più scambiati di USA e Milano. Se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura. Compra e vende solo a borsa aperta, dal lunedì al venerdì (New York 9:30–16:00, Milano 9:00–17:30), mai di notte. Costi: quelli scelti in Commissioni.
+- **Crypto, piani di 24 ore** (esercitazione, in media perde): ogni piano "compra il ribasso" e "compra la rottura" ha 1/24 del capitale; entra al livello ed esce alla protezione, all'obiettivo o alla scadenza. 24 ore su 24.
+- **Strategie di notte ritirate**: il robot non compra più azioni a borsa chiusa. Le posizioni rimaste da prima si chiudono alla prossima apertura. La verifica di notte resta nei libri.
 
-Il **registro**, in cima alla pagina, mostra in diretta ogni operazione aperta e chiusa, con l'ora (con i secondi quando è di oggi); una riga in alto compare in tutte le pagine, e con gli avvisi concessi arriva una notifica anche da un'altra scheda. Ogni voce riporta (quando, cosa, a che prezzo, il risultato e da
-dove viene: prezzi ufficiali, candele orarie o dal vivo. Le **posizioni aperte** hanno il risultato in
-tempo reale. **Inizia sessione** (da oggi, o rigiocando l'ultima settimana o le ultime due) e
-**Termina sessione**: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in
-attesa si annullano, le azioni comprate per la notte si vendono all'apertura (di notte la borsa è
-chiusa); poi il robot si ferma.
+**Operazioni in diretta.** Il registro in cima alla scheda elenca ogni operazione, tutte o solo azioni o solo crypto, con l'ora (con i secondi per quelle di oggi), il prezzo, l'importo investito o incassato, il risultato e la fonte (in diretta, prezzi ufficiali, candele orarie). Una riga in alto compare in tutte le pagine mentre una sessione è aperta, e ogni operazione nuova avvisa (con notifica del dispositivo, se hai concesso gli avvisi e la pagina è in un'altra scheda). Il registro tiene le ultime 1000 operazioni.
 
-A pagina chiusa il robot non si ferma: a ogni aggiornamento rifà le operazioni che avrebbe fatto con
-i prezzi ufficiali (`giornata.prezzi_notte`: aperture e chiusure delle ultime 45 sedute di 146 titoli
-USA e italiani; `giornata.piani()["candele"]`: aperture, massimi, minimi e chiusure dei 14 titoli in
-giornata; `intraday.py`, `storia_piani`: i piani crypto rigiocati sulle candele orarie degli ultimi 7
-giorni). Quello che ha già registrato non cambia e non si conta due volte (anche con l'app aperta su
-più dispositivi: ogni salvataggio ha un numero di versione). Con `live.py` le aperture, i massimi e le
-chiusure di oggi arrivano da `/aperture` un minuto dopo le aste, solo per i titoli che servono e solo
-in orario di borsa.
+**Sessioni.** Inizia sessione (da oggi, o rigiocando l'ultima settimana o le ultime due) e Termina sessione: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano, poi il robot si ferma. Ogni strategia si avvia e si ferma da sola.
 
-**Nel cloud**: `robot_cloud.js` apre l'app appena generata in un Chromium senza finestra, le passa lo
-stato salvato del robot e lo fa girare (è lo stesso codice), poi scrive il nuovo stato e un riassunto
-per la notifica. L'aggiornamento programmato (18:10 e 22:10 nei giorni feriali) legge lo stato
-dall'archivio dell'app, esegue `node robot_cloud.js stato.json nuovo.json`, lo riscrive (solo se la
-versione non è cambiata nel frattempo) e ti manda una notifica se ci sono operazioni nuove.
+In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (ogni 5 secondi), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi). A pagina chiusa il cloud rifà le operazioni alle 18:10 e alle 22:10 con i prezzi ufficiali e le candele orarie (`robot_cloud.js`), senza cambiare quelle già registrate.
 
-Verifica: rigiocando le due settimane dal 4 al 18 novembre 2026, le notti USA (9) e italiane (9) e le
-18 operazioni in giornata coincidono con il calcolo in Python (stesse liste, stessi risultati, stesso
-capitale); le crypto usano la stessa logica già verificata sulle candele orarie.
-
+Il robot salva a ogni operazione e lo storico ogni 10 minuti. Verifica: rigiocando da inizio novembre 2026, le operazioni in seduta coincidono con il calcolo in Python (stesse liste, stessi risultati); le crypto usano la stessa logica già verificata sulle candele orarie.
 ### I dati di oggi: seduta in corso e chiusura mancante
 
 Durante la seduta Yahoo mette come chiusura della barra di oggi il prezzo del momento: `giornata`
