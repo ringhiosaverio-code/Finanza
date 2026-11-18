@@ -197,8 +197,9 @@ footer{color:var(--muted);font-size:12.5px}
 .simhd .last .k{font-size:12px;color:var(--muted)}
 .simhd .last b{font-family:var(--f-head);font-size:22px}
 .simhd .last small{color:var(--muted);font-size:12px}
-.hz{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.hz{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:10px}
 .hzc{background:var(--surface2);border-radius:12px;padding:12px 14px;display:grid;gap:6px;align-content:start;min-width:0}
+.hzc.cons{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
 .hzc .k{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .hzc .pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 .hzc .pv{font-family:var(--f-head);font-weight:700;font-size:30px;line-height:1;white-space:nowrap}
@@ -736,6 +737,17 @@ function renderDay() {
 /* ---------------- giudizio: perché sì, perché no (stesse regole ovunque) ---------------- */
 // "del 18 %" ma "dell'8 %", "dell'11 %", "dell'1 %", "dell'80 %"
 const delp = (x, d = 0) => { const s = pc(x, d, false); return (/^(8|11[ ,]|1[ ,])/.test(s) ? 'dell\u2019' : 'del ') + s; };
+/* perché quella durata: la più probabile tra quelle entro il rischio (simula.durata_consigliata) */
+const DURATE_OK = ['1 mese', '3 mesi', '6 mesi', '1 anno'];
+function perche(s) {
+  const L = s.orizzonti.filter(o => DURATE_OK.includes(o.orizzonte)), q = o => o.scenari.prudente, p10 = o => q(o).p10 != null ? q(o).p10 : q(o).p5;
+  const i = L.findIndex(o => o.giorni === s.durata); if (i < 0) return {breve: '', lungo: ''};
+  const o = L[i], dopo = L.slice(i + 1), oltre = dopo.find(x => Math.round(p10(x) * 100) / 100 < -.10);
+  const lungo = `tra 1 mese, 3 mesi, 6 mesi e 1 anno è il periodo con la probabilità di guadagno più alta (${p100(q(o).p_gain)}) in cui 1 volta su 10 non si perde più ${delp(-p10(o))}` +
+    (oltre ? `. Tenendolo ${oltre.orizzonte} la probabilità sarebbe ${p100(q(oltre).p_gain)}, ma 1 volta su 10 si perderebbe più ${delp(-p10(oltre))}: troppo rischio.` : dopo.length ? `. Più a lungo la probabilità non sale.` : `: è il periodo più lungo che l'app considera.`);
+  const breve = oltre ? `più a lungo il rischio supera il limite` : dopo.length ? `più a lungo non migliora` : `anche a 1 anno resta entro il rischio`;
+  return {breve, lungo};
+}
 /* un piccolo ribasso (sotto la media di 10 giorni) è un buon momento solo dove libri.py lo ha verificato */
 function momento(s) {
   const mo = D.libri && D.libri.momento && D.libri.momento.find(x => x.categoria === s.categoria);
@@ -778,6 +790,12 @@ function giudizio(s) {
     if (st.sopra_media200) (diff >= .05 ? pro : fatti).push(`<b>È in salita</b> (${pc(st.vs_media200, 0)} rispetto alla media a 200 giorni)${diff >= .05 ? ', e per questa categoria conta' : '. Per questa categoria non ha cambiato molto le cose'}: ${ver}.`);
     else (diff >= .05 ? contro : fatti).push(`<b>È in discesa</b> (${pc(st.vs_media200, 0)} rispetto alla media a 200 giorni)${diff >= .05 ? ', e per questa categoria conta' : diff <= -.05 ? '. Per questa categoria, comprare in discesa è andato perfino meglio' : '. Per questa categoria non ha fatto molta differenza, quindi non è un motivo per evitarlo'}: ${ver}.`);
   }
+  // per quanto tenerlo: la durata scelta per questo strumento, e perché
+  if (s.durata) fatti.unshift(`<b>Perché ${per}</b>: ${perche(s).lungo}`);
+  else fatti.unshift(`<b>Perché ${per}</b>: con nessuna durata tra 1 mese e 1 anno resta entro il rischio (1 volta su 10 si perde sempre più del 10 %), quindi vale il periodo della sua categoria.`);
+  const vd = D.verifica25 && D.verifica25.durate && D.verifica25.durate.find(x => x.durata === hz.orizzonte);
+  const vg = vd && vd.gruppi.find(x => x.gruppo === GRUPPO[m]);
+  if (vg && vg.stimata - vg.vera >= .05) contro.push(`<b>Stima ottimista per ${esc(vg.gruppo)}</b>: a ${esc(hz.orizzonte)}, quando l'app diceva in media ${p100(vg.stimata)}, è andata in guadagno il ${p100(vg.vera)} delle volte (verifica dal ${new Date(vd.da).getFullYear()}).`);
   // il momento di entrata: un piccolo ribasso, solo dove la verifica dei libri dice che conta
   const mo = momento(s);
   if (mo) pro.push(`<b>Buon momento per entrare</b>: è in un piccolo ribasso (${pc(s.media10, 1)} rispetto alla media degli ultimi 10 giorni). Tra ${['usa', 'italia'].includes(m) ? `le 10 ${CAT_NOME[m].replace('le ', '')} più forti della classifica` : `${CAT_NOME[m]} consigliate`}, quelle in questa situazione sono andate in media ${pc(mo.prima.differenza, 1)} e ${pc(mo.dopo.differenza, 1)} meglio delle altre nel mese dopo, prima e dopo il 2016. <a href="#libri" style="color:var(--accent)">Dai libri</a>`);
@@ -912,7 +930,7 @@ function renderSimResult(s) {
     <div><span class="lab">Quanto crescerà, in media?</span><div class="seg" id="sim-scen">${SCEN.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === sc}">${l}</button>`).join('')}</div>
       <p class="note" style="margin-top:6px">${desc}</p></div>
     <div class="hz">${s.orizzonti.map(o => { const m = o.scenari[sc], a = o.affidabilita;
-      return `<div class="hzc"><span class="k">Tra ${o.orizzonte}</span>
+      return `<div class="hzc${o.giorni === s.hold ? ' cons' : ''}"><span class="k">Tra ${o.orizzonte}${o.giorni === s.hold ? ' · consigliato' : ''}</span>
         <div class="pr"><span class="pv">${p100(m.p_gain)}</span><span class="pl">probabilità<br>di guadagno</span></div>
         <span class="meter"><i style="width:${m.p_gain * 100}%"></i></span>
         <small>di solito ${pc(m.median)} · 9 volte su 10 tra ${pc(m.p5, 0)} e ${pc(m.p95, 0)}</small>
@@ -988,8 +1006,8 @@ function oggiItems() {
     const list = ci.M.candidates.slice().sort((a, b) => ci.md.p[b.g] - ci.md.p[a.g] || b.forza - a.forza);
     (m === 'usa' || m === 'italia' ? list.slice(0, 5) : list).forEach(c => {
       const s = D.simula && D.simula[c.symbol];
-      const hz = s && (s.orizzonti.find(o => o.giorni === ci.hold) || s.orizzonti[2]);
-      items.push({m, one, col, ci, c, s, p: hz ? Math.round(hz.scenari.prudente.p_gain * 100) / 100 : ci.md.p[c.g]});
+      const hold = s && s.hold ? s.hold : ci.hold, hz = s && (s.orizzonti.find(o => o.giorni === hold) || s.orizzonti[2]);
+      items.push({m, one, col, ci, c, s, hold, p: hz ? Math.round(hz.scenari.prudente.p_gain * 100) / 100 : ci.md.p[c.g]});
     });
   }
   const ord = m => CAT.findIndex(x => x[0] === m);
@@ -1014,7 +1032,7 @@ function renderOggi() {
   <h2 style="margin-top:6px">Oppure scegli tu, strumento per strumento</h2>
   <ol class="steps">
     <li><span><b>Compra il giorno indicato</b>, con un ordine al prezzo massimo indicato. Se costa di più, non comprare.</span></li>
-    <li><span><b>Tieni per il tempo indicato</b>: è quello che in passato ha dato più operazioni in guadagno per quella categoria.</span></li>
+    <li><span><b>Tieni per il tempo indicato</b>: è scelto strumento per strumento, il periodo con la probabilità di guadagno più alta senza superare il rischio (1 volta su 10 non più del 10 % di perdita). Gli strumenti tranquilli si tengono più a lungo, quelli che oscillano molto meno.</span></li>
     <li><span><b>Vendi alla data indicata</b>, alla chiusura. Le cedole e i dividendi pagati nel frattempo restano tuoi.</span></li>
   </ol>
   <details class="card"><summary><b>Perché questi tempi?</b> Le cinque categorie a confronto</summary><h2 style="margin-top:6px">Cosa conviene, per categoria</h2>
@@ -1032,7 +1050,8 @@ function renderOggi() {
   <div class="picks">${items.length ? items.map((x, i) => {
     const c = x.c, M = x.ci.M, cur = M.mercato.valuta, sty = x.ci.sty, a = c.atr;
     const lim = c.price + M.rules.limit_atr * a, stop = sty.ks ? c.price - sty.ks * a : null, tgt = sty.ks && sty.rr ? c.price + sty.rr * sty.ks * a : null;
-    const entryDay = M.future_days[0], exitDay = M.future_days[x.ci.hold - 1], today = M.generato.slice(0, 10) === entryDay;
+    const entryDay = M.future_days[0], today = M.generato.slice(0, 10) === entryDay;
+    const exitDay = (x.s && giorniPiu(x.s, entryDay, x.hold)) || M.future_days[Math.min(x.hold, M.future_days.length) - 1];
     const [yv, ys] = yieldBox(c, x.m);
     return `<article class="pick">
       <div class="hd"><span class="rk">${i + 1}</span>
@@ -1040,7 +1059,7 @@ function renderOggi() {
         <div class="pr" title="Probabilità di guadagno"><span class="meter"><i style="width:${x.p * 100}%"></i></span><span class="pv">${p100(x.p)}</span><span class="pl">probabilità<br>di guadagno</span></div></div>
       <div class="trio">
         <div><span class="k">Compra</span><span class="big">fino a ${fmtc(lim, cur)}</span><small>${today ? 'oggi, ' : ''}${dt(entryDay)} · ultima chiusura ${fmtc(c.price, cur)}${x.s && momento(x.s) ? ' · <b class="pos">buon momento</b>: piccolo ribasso' : ''}</small></div>
-        <div><span class="k">Tieni e vendi</span><span class="big">${holdName(x.ci.hold)}</span><small>vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
+        <div><span class="k">Tieni e vendi</span><span class="big">${DURATA_NOME[x.hold] || holdName(x.hold)}</span><small>${x.s && x.s.durata ? `${esc(perche(x.s).breve)} · ` : ''}vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
         <div><span class="k">Cedole o dividendi</span><span class="big">${yv}</span><small>${ys}</small></div>
       </div>
       ${x.s ? verdettoHTML(giudizio(x.s), true) : ''}
@@ -1115,7 +1134,8 @@ function giorniTra(s, a, b) {
   const cal = (D.calendari || {})[s.calendario] || [];
   return cal.filter(x => x > a && x <= b).length;
 }
-const holdTxt = s => ({1: '1 giorno', 5: '1 settimana', 7: '1 settimana', 21: '1 mese', 30: '1 mese', 63: '3 mesi', 91: '3 mesi', 252: '1 anno', 365: '1 anno'})[s.hold] || s.hold + ' giorni';
+const DURATA_NOME = {1: '1 giorno', 5: '1 settimana', 7: '1 settimana', 10: '2 settimane', 21: '1 mese', 30: '1 mese', 63: '3 mesi', 91: '3 mesi', 126: '6 mesi', 182: '6 mesi', 252: '1 anno', 365: '1 anno'};
+const holdTxt = s => DURATA_NOME[s.hold] || s.hold + ' giorni';
 function picker(id, placeholder) {
   return `<div class="simrow"><input id="${id}" list="all-list" placeholder="${placeholder}" spellcheck="false" autocomplete="off"></div>`;
 }
@@ -1256,6 +1276,17 @@ function demoPacchetto() {
   if (!n) { avviso(`Nel conto demo non c'è abbastanza liquidità per il pacchetto (servono almeno ${eur(Math.max(...K.L.map(x => prezzoEur(x.s))) * K.L.length)}).`); return; }
   Store.save('demo', Object.assign({}, DEMO, {cassa, posizioni: pos, movimenti: mov.slice(-300)}));
   avviso(`Pacchetto comprato nel conto demo: ${n} strumenti per ${eur(tot)}. Piano: tienili ${K.P.durata}. Lo trovi in Esercitati.`);
+}
+function duraScelteHTML(V) {
+  const X = V && V.scelta_durata; if (!X) return '';
+  const c = (x, f) => x && x.n >= 30 ? f(x) : 'n/d', P = X.periodi;
+  const riga = (nome, a, b) => `<tr><td class="l">${nome}</td><td><b>${c(a.cat, y => p100(y.p_gain))}</b> → <b>${c(a.str, y => p100(y.p_gain))}</b></td><td>${c(a.cat, y => pc(y.p10, 1))} → ${c(a.str, y => pc(y.p10, 1))}</td><td><b>${c(b.cat, y => p100(y.p_gain))}</b> → <b>${c(b.str, y => p100(y.p_gain))}</b></td><td>${c(b.cat, y => pc(y.p10, 1))} → ${c(b.str, y => pc(y.p10, 1))}</td></tr>`;
+  const dist = d => Object.entries(d || {}).sort((a, b) => DURATE_OK.indexOf(a[0]) - DURATE_OK.indexOf(b[0])).map(([k, v]) => `${k} ${p100(v)}`).join(', ');
+  return `<h3 style="margin-top:14px">Quanto tenere: per categoria o per strumento</h3>
+    <p class="note">Prima la durata era la stessa per tutta la categoria (1 mese le azioni, 3 mesi ETF, obbligazionari e oro). Adesso è scelta per ogni strumento: la più probabile tra 1 mese, 3 mesi, 6 mesi e 1 anno, senza superare il rischio. Ogni mese dal 2004, stessi strumenti e mesi, costi inclusi: com'era → com'è.</p>
+    <div class="scroll"><table><thead><tr><th class="l">Gruppo</th><th>In guadagno, fino al 2016</th><th>1 su 10 sotto</th><th>In guadagno, dal 2017</th><th>1 su 10 sotto</th></tr></thead>
+      <tbody>${riga('<b>Tutti</b> (senza crypto)', P.prima, P.dopo)}${Object.entries(X.gruppi).filter(([g]) => g !== 'crypto').map(([g, x]) => riga(esc(g), x.prima, x.dopo)).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:6px">Le durate scelte dal 2017: ${dist(P.dopo.str.durate)}. Le azioni restano quasi sempre a 1 mese perché oscillano molto; obbligazionari ed ETF tranquilli vanno spesso a 1 anno. Per gli obbligazionari a 1 anno la stima è stata ottimista: l'app lo scrive nel giudizio.</p>`;
 }
 function pacchettiHTML(V) {
   const P = V && V.pacchetti; if (!P || !P.durata) return '';
@@ -1436,6 +1467,7 @@ function verifica25HTML() {
         <tbody>${T.gruppi.map(g => `<tr><td class="l">${esc(g.gruppo)}</td><td>${p100(g.stimata)}</td><td><b>${p100(g.vera)}</b></td></tr>`).join('')}</tbody></table></div></div>
     </div>
     ${durateHTML(V)}
+    ${duraScelteHTML(V)}
     ${pacchettiHTML(V)}
     ${alt.length ? `<h3 style="margin-top:14px">Miglioramenti provati</h3><p class="note">Valutati anno per anno su anni che non avevano visto. Il numero è quanto prevedono meglio di chi dice sempre la media (0 = uguale).</p>
       <ul class="note" style="margin:6px 0 0;padding-left:18px">${alt.map(a => `<li><b>${esc(a.nome)}</b>: ${(a.skill >= 0 ? '+' : '') + nf(a.skill * 100, 2)} %${a.nome === 'attuale' ? ' (quella in uso)' : att && a.skill <= att.skill + 0.001 ? ', non migliora: scartato' : ', differenza troppo piccola per cambiare'}</li>`).join('')}</ul>
@@ -1516,6 +1548,8 @@ function renderMetodo() {
     <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
+    <h3>Quanto tenere</h3>
+    <p>Per ogni strumento la Macchina del Tempo calcola la probabilità di guadagno e il caso peggiore (1 volta su 10) a 1 mese, 3 mesi, 6 mesi e 1 anno. L'app sceglie <b>il periodo con la probabilità più alta tra quelli in cui 1 volta su 10 non si perde più del 10 %</b>, la stessa soglia del giudizio "Sì". Così uno strumento tranquillo (un obbligazionario, un ETF poco volatile) si tiene più a lungo, perché il tempo fa salire la probabilità senza far crescere troppo il rischio; uno che oscilla molto si tiene meno. Se nessun periodo resta entro il rischio vale quello della categoria. Rifatta ogni mese dal 2004 con i soli prezzi di quel giorno, questa scelta è andata in guadagno più spesso della durata unica per categoria, sia fino al 2016 sia dopo (vedi "Funziona?").</p>
     <h3>Il pacchetto</h3>
     <p>Il consiglio più verificato dell'app: i <b>10 strumenti più forti</b> del giorno tra azioni, ETF, obbligazionari e oro (crescita dell'ultimo anno, senza l'ultimo mese, divisa per le oscillazioni degli ultimi 3 mesi; solo quelli sopra la media a 200 giorni e con il prezzo non bloccato), <b>in parti uguali</b>, tenuti per il periodo scelto dalla verifica (oggi 1 anno). Rifatto ogni mese dal 2004 con i soli prezzi di quel giorno e costi inclusi, è finito in guadagno molto più spesso di un solo strumento, anche del primo della lista per probabilità. La verifica mostra anche che dividere conta più che scegliere: 10 strumenti presi a caso tra i candidati sono andati quasi uguale. Il caso peggiore resta pesante (il pacchetto di marzo 2008 ha perso il 45 % in un anno) e le azioni sono quelle negli indici oggi, quindi i numeri sono un po' ottimisti.</p>
     <h3>Crypto intraday</h3>

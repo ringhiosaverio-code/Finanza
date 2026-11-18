@@ -48,7 +48,9 @@ LISTA = os.path.join(ROOT, "simula_lista.json")   # gli ISIN aggiunti all'app (v
 ISIN_FILE = os.path.join(ROOT, "isin.json")
 UA = settimana.UA
 
-HORIZONS = [("1 giorno", 1), ("1 settimana", 5), ("1 mese", 21), ("3 mesi", 63), ("1 anno", 252)]
+HORIZONS = [("1 giorno", 1), ("1 settimana", 5), ("1 mese", 21), ("3 mesi", 63), ("6 mesi", 126), ("1 anno", 252)]
+DURATE = ("1 mese", "3 mesi", "6 mesi", "1 anno")     # tra queste si sceglie per quanto tenere uno strumento
+RISCHIO = 0.10                   # ... la più probabile tra quelle in cui 1 volta su 10 non si perde più del 10 %
 BLOCK = 21                       # la Macchina del Tempo incolla pezzi di un mese
 N_SIM = 10000
 YEARS_MAX = 25
@@ -220,6 +222,22 @@ def summary(rets):
             "p95": round(pct(rets, .95), 4), "mean": round(sum(rets) / len(rets), 4), "n": len(rets)}
 
 
+def durata_consigliata(orizzonti):
+    """Per quanto tenere lo strumento: tra 1 mese, 3 mesi, 6 mesi e 1 anno, la durata con la probabilità
+    di guadagno più alta (scenario prudente) tra quelle in cui 1 volta su 10 non si perde più del 10 %
+    (la stessa soglia del giudizio "Sì"). A parità di probabilità la più breve. None se nessuna rispetta
+    il limite: allora decide la categoria. Verificata in verifica.py (scelta_durata)."""
+    ok = []
+    for o in orizzonti:
+        m = o["scenari"].get("prudente") if o["orizzonte"] in DURATE else None
+        if not m:
+            continue
+        p10 = m["p10"] if m.get("p10") is not None else m["p5"]
+        if round(p10, 2) >= -RISCHIO:
+            ok.append((round(m["p_gain"], 2), -o["giorni"], o["giorni"]))
+    return max(ok)[2] if ok else None
+
+
 def reliability(n_indep, spread):
     """Affidabilità di una probabilità: quanti casi indipendenti ci sono e quanto conta l'ipotesi
     sulla crescita (distanza tra 'nessuna crescita' e 'come in passato')."""
@@ -247,7 +265,7 @@ CALENDARI = {
     "borsa": {"anno": 252, "orizzonti": HORIZONS, "blocco": BLOCK, "vol": 63},
     # crypto: si scambiano tutti i giorni, weekend compresi
     "sempre": {"anno": 365, "orizzonti": [("1 giorno", 1), ("1 settimana", 7), ("1 mese", 30), ("3 mesi", 91),
-                                          ("1 anno", 365)], "blocco": 30, "vol": 91},
+                                          ("6 mesi", 182), ("1 anno", 365)], "blocco": 30, "vol": 91},
 }
 CRYPTO = "BTC-EUR ETH-EUR SOL-EUR XRP-EUR BNB-EUR ADA-EUR DOGE-EUR LTC-EUR DOT-EUR LINK-EUR AVAX-EUR TRX-EUR".split()
 
@@ -341,7 +359,7 @@ def simulate(dates, closes, n=N_SIM, seed=19, cal="borsa"):
         "volatilita": round(sd_a, 4), "crescita": {"zero": 0.0, "prudente": round(math.exp(mu_prud * A) - 1, 4),
                                                     "passato": round(math.exp(mu_a) - 1, 4)},
         "drift": {k: round(v, 8) for k, v in drift.items()},
-        "orizzonti": out, "ventaglio": fan,
+        "orizzonti": out, "ventaglio": fan, "durata": durata_consigliata(out),
         "media10": round(closes[-1] / (sum(closes[-10:]) / len(closes[-10:])) - 1, 5),   # piccolo ribasso se < 0
         "grafico": {"dates": dates[c0::step] + ([dates[-1]] if tail else []),
                     "close": [round(x, 6) for x in closes[c0::step]] + ([round(closes[-1], 6)] if tail else [])},

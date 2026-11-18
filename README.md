@@ -128,6 +128,25 @@ Titoli italiani: prezzi in euro, calendario di Borsa Italiana (verificato sui da
 (query1/query2.finance.yahoo.com) con cache di 12 ore in `trader/cache/daily/`. L'app è
 un'istantanea: per aggiornarla rilancia `python3 app.py`.
 
+### Quanto tenere: scelto per ogni strumento
+
+Per ogni strumento la Macchina del Tempo calcola la probabilità prudente e il caso peggiore (1 volta
+su 10) a 1 mese, 3 mesi, 6 mesi e 1 anno; `simula.durata_consigliata` sceglie il periodo con la
+probabilità più alta tra quelli in cui 1 volta su 10 non si perde più del 10 % (la soglia del "Sì").
+Se nessuno rispetta il limite vale la durata della categoria. Prima la durata era unica per categoria
+(1 mese le azioni, 3 mesi tutto il resto). Verifica (`verifica.py`, ogni mese dal 2004, stessi
+strumenti e mesi, costi inclusi), in guadagno com'era → com'è:
+
+| Gruppo | Fino al 2016 | Dal 2017 |
+|---|---|---|
+| Tutti (senza crypto) | 57 % → 58 % | 57 % → 60 % |
+| ETF azionari | 68 % → 70 % | 68 % → 73 % |
+| ETF obbligazionari | 60 % → 68 % | 54 % → 60 % |
+| Azioni | 56 % → 57 % | 57 % → 59 % |
+
+1 volta su 10 sotto: -10,0 % e -8,6 % (prima -8,4 % e -8,0 %). Per gli obbligazionari a 1 anno la
+stima è stata ottimista (72 % detta, 66 % vera): il giudizio lo scrive.
+
 ### Il pacchetto (in cima a Oggi)
 
 I 10 strumenti più forti del giorno (crescita 12-1 mesi divisa per la volatilità a 3 mesi, la stessa
@@ -167,7 +186,7 @@ scarica fino a 25 anni di prezzi giornalieri e calcola la **probabilità di guad
 
 Nell'app, la sezione **Simula** fa lo stesso scrivendo l'ISIN, il ticker o il nome, per i 176 titoli
 già dentro (S&P 100, FTSE MIB, ETF azionari e obbligazionari, oro e quelli aggiunti), con orizzonti
-di 1 giorno, 1 settimana, 1 mese, 3 mesi e 1 anno. Per un ISIN nuovo, `simula.py` lo aggiunge a
+di 1 giorno, 1 settimana, 1 mese, 3 mesi, 6 mesi e 1 anno. Per un ISIN nuovo, `simula.py` lo aggiunge a
 `simula_lista.json` e `python3 app.py` lo mette nell'app con prezzi aggiornati. `isin.json` contiene
 la corrispondenza ISIN → ticker dei titoli dell'app, verificata uno per uno con la ricerca di Yahoo.
 
@@ -186,7 +205,7 @@ i soli prezzi di quel giorno e la confronta con com'è andata (39.125 previsioni
 - sopra il 70 % le stime sono state troppo ottimiste (vero 62 %): l'app lo segnala;
 - tre miglioramenti provati su anni mai visti (miscela con la frequenza del gruppo, ricalibratura
   unica e per gruppo) non prevedono meglio: la stima resta quella prudente;
-- a ogni durata della ricerca per titolo (1 giorno, 1 settimana, 1 mese, 3 mesi, 1 anno) la
+- a ogni durata della ricerca per titolo (1 giorno, 1 settimana, 1 mese, 3 mesi, 6 mesi, 1 anno) la
   probabilità detta è in media un po' più bassa di quella vera (a 1 anno 66 % contro 69 %), ma tra
   strumenti dello stesso tipo le differenze contano poco: a 1 anno le stime più alte (75 %) sono
   andate come le più basse (69 % contro 70 %). Gli ETF obbligazionari sono l'unico gruppo con stime

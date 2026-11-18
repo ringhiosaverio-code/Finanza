@@ -86,7 +86,7 @@ def simulazioni(mercati, log=print):
         name = meta.get("longName") or meta.get("shortName") or sym
         if cat[sym] == "crypto":
             name = name.replace(" EUR", "")
-        return extra({"isin": rev.get(sym), "symbol": sym, "categoria": cat[sym], "hold": hold.get(cat[sym], 21),
+        return extra({"isin": rev.get(sym), "symbol": sym, "categoria": cat[sym], "hold_cat": hold.get(cat[sym], 21),
                       "name": name, "exchange": meta.get("fullExchangeName") or meta.get("exchangeName") or "",
                       "type": meta.get("instrumentType") or "", "currency": meta.get("currency") or "", **s})
 
@@ -101,8 +101,10 @@ def simulazioni(mercati, log=print):
             log("[app] %s saltato: %s" % (code, e))
             continue
         fund = s.get("type") in ("ETF", "MUTUALFUND")
-        s["hold"] = 91 if s.get("cal") == "sempre" else (63 if fund else 21)
+        s["hold_cat"] = 91 if s.get("cal") == "sempre" else (63 if fund else 21)
         out[s["symbol"]] = extra(s)
+    for s in out.values():                               # per quanto tenere: la durata dello strumento,
+        s["hold"] = s.get("durata") or s["hold_cat"]     # altrimenti quella della categoria
     return out
 
 

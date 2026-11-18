@@ -47,22 +47,44 @@ def prudente(mu, sd, n, A):
     return (prior + w * (mu_a - prior)) / A
 
 
-def previsioni(log=print, orizzonti=False):
-    """Una previsione al mese per strumento. Con orizzonti=False sul periodo consigliato della sua
-    categoria; con orizzonti=True su tutte le durate della Macchina del Tempo (campo "h": 0..4)."""
+CANDIDATE = {"borsa": [(n, h) for n, h in simula.HORIZONS if n in simula.DURATE],
+             "sempre": [(n, h) for n, h in simula.CALENDARI["sempre"]["orizzonti"] if n in simula.DURATE]}
+
+
+def strumenti():
     cat = {}
     for m in ("usa", "italia", "etf", "bond", "oro"):
         for s in settimana.MERCATI[m]["universo"]:
             cat[s] = m
     for s in simula.CRYPTO:
         cat[s] = "crypto"
+    return cat
+
+
+def stime(S, t, mu, sd, A, durate):
+    """Le stime prudenti a ogni durata, fatte al giorno t con le sole finestre già concluse,
+    nella stessa forma degli orizzonti di simula.simulate()."""
+    out = []
+    for nome, h in durate:
+        W = S[h:] - S[:-h]
+        sh = W[:t - h + 1] - mu * h + prudente(mu, sd, t, A) * h
+        out.append({"orizzonte": nome, "giorni": h, "scenari": {"prudente": {
+            "p_gain": float(np.mean(sh > 0)), "p10": float(np.percentile(sh, 10)), "p5": float(np.percentile(sh, 5))}}})
+    return out
+
+
+def previsioni(log=print, orizzonti=False):
+    """Una previsione al mese per strumento. Con orizzonti=False per la durata che l'app consiglia per
+    quello strumento (simula.durata_consigliata, o la categoria se nessuna rispetta il limite di rischio);
+    con orizzonti=True su tutte le durate della Macchina del Tempo (campo "h": 0..5)."""
     rows = []
-    for sym, m in cat.items():
+    for sym, m in strumenti().items():
         try:
             meta, dates, closes = simula.series(simula.fetch_max(sym))
         except (simula.SimError, ValueError, KeyError) as e:
             log("[verifica] %s saltato: %s" % (sym, e))
             continue
+        cal = "sempre" if m == "crypto" else "borsa"
         A = 365 if m == "crypto" else 252
         c = np.array(closes[-(simula.YEARS_MAX * A + 1):])
         dts = dates[-len(c):]
@@ -70,16 +92,85 @@ def previsioni(log=print, orizzonti=False):
         N = len(lr)
         S = np.concatenate([[0.0], np.cumsum(lr)])
         S2 = np.concatenate([[0.0], np.cumsum(lr * lr)])
-        durate = [h for _, h in simula.CALENDARI["sempre" if m == "crypto" else "borsa"]["orizzonti"]] if orizzonti else [HOLD[m]]
-        for k, h in enumerate(durate):
-            W = S[h:] - S[:-h]                               # rendimento (log) di h giorni che parte da k
-            for t in range(3 * A, N - h, 21 if A == 252 else 30):
-                mu = S[t] / t
-                sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
-                shifted = W[:t - h + 1] - mu * h + prudente(mu, sd, t, A) * h   # solo finestre concluse al giorno t
-                rows.append({"g": GRUPPO[m], "h": k, "d": dts[t], "fine": dts[t + h], "p": float(np.mean(shifted > 0)),
-                             "p10": float(np.percentile(shifted, 10)), "y": float(W[t] > 0), "r": float(math.expm1(W[t]))})
+        passo = 21 if A == 252 else 30
+        if orizzonti:
+            for k, (nome, h) in enumerate(simula.CALENDARI[cal]["orizzonti"]):
+                W = S[h:] - S[:-h]                           # rendimento (log) di h giorni che parte da k
+                for t in range(3 * A, N - h, passo):
+                    mu = S[t] / t
+                    sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
+                    shifted = W[:t - h + 1] - mu * h + prudente(mu, sd, t, A) * h   # solo finestre concluse al giorno t
+                    rows.append({"g": GRUPPO[m], "h": k, "d": dts[t], "fine": dts[t + h], "p": float(np.mean(shifted > 0)),
+                                 "p10": float(np.percentile(shifted, 10)), "y": float(W[t] > 0), "r": float(math.expm1(W[t]))})
+            continue
+        for t in range(3 * A, N - CANDIDATE[cal][0][1], passo):
+            mu = S[t] / t
+            sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
+            st = stime(S, t, mu, sd, A, CANDIDATE[cal])
+            h = simula.durata_consigliata(st) or HOLD[m]
+            if t + h > N:
+                continue                                     # com'è andata non si sa ancora
+            x = next(o for o in st if o["giorni"] == h)["scenari"]["prudente"]
+            rows.append({"g": GRUPPO[m], "h": h, "d": dts[t], "fine": dts[t + h], "p": x["p_gain"], "p10": x["p10"],
+                         "y": float(S[t + h] - S[t] > 0), "r": float(math.expm1(S[t + h] - S[t]))})
     return rows
+
+
+def scelta_durata(log=print):
+    """Quanto tenere: la durata per categoria (com'era: 1 mese le azioni, 3 mesi il resto) contro la durata
+    per strumento (simula.durata_consigliata). Ogni mese dal 2004, sugli stessi strumenti e mesi (quelli
+    in cui tutte le durate fino a 1 anno sono concluse), costi inclusi; fino al 2016 e dal 2017."""
+    costo = {m: settimana.MERCATI[m]["costo"] / 100 for m in ("usa", "italia", "etf", "bond", "oro")}
+    costo["crypto"] = 0.004
+    rows = []
+    for sym, m in strumenti().items():
+        try:
+            meta, dates, closes = simula.series(simula.fetch_max(sym))
+        except (simula.SimError, ValueError, KeyError) as e:
+            log("[verifica] %s saltato: %s" % (sym, e))
+            continue
+        cal = "sempre" if m == "crypto" else "borsa"
+        A = 365 if m == "crypto" else 252
+        c = np.array(closes[-(simula.YEARS_MAX * A + 1):])
+        dts = dates[-len(c):]
+        lr = np.diff(np.log(c))
+        N = len(lr)
+        S = np.concatenate([[0.0], np.cumsum(lr)])
+        S2 = np.concatenate([[0.0], np.cumsum(lr * lr)])
+        H = CANDIDATE[cal]
+        for t in range(3 * A, N - H[-1][1] + 1):
+            if dts[t][:7] == dts[t - 1][:7]:
+                continue                                     # il primo giorno di borsa di ogni mese
+            mu = S[t] / t
+            sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
+            st = stime(S, t, mu, sd, A, H)
+            r = {o["giorni"]: (o["scenari"]["prudente"]["p_gain"], float(math.expm1(S[t + o["giorni"]] - S[t])) - costo[m])
+                 for o in st}
+            rows.append({"g": GRUPPO[m], "mese": dts[t][:7], "cat": HOLD[m], "str": simula.durata_consigliata(st) or HOLD[m], "r": r})
+    nomi = {h: n for cal in CANDIDATE.values() for n, h in cal}
+
+    def numeri(R, regola):
+        if len(R) < 30:
+            return {"n": len(R)}
+        x = np.array([q["r"][q[regola]][1] for q in R])
+        detta = np.array([q["r"][q[regola]][0] for q in R])
+        dist = {}
+        for q in R:
+            dist[nomi[q[regola]]] = dist.get(nomi[q[regola]], 0) + 1
+        return {"n": len(R), "p_gain": round(float(np.mean(x > 0)), 4), "tipico": round(float(np.median(x)), 4),
+                "p10": round(float(np.percentile(x, 10)), 4), "detta": round(float(detta.mean()), 4),
+                "durate": {k: round(v / len(R), 3) for k, v in dist.items()}}
+
+    out = {"regole": [{"id": "cat", "nome": "Per categoria (com'era)"}, {"id": "str", "nome": "Per strumento (adesso)"}],
+           "periodi": {}, "gruppi": {}}
+    for p, f in (("prima", lambda q: q["mese"] < "2017"), ("dopo", lambda q: q["mese"] >= "2017")):
+        P = [q for q in rows if f(q)]
+        out["periodi"][p] = {"cat": numeri([q for q in P if q["g"] != "crypto"], "cat"),
+                             "str": numeri([q for q in P if q["g"] != "crypto"], "str")}
+        for g in sorted({q["g"] for q in rows}):
+            G = [q for q in P if q["g"] == g]
+            out["gruppi"].setdefault(g, {})[p] = {"cat": numeri(G, "cat"), "str": numeri(G, "str")}
+    return out
 
 
 PACCHETTI = [
@@ -296,7 +387,8 @@ def main():
            "dal_2017": riassunto([r for r in rows if r["d"] >= "2017"]),
            "alternative": alternative(rows),
            "durate": per_durata(previsioni(log=lambda m: None, orizzonti=True)),
-           "pacchetti": pacchetti(log=lambda m: None)}
+           "pacchetti": pacchetti(log=lambda m: None),
+           "scelta_durata": scelta_durata(log=lambda m: None)}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=1)
     t = out["tutto"]
@@ -311,6 +403,11 @@ def main():
         print("  a %-12s detta %.1f%%, vera %.1f%% · stime più basse %.0f%% -> %.0f%%, più alte %.0f%% -> %.0f%%" % (
             d["durata"], 100 * d["stimata"], 100 * d["vera"], 100 * d["basse"]["stimata"], 100 * d["basse"]["vera"],
             100 * d["alte"]["stimata"], 100 * d["alte"]["vera"]))
+    sd = out["scelta_durata"]["periodi"]
+    for p in ("prima", "dopo"):
+        print("  quanto tenere, %s: per categoria %.1f%% in guadagno (1 su 10 sotto %+.1f%%), per strumento %.1f%% (%+.1f%%) %s" % (
+            "fino al 2016" if p == "prima" else "dal 2017", 100 * sd[p]["cat"]["p_gain"], 100 * sd[p]["cat"]["p10"],
+            100 * sd[p]["str"]["p_gain"], 100 * sd[p]["str"]["p10"], sd[p]["str"]["durate"]))
     P = out["pacchetti"]
     for x in P["disegni"]:
         d = x["durate"][P["durata"]]

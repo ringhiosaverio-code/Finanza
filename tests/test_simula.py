@@ -67,7 +67,7 @@ class Simulate(unittest.TestCase):
         self.s = M.simulate(self.dates, self.closes, n=4000)
 
     def test_shape(self):
-        self.assertEqual([r["giorni"] for r in self.s["orizzonti"]], [1, 5, 21, 63, 252])
+        self.assertEqual([r["giorni"] for r in self.s["orizzonti"]], [1, 5, 21, 63, 126, 252])
         for r in self.s["orizzonti"]:
             self.assertEqual(set(r["scenari"]), {"zero", "prudente", "passato"})
             self.assertIn(r["affidabilita"]["livello"], ("alta", "media", "bassa"))
@@ -108,6 +108,36 @@ class Simulate(unittest.TestCase):
         with self.assertRaises(M.SimError):
             M.simulate(d, c)
 
+
+
+
+def oriz(*righe):
+    """righe: (nome, giorni, p_gain, p10) -> orizzonti come li scrive simulate()."""
+    return [{"orizzonte": n, "giorni": g, "scenari": {"prudente": {"p_gain": p, "p10": q, "p5": q - 0.02}}}
+            for n, g, p, q in righe]
+
+
+class Durata(unittest.TestCase):
+    def test_la_piu_probabile_entro_il_rischio(self):
+        o = oriz(("1 giorno", 1, .51, -.02), ("1 mese", 21, .56, -.05), ("3 mesi", 63, .62, -.08),
+                 ("6 mesi", 126, .66, -.11), ("1 anno", 252, .72, -.15))
+        self.assertEqual(M.durata_consigliata(o), 63)
+
+    def test_strumento_tranquillo_tiene_un_anno(self):
+        o = oriz(("1 mese", 21, .58, -.01), ("3 mesi", 63, .63, -.02), ("6 mesi", 126, .68, -.03), ("1 anno", 252, .74, -.04))
+        self.assertEqual(M.durata_consigliata(o), 252)
+
+    def test_a_parita_la_piu_breve_e_niente_se_nessuna_regge(self):
+        self.assertEqual(M.durata_consigliata(oriz(("1 mese", 21, .60, -.05), ("3 mesi", 63, .601, -.07))), 21)
+        self.assertIsNone(M.durata_consigliata(oriz(("1 mese", 21, .55, -.12), ("1 anno", 252, .60, -.40))))
+
+    def test_il_giorno_e_la_settimana_non_si_scelgono(self):
+        self.assertEqual(M.durata_consigliata(oriz(("1 settimana", 5, .70, -.01), ("1 mese", 21, .55, -.05))), 21)
+
+    def test_simulate_la_calcola(self):
+        d, c = series(2600, 0.0004, 0.004, seed=3)
+        s = M.simulate(d, c, n=400)
+        self.assertIn(s["durata"], (21, 63, 126, 252))
 
 if __name__ == "__main__":
     unittest.main()
