@@ -1,0 +1,49 @@
+# App su GitHub Pages.
+# Ogni giorno feriale, alle 18:10 e alle 22:10 ora italiana (in estate un'ora dopo: GitHub usa l'ora UTC),
+# scarica i prezzi, genera l'app con python3 app.py e la pubblica. Si può lanciare anche a mano:
+# Actions → "App su GitHub Pages" → Run workflow. Si pubblica solo dal ramo main.
+name: App su GitHub Pages
+
+on:
+  schedule:
+    - cron: "10 17,21 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  genera:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Genera l'app con i prezzi di oggi
+        run: python3 app.py
+      - name: Prepara il sito
+        run: |
+          mkdir -p site
+          cp trader/app.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  pubblica:
+    if: github.ref == 'refs/heads/main'
+    needs: genera
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.pubblicazione.outputs.page_url }}
+    steps:
+      - id: pubblicazione
+        uses: actions/deploy-pages@v4
