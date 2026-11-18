@@ -10,14 +10,16 @@ app blocca ogni collegamento a siti esterni), quindi il tempo reale passa da qui
 
   prezzi    Kraken, dati pubblici gratuiti (api.kraken.com), una richiesta al secondo per tutte e
             12 le crypto in euro; se Kraken chiede di rallentare, aspetta e riprova da solo
-  piani     i due piani intraday dell'app (compra il ribasso, compra la rottura), ricalcolati ogni
-            ora dalle candele orarie di Yahoo Finance (intraday.py), con la loro verifica di 2 anni
+  ordini    i tre ordini orari dell'app (ribasso leggero, medio e profondo, validi un'ora), rifatti a
+            ogni ora piena dalle candele orarie di Yahoo Finance (intraday.py), con la loro verifica
+            di 2 anni; una posizione per crypto e profondità, fuori al più tardi dopo 24 ore
   avvisi    quando il prezzo tocca un'entrata, una protezione o un obiettivo: la riga si colora,
             compare nell'elenco degli avvisi e, se lo permetti, suona e manda una notifica
 
 La pagina è servita solo su 127.0.0.1 (non è raggiungibile da altri computer).
-Solo libreria standard, Python 3.8+. Non è consulenza finanziaria: nella verifica di 2 anni,
-con i costi, nessuna regola intraday ha guadagnato in media.
+Solo libreria standard, Python 3.8+. Non è consulenza finanziaria: la verifica su 2 anni e su
+Kraken dà un guadagno medio per operazione dopo i costi, ma un ordine limite sul minimo di una
+candela oraria non è garantito che si esegua.
 """
 
 import argparse
@@ -78,22 +80,29 @@ def leggi_kraken(timeout=5):
     return out
 
 
+NUOVE = {l["id"] for l in intraday.LIVELLI_ORE}            # ribasso15, ribasso20, ribasso30
+ETICHETTE = {l["id"]: ("%g" % l["e"]).replace(".", ",") for l in intraday.LIVELLI_ORE}
 CHIUSO = ("obiettivo", "protezione", "scaduto", "scaduto_dentro")
 PASSO = {"attesa": 0, "dentro": 1, "obiettivo": 2, "protezione": 2, "scaduto": 2, "scaduto_dentro": 2}
 
 
 def avanza(p, prezzo, quando):
-    """Fa avanzare un piano (ribasso o rottura) al prezzo di adesso, come la verifica: prima l'entrata,
-    poi protezione, obiettivo o scadenza. Ritorna gli eventi nuovi: entrata, protezione, obiettivo, scadenza."""
+    """Fa avanzare un ordine (ribasso, rottura, o uno dei tre ordini orari) al prezzo di adesso, come la verifica:
+    prima l'entrata, poi protezione, obiettivo o scadenza. Ritorna gli eventi nuovi: entrata, protezione,
+    obiettivo, scadenza. Un ordine orario vale fino a `fino`; se scatta, si esce al più tardi 24 ore dopo l'entrata."""
     eventi, fine = [], da_utc(p["fino"])
+    ribasso = str(p["regola"]).startswith("ribasso")
     if p["fase"] == "attesa":
         if quando >= fine:
             p["fase"] = "scaduto"                            # l'ordine non è scattato: nessuna operazione
             return eventi
-        if (prezzo <= p["entrata"]) if p["regola"] == "ribasso" else (prezzo >= p["entrata"]):
-            fill = min(p["entrata"], prezzo) if p["regola"] == "ribasso" else max(p["entrata"], prezzo)
+        if (prezzo <= p["entrata"]) if ribasso else (prezzo >= p["entrata"]):
+            fill = min(p["entrata"], prezzo) if ribasso else max(p["entrata"], prezzo)
             p.update(fase="dentro", prezzo_entrata=fill, quando=intraday.utc(quando))
+            if p["regola"] in NUOVE:
+                p["scade"] = intraday.utc(quando + datetime.timedelta(hours=intraday.TENUTA))
             eventi.append("entrata")
+    fine = da_utc(p.get("scade") or p["fino"])               # in posizione: la scadenza dell'entrata
     if p["fase"] == "dentro":
         uscita = None
         if prezzo <= p["protezione"]:
@@ -110,10 +119,17 @@ def avanza(p, prezzo, quando):
 
 
 def da_seguire(crypto):
-    """I piani ribasso e rottura da seguire: quello in corso e quello precedente, finché valgono."""
+    """Gli ordini da seguire: i tre ordini orari di adesso e le posizioni ancora aperte (o, nel formato dei due
+    piani al giorno, ribasso e rottura in corso e precedenti, finché valgono)."""
     out = {}
     for sym, x in crypto.items():
         if sym not in COPPIE:
+            continue
+        if "ordini" in x:                                    # gli ordini rinnovati ogni ora, e le posizioni ancora aperte
+            for rid, p in x["ordini"].items():
+                out[(sym, rid, p["ora"])] = dict(p, sym=sym, attuale=True)
+            for p in x.get("posizioni", []):
+                out[(sym, p["regola"], p["ora"])] = dict(p, sym=sym, attuale=False)
             continue
         for r in ("ribasso", "rottura"):
             out[(sym, r, x["ora"])] = dict(x["piani"][r], sym=sym, regola=r, ora=x["ora"], fino=x["fino"], attuale=True)
@@ -145,14 +161,17 @@ class Stato:
                 if vecchio is not None and vecchio["fase"] == "dentro" and p["fase"] in CHIUSO:
                     self.avviso(p, p["fase"] if p["fase"] != "scaduto_dentro" else "scadenza", None, "candele orarie")
                 p["silenzio"] = primo
+        for k, v in self.seguiti.items():                    # dentro dal vivo, e per le candele ancora no: si segue lo stesso
+            if k not in nuovi and v["fase"] == "dentro":
+                nuovi[k] = dict(v, attuale=False)
         self.seguiti = nuovi
-        self.piani = {s: {k: x[k] for k in ("ora", "fino", "storia", "prezzo", "prezzo_ora")}
+        self.piani = {s: {k: x.get(k) for k in ("ora", "fino", "storia", "prezzo", "prezzo_ora")}
                       for s, x in crypto.items() if s in COPPIE}
         self.verifica = verifica
         self.piani_ora = ora()
 
     def aggiorna_piani(self):
-        r = intraday.analizza(log=lambda m: None, max_age=600)
+        r = intraday.analizza_ore(log=lambda m: None, max_age=600, kraken=False)
         with self.lock:
             self.unisci(r["crypto"], r["verifica"])
 
@@ -230,7 +249,7 @@ main{max-width:1180px;margin:0 auto;padding:20px 16px 48px}h1{margin:0;font-size
 .dot.off{background:var(--crit)}button{font:inherit;border:1px solid var(--line);background:var(--s);color:var(--ink);border-radius:999px;padding:5px 14px;cursor:pointer}
 .card{background:var(--s);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:14px}.scroll{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;vertical-align:top}th{color:var(--mu);font-size:12px;text-transform:uppercase;letter-spacing:.03em}
-th.l,td.l{text-align:left}.ph,.og .note{display:none}.px{font-weight:700;font-size:16px;transition:background .3s}.up{color:var(--good)}.down{color:var(--crit)}.flashu{background:var(--goodbg)}.flashd{background:var(--critbg)}
+th.l,td.l{text-align:left}td.pi{white-space:normal;min-width:210px}.ph,.og .note{display:none}.px{font-weight:700;font-size:16px;transition:background .3s}.up{color:var(--good)}.down{color:var(--crit)}.flashu{background:var(--goodbg)}.flashd{background:var(--critbg)}
 .lv{font-size:13px;color:var(--ink2)}.lv b{color:var(--ink)}.note{color:var(--mu);font-size:13px}
 .tag{display:inline-block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;border-radius:6px;padding:0 6px;margin-right:4px;background:var(--s2);color:var(--ink2)}
 .tag.in{background:var(--accbg);color:var(--acc)}.tag.ok{background:var(--goodbg);color:var(--good)}.tag.ko{background:var(--critbg);color:var(--crit)}
@@ -241,11 +260,11 @@ th.l,td.l{text-align:left}.ph,.og .note{display:none}.px{font-weight:700;font-si
 .tbl td{border:0;padding:2px 0;white-space:normal}.tbl td.og{text-align:left}.tbl td.pi{grid-column:1/-1;text-align:left;margin-top:6px}
 .ph,.og .note{display:none}.tbl .ph,.tbl .og .note{display:inline}.tbl td.pi::before{content:attr(data-k);display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:var(--mu)}}
 </style></head><body><main>
-<h1>Crypto dal vivo</h1><p class="sub">Prezzi in euro da Kraken, aggiornati ogni secondo. Per ogni crypto i due piani intraday dell'app, validi 24 ore: a che punto sono (in attesa, dentro, chiusi) e un avviso quando scatta l'entrata, la protezione, l'obiettivo o la scadenza.</p>
+<h1>Crypto dal vivo</h1><p class="sub">Prezzi in euro da Kraken, aggiornati ogni secondo. Per ogni crypto i tre ordini orari dell'app (ribasso leggero, medio e profondo, validi un'ora e rifatti a ogni ora piena): a che punto sono (in attesa, dentro, chiusi) e un avviso quando scatta l'entrata, la protezione, l'obiettivo o la scadenza.</p>
 <div class="bar"><span id="st"><span class="dot"></span>collegamento…</span><button id="perm" type="button">Attiva suono e notifiche</button></div>
 <p class="sub" id="pi"></p>
 <div class="alert" id="ver"></div>
-<div class="card scroll"><table class="tbl"><thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Oggi</th><th>24 ore min / max</th><th class="l">Compra il ribasso</th><th class="l">Compra la rottura</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="card scroll"><table class="tbl"><thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Oggi</th><th>24 ore min / max</th><th class="l">Ribasso leggero</th><th class="l">Ribasso medio</th><th class="l">Ribasso profondo</th></tr></thead><tbody id="tb"></tbody></table></div>
 <div class="card"><b>Avvisi</b><div id="evs" class="note" style="margin-top:6px">Ancora nessun avviso. I livelli già superati prima dell'avvio non fanno avviso: li vedi nella tabella.</div></div>
 <p class="note">"Oggi" è la variazione dalla mezzanotte UTC (l'una di notte in Italia). I livelli nascono dalle candele orarie di Yahoo Finance, i prezzi dal vivo vengono da Kraken: possono differire di qualche decimo di punto. Risultati con i costi (0,2 % per lato). Non è consulenza finanziaria: gli ordini veri si mettono dalla tua piattaforma, questa pagina non compra e non vende nulla.</p>
 </main><script>
@@ -258,13 +277,14 @@ const hm = s => { const d = new Date(s.replace(' UTC', 'Z').replace(' ', 'T')), 
   return d.toLocaleString('it-IT', oggi ? {hour: '2-digit', minute: '2-digit'} : {weekday: 'short', hour: '2-digit', minute: '2-digit'}); };
 const hh = h => { const d = new Date(); d.setUTCHours(h, 0, 0, 0); return d.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}); };
 const COSTO = 0.002;
+const NOMI_R = {ribasso15: 'ribasso leggero', ribasso20: 'ribasso medio', ribasso30: 'ribasso profondo', ribasso: 'compra il ribasso', rottura: 'compra la rottura'};
 let suono = false, visti = null, ctx = null;
 $('#perm').onclick = async () => { suono = true; try { ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
   try { if ('Notification' in window) await Notification.requestPermission(); } catch (e) {} $('#perm').textContent = 'Suono e notifiche attivi'; };
 function bip() { if (!ctx) return; const o = ctx.createOscillator(), g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 880; g.gain.value = .08; o.start(); o.stop(ctx.currentTime + .25); }
 function cella(p, q) {
   const lv = (d) => `<span class="down">prot. ${f(p.protezione)}${d ? ' (' + pc(p.protezione / q - 1) + ')' : ''}</span> · <span class="up">obiett. ${f(p.obiettivo)}${d ? ' (' + pc(p.obiettivo / q - 1) + ')' : ''}</span>`;
-  if (p.fase === 'attesa') return `<span class="lv"><span class="tag">in attesa</span>${p.regola === 'ribasso' ? 'compra a' : 'compra sopra'} <b>${f(p.entrata)}</b> <span class="note">(manca ${pc(p.entrata / q - 1)})</span><br>poi ${lv(false)}</span>`;
+  if (p.fase === 'attesa') return `<span class="lv"><span class="tag">in attesa</span>${String(p.regola).startsWith('ribasso') ? 'compra a' : 'compra sopra'} <b>${f(p.entrata)}</b> <span class="note">(manca ${pc(p.entrata / q - 1)})</span><br>poi ${lv(false)}</span>`;
   if (p.fase === 'dentro') { const r = q / p.prezzo_entrata - 1 - 2 * COSTO;
     return `<span class="lv"><span class="tag in">dentro</span>a <b>${f(p.prezzo_entrata)}</b> dalle ${hm(p.quando)} · ora <b class="${r >= 0 ? 'up' : 'down'}">${pc(r)}</b><br>${lv(true)}</span>`; }
   if (p.fase === 'obiettivo') return `<span class="lv"><span class="tag ok">chiuso</span>obiettivo raggiunto alle ${hm(p.chiusura)}: <b class="up">${pc(p.rendimento)}</b><br><span class="note">entrata ${f(p.prezzo_entrata)}</span></span>`;
@@ -273,7 +293,7 @@ function cella(p, q) {
   return `<span class="lv note"><span class="tag">scaduto</span>l'ordine non è scattato: nessuna operazione</span>`;
 }
 function testo(e) {
-  const R = `<b>${e.nome}</b>, ${e.regola === 'ribasso' ? 'compra il ribasso' : 'compra la rottura'} (piano delle ${hm(e.piano)}): `;
+  const R = `<b>${e.nome}</b>, ${NOMI_R[e.regola] || e.regola} (ordine delle ${hm(e.piano)}): `;
   const fonte = e.fonte === 'Kraken' ? '' : ' <span class="note">(visto sulle candele orarie)</span>';
   if (e.evento === 'entrata') return R + `<b>entrata</b> a ${f(e.valore)}. Ora protezione ${f(e.protezione)} e obiettivo ${f(e.obiettivo)}.` + fonte;
   if (e.evento === 'obiettivo') return R + `<b>obiettivo</b> raggiunto a ${f(e.valore)}: vendi. Risultato ${pc(e.rendimento)} con i costi.` + fonte;
@@ -285,17 +305,17 @@ async function giro() {
   let D; try { D = await (await fetch('/dati', {cache: 'no-store'})).json(); } catch (e) { $('#st').innerHTML = '<span class="dot off"></span><span class="err">il programma non risponde: è ancora acceso?</span>'; return; }
   $('#st').innerHTML = D.errore ? `<span class="dot off"></span><span class="err">${D.errore}</span>` : `<span class="dot"></span>aggiornato alle ${D.aggiornato || '…'}`;
   const P0 = Object.values(D.piani || {})[0];
-  $('#pi').innerHTML = P0 ? `<b>Piani delle ${hm(P0.ora)}, validi fino alle ${hm(P0.fino)}.</b> Nuovi piani ogni giorno alle ${hh(17)} e alle ${hh(21)}, come nella verifica; controllati ogni ora, l'ultima alle ${D.piani_ora}.` : 'Calcolo i piani dalle candele orarie…';
-  if (D.verifica && D.verifica.ribasso) { const v = D.verifica, g = s => s && s.n ? `${Math.round(s.p_gain * 100)} % in guadagno, media ${pc(s.media)}` : 'n/d';
-    $('#ver').innerHTML = `<b>Verifica di 2 anni, costi inclusi:</b> compra il ribasso ${g(v.ribasso.tutto)} · compra la rottura ${g(v.rottura.tutto)} · compra e vendi dopo 24 ore ${g(v.tempo.tutto)}. Nessuna regola intraday ha guadagnato in media: se provi, fallo prima nel conto demo dell'app.`; }
+  $('#pi').innerHTML = P0 ? `<b>Ordini delle ${hm(P0.ora)}, validi fino alle ${hm(P0.fino)}.</b> Se ne fanno di nuovi a ogni ora piena, dall'ultima candela oraria chiusa; l'ultimo calcolo alle ${D.piani_ora}.` : 'Calcolo gli ordini dalle candele orarie…';
+  if (D.verifica && D.verifica.ribasso15) { const v = D.verifica, g = s => s && s.n ? `${Math.round(s.p_gain * 100)} % in guadagno, media ${pc(s.media)}` : 'n/d';
+    $('#ver').innerHTML = `<b>Verifica di 2 anni, costi inclusi (secondo anno):</b> ribasso leggero ${g(v.ribasso15.anno2)} · medio ${g(v.ribasso20.anno2)} · profondo ${g(v.ribasso30.anno2)} · la rottura ${g(v.rottura.anno2)}. Un ordine limite sul minimo di una candela non è garantito che si esegua: se provi, fallo prima nel conto demo dell'app.`; }
   const S = D.seguiti || [];
   $('#tb').innerHTML = Object.keys(D.nomi).map(s => { const x = D.prezzi[s]; if (!x) return '';
     const v = x.prezzo / x.apertura - 1, cl = x.direzione > 0 ? 'flashu' : x.direzione < 0 ? 'flashd' : '';
     const col = r => { const cur = S.find(p => p.sym === s && p.regola === r && p.attuale);
       const prev = S.filter(p => p.sym === s && p.regola === r && !p.attuale && p.fase === 'dentro');
-      return (cur ? cella(cur, x.prezzo) : '…') + prev.map(p => `<div class="prev lv">Piano precedente, vale fino alle ${hm(p.fino)}:<br>${cella(p, x.prezzo)}</div>`).join(''); };
+      return (cur ? cella(cur, x.prezzo) : prev.length ? '' : '…') + prev.map(p => `<div class="prev lv">Ancora in posizione, esce al più tardi alle ${hm(p.scade || p.fino)}:<br>${cella(p, x.prezzo)}</div>`).join(''); };
     return `<tr><td class="l"><b>${D.nomi[s]}</b> <span class="note">${s.replace('-EUR', '')}</span></td><td class="px ${cl}">${f(x.prezzo)}</td><td class="og ${v >= 0 ? 'up' : 'down'}">${pc(v)}<span class="note"> oggi</span></td>
-      <td class="lv"><span class="ph">24 ore </span>${nf(x.min24, dec(x.min24))} / ${nf(x.max24, dec(x.max24))}</td><td class="l pi" data-k="Compra il ribasso">${col('ribasso')}</td><td class="l pi" data-k="Compra la rottura">${col('rottura')}</td></tr>`; }).join('');
+      <td class="lv"><span class="ph">24 ore </span>${nf(x.min24, dec(x.min24))} / ${nf(x.max24, dec(x.max24))}</td><td class="l pi" data-k="Ribasso leggero">${col('ribasso15')}</td><td class="l pi" data-k="Ribasso medio">${col('ribasso20')}</td><td class="l pi" data-k="Ribasso profondo">${col('ribasso30')}</td></tr>`; }).join('');
   const E = D.eventi || [];
   if (E.length) $('#evs').innerHTML = E.map(e => `<div class="ev"><span class="t">${e.ora}</span><span>${testo(e)}</span></div>`).join('');
   if (visti !== null && D.n_eventi > visti) {
@@ -342,10 +362,11 @@ def terminale(stato):
             righe = []
             for s, v in stato.prezzi.items():
                 stati = [stato.seguiti.get((s, r, stato.piani[s]["ora"]), {}).get("fase") if s in stato.piani else None
-                         for r in ("ribasso", "rottura")]
-                righe.append("%-10s %14s  %+6.2f %%   ribasso %-8s rottura %-8s" % (
+                         for r in ETICHETTE]
+                righe.append("%-10s %14s  %+6.2f %%   %s" % (
                     NOMI[s].split()[0], "%.*f" % (5 if v["prezzo"] < 1 else 2, v["prezzo"]),
-                    100 * (v["prezzo"] / v["apertura"] - 1), FASE.get(stati[0], "…"), FASE.get(stati[1], "…")))
+                    100 * (v["prezzo"] / v["apertura"] - 1),
+                    "  ".join("ribasso %s %-8s" % (e, FASE.get(st, "…")) for e, st in zip(ETICHETTE.values(), stati))))
             avvisi = ["%s  %s, %s: %s" % (e["ora"], e["nome"], e["regola"], e["evento"]) for e in stato.eventi[-5:][::-1]]
             err = stato.errore
         sys.stdout.write("\x1b[2J\x1b[H" + "Crypto dal vivo · %s (Kraken, in euro)\n\n" % ora() + "\n".join(righe) +

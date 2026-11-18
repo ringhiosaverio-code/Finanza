@@ -4,6 +4,7 @@ sugli ultimi 2 anni di candele orarie (Yahoo Finance).
 
     python3 intraday.py              # stampa i piani di oggi e la verifica; app.py li mette nella sezione Crypto
     python3 intraday.py --varianti   # prova 9 varianti delle regole, primo anno contro secondo
+    python3 intraday.py --ore        # ordini rinnovati ogni ora: verifica su 2 anni e controllo su Kraken
 
 Due regole, fissate prima di guardare i risultati, più il confronto "compra e vendi dopo 24 ore":
   Ribasso  ordine limite sotto il prezzo attuale (ultima chiusura oraria - 3 ATR orari);
@@ -15,6 +16,9 @@ Due regole, fissate prima di guardare i risultati, più il confronto "compra e v
   candela oraria nelle ultime 24 ore.
 La verifica rifà il piano alle 17 e alle 21 UTC (quando si aggiorna l'app) di ogni giorno degli
 ultimi 2 anni, per tutte e 12 le crypto, e separa il primo anno dal secondo.
+Dal 18 novembre 2026 l'app e il robot usano ordini rinnovati ogni ora (analizza_ore, più sotto): tre ribassi
+da 1,5 / 2 / 3 escursioni, validi un'ora, uno alla volta per moneta e profondità, verificati su 2 anni di Yahoo e
+controllati su Kraken. I due piani al giorno (17 e 21 UTC) restano qui come confronto.
 Solo libreria standard. Non è consulenza finanziaria.
 """
 
@@ -269,7 +273,261 @@ def varianti(log=print):
             "scelta_sul_primo_anno": migliore["nome"]}
 
 
+# ---------------------------------------------------------------------------------------------------------
+# Ordini rinnovati ogni ora: tre ribassi (1,5 / 2 / 3 escursioni), uno alla volta per moneta e profondità.
+# Ogni ora piena, dalla candela oraria appena chiusa, si fa un ordine limite sotto il prezzo, valido per quella
+# sola ora. Se scatta, protezione 3 escursioni sotto l'entrata, obiettivo il prezzo di partenza, al più tardi
+# fuori dopo 24 ore. Finché c'è una posizione non si fanno nuovi ordini di quella profondità. La candela oraria
+# è il passo più fine che si può verificare su 2 anni (Yahoo dà candele da un minuto solo per gli ultimi 7
+# giorni); il prezzo si segue poi al secondo (crypto_live.py) o ogni 5 secondi (live.py).
+# ---------------------------------------------------------------------------------------------------------
+FINESTRA = 1                  # ore in cui vale ogni ordine: a ogni ora piena se ne fa uno nuovo
+TENUTA = 24                   # ore al massimo in posizione dopo l'entrata
+STOP_ATR = 3                  # protezione sotto l'entrata, in escursioni orarie
+PENETRAZIONE = 0.25           # prova prudente: il minimo deve scendere un quarto di escursione sotto il livello
+# le tre profondità: fissate dopo la prova su 2 anni di Yahoo e controllate su Kraken (30 giorni); la prova con
+# ordini valevoli 2 ore o più è peggiore (le entrate arrivano in un ribasso che continua): per questo 1 ora
+LIVELLI_ORE = [
+    {"id": "ribasso15", "nome": "Ribasso leggero", "e": 1.5, "desc": "Ordine limite 1,5 escursioni orarie sotto il prezzo"},
+    {"id": "ribasso20", "nome": "Ribasso medio", "e": 2, "desc": "Ordine limite 2 escursioni orarie sotto il prezzo"},
+    {"id": "ribasso30", "nome": "Ribasso profondo", "e": 3, "desc": "Ordine limite 3 escursioni orarie sotto il prezzo"},
+]
+ROTTURA_ORE = {"id": "rottura", "nome": "Rottura (confronto)", "desc": "Ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni, obiettivo 3"}
+KRAKEN = {"BTC-EUR": ("XBTEUR", "XXBTZEUR"), "ETH-EUR": ("ETHEUR", "XETHZEUR"), "SOL-EUR": ("SOLEUR", "SOLEUR"),
+          "XRP-EUR": ("XRPEUR", "XXRPZEUR"), "BNB-EUR": ("BNBEUR", "BNBEUR"), "ADA-EUR": ("ADAEUR", "ADAEUR"),
+          "DOGE-EUR": ("DOGEEUR", "XDGEUR"), "LTC-EUR": ("LTCEUR", "XLTCZEUR"), "DOT-EUR": ("DOTEUR", "DOTEUR"),
+          "LINK-EUR": ("LINKEUR", "LINKEUR"), "AVAX-EUR": ("AVAXEUR", "AVAXEUR"), "TRX-EUR": ("TRXEUR", "TRXEUR")}
+
+
+def serie(B):
+    """Escursione media (ATR) e massimo delle ultime 24 candele, per ogni candela: gli stessi numeri di atr()
+    e livelli(), calcolati una volta sola."""
+    n = len(B)
+    tr = [0.0] * n
+    for k in range(1, n):
+        tr[k] = max(B[k][2] - B[k][3], abs(B[k][2] - B[k - 1][4]), abs(B[k][3] - B[k - 1][4]))
+    a, m = [None] * n, [None] * n
+    for i in range(24, n):
+        a[i] = sum(tr[i - 23:i + 1]) / 24
+        m[i] = max(b[2] for b in B[i - 23:i + 1])
+    return a, m
+
+
+def ordine_ore(B, i, a, mx, tipo="ribasso", e=3.0, s=STOP_ATR):
+    """Entrata, protezione e obiettivo dell'ordine fatto alla chiusura della candela i."""
+    c, ai = B[i][4], a[i]
+    if tipo == "ribasso":
+        ent = c - e * ai
+        return {"entrata": ent, "tipo": "limite", "protezione": ent - s * ai, "obiettivo": c}
+    return {"entrata": mx[i], "tipo": "sopra", "protezione": mx[i] - 1.5 * ai, "obiettivo": mx[i] + 3 * ai}
+
+
+def _t(sec):
+    return utc(datetime.datetime.fromtimestamp(sec, datetime.timezone.utc))
+
+
+def episodio(B, i, lv, ai, tipo="ribasso", finestra=FINESTRA, tenuta=TENUTA, pen=0.0):
+    """Com'è andato l'ordine fatto alla chiusura della candela i, rigiocando le candele chiuse dopo:
+    attesa (la finestra non è finita: ordine ancora valido), scaduto (finestra finita senza entrare), dentro,
+    obiettivo, protezione (chiuso) o scaduto_dentro (24 ore in posizione: si vende alla chiusura dell'ultima)."""
+    n, e, stop, tgt = len(B), lv["entrata"], lv["protezione"], lv["obiettivo"]
+    trig = fill = None
+    for k in range(finestra):
+        j = i + 1 + k
+        if j >= n:
+            return {"fase": "attesa"}
+        b = B[j]
+        if tipo == "ribasso" and b[3] <= e - pen * ai:
+            trig, fill = j, min(e, b[1])
+            break
+        if tipo == "rottura" and b[2] >= e + pen * ai:
+            trig, fill = j, max(e, b[1])
+            break
+    if trig is None:
+        return {"fase": "scaduto"}
+    base = {"prezzo_entrata": fill, "quando": _t(B[trig][0]), "scade": _t(B[trig][0] + tenuta * 3600)}
+    for j in range(trig, min(n, trig + tenuta)):
+        b, k = B[j], j - trig
+        px = nome = None
+        if k > 0 and b[1] <= stop:
+            px, nome = b[1], "protezione"
+        elif k > 0 and b[1] >= tgt:
+            px, nome = b[1], "obiettivo"
+        elif b[3] <= stop:
+            px, nome = stop, "protezione"
+        elif b[2] >= tgt:
+            px, nome = tgt, "obiettivo"
+        if nome:
+            return dict(base, fase=nome, chiusura=_t(b[0]), prezzo_uscita=px, rendimento=px / fill - 1 - 2 * COSTO, x=j)
+    if n >= trig + tenuta:
+        px = B[trig + tenuta - 1][4]
+        return dict(base, fase="scaduto_dentro", chiusura=base["scade"], prezzo_uscita=px,
+                    rendimento=px / fill - 1 - 2 * COSTO, x=trig + tenuta - 1)
+    return dict(base, fase="dentro")
+
+
+def catena(B, a, mx, tipo="ribasso", e=3.0, s=STOP_ATR, da=200, pen=0.0, finestra=FINESTRA, tenuta=TENUTA):
+    """Gli ordini rinnovati ogni ora, uno alla volta, da `da` alla fine dei dati.
+    -> (episodi con entrata, ordini fatti, {"ordine": quello ancora valido o None, "posizione": quella aperta o None})."""
+    n, i, ordini, episodi, finale = len(B), da, 0, [], {"ordine": None, "posizione": None}
+    while i < n:
+        lv = ordine_ore(B, i, a, mx, tipo, e, s)
+        ordini += 1
+        r = episodio(B, i, lv, a[i], tipo, finestra, tenuta, pen)
+        if r["fase"] == "scaduto":
+            i += 1
+            continue
+        piano = dict(lv, **r, i=i)
+        if r["fase"] == "attesa":
+            finale["ordine"] = piano
+            break
+        episodi.append(piano)
+        if r["fase"] == "dentro":
+            finale["posizione"] = piano
+            break
+        i = r["x"]                               # il prossimo ordine alla chiusura della candela di uscita
+    return episodi, ordini, finale
+
+
+def piano_dati(B, p, regola):
+    """Un ordine o una posizione, come li usano l'app e il robot."""
+    rnd = lambda d: {k: (round(v, 6) if isinstance(v, float) else v) for k, v in d.items()}
+    ora = ora_piano(B, p["i"])
+    out = {k: v for k, v in p.items() if k not in ("i", "x")}
+    return dict(rnd(out), regola=regola, ora=utc(ora), fino=utc(ora + datetime.timedelta(hours=FINESTRA)))
+
+
+def candele_kraken(sym, adesso=None):
+    """Le ultime ~720 candele orarie chiuse di Kraken (in euro): un exchange vero, per il controllo indipendente."""
+    pair, key = KRAKEN[sym]
+    req = urllib.request.Request("https://api.kraken.com/0/public/OHLC?pair=%s&interval=60" % pair,
+                                 headers={"User-Agent": UA, "Accept": "application/json"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        d = json.loads(r.read().decode("utf-8", "replace"))
+    if d.get("error"):
+        raise RuntimeError("; ".join(d["error"]))
+    righe = d["result"].get(key) or next(v for k, v in d["result"].items() if k != "last")
+    adesso = time.time() if adesso is None else adesso
+    return [(int(r[0]), float(r[1]), float(r[2]), float(r[3]), float(r[4])) for r in righe if int(r[0]) + 3600 <= adesso]
+
+
+def controllo_kraken(log=print, candele_di=candele_kraken):
+    """Gli stessi ordini sulle candele di Kraken, per i giorni che offre: la prova indipendente dei dati di Yahoo."""
+    rets = {l["id"]: {"base": [], "prudente": []} for l in LIVELLI_ORE}
+    giorni, usate = 0, 0
+    for sym in KRAKEN:
+        try:
+            B = candele_di(sym)
+        except Exception as e:                               # rete o coppia mancante
+            log("[intraday] Kraken %s saltato: %s" % (sym, e))
+            continue
+        if len(B) < 100:
+            continue
+        a, m = serie(B)
+        usate += 1
+        giorni = max(giorni, len(B) // 24)
+        for l in LIVELLI_ORE:
+            for nome, pen in (("base", 0.0), ("prudente", PENETRAZIONE)):
+                rets[l["id"]][nome] += [x["rendimento"] for x in catena(B, a, m, "ribasso", l["e"], da=30, pen=pen)[0]
+                                        if x["fase"] != "dentro"]
+    if usate < 6:
+        return None
+    return {"giorni": giorni, "crypto": usate,
+            "livelli": {k: {n: stat(v) for n, v in d.items()} for k, d in rets.items()}}
+
+
+def analizza_ore(log=print, max_age=3600, kraken=True):
+    """Gli ordini orari: verifica su 2 anni di candele Yahoo (primo anno, secondo anno, prova prudente), controllo
+    su Kraken, e per ogni crypto l'ordine di adesso, le posizioni aperte e gli ultimi 7 giorni (per il robot)."""
+    dati = {}
+    for sym in simula.CRYPTO:
+        try:
+            B = candele(sym, max_age)
+        except Exception as e:                               # rete, dati mancanti
+            log("[intraday] %s saltato: %s" % (sym, e))
+            continue
+        dati[sym] = (B,) + serie(B)
+    if not dati:
+        raise ValueError("nessun dato delle crypto")
+    regole = [(l["id"], "ribasso", l["e"]) for l in LIVELLI_ORE] + [("rottura", "rottura", 0)]
+    acc = {rid: {"anno1": [], "anno2": [], "p1": [], "p2": [], "ordini": 0} for rid, _, _ in regole}
+    per = {}
+    for sym, (B, a, m) in dati.items():
+        meta = B[0][0] + 365 * 86400
+        storia, correnti, aperti = [], {}, []
+        for rid, tipo, e in regole:
+            episodi, ordini, finale = catena(B, a, m, tipo, e or 3.0)
+            acc[rid]["ordini"] += ordini
+            for x in episodi:
+                if x["fase"] != "dentro":
+                    acc[rid]["anno1" if B[x["i"]][0] < meta else "anno2"].append(x["rendimento"])
+            for x in catena(B, a, m, tipo, e or 3.0, pen=PENETRAZIONE)[0]:
+                if x["fase"] != "dentro":
+                    acc[rid]["p1" if B[x["i"]][0] < meta else "p2"].append(x["rendimento"])
+            if tipo != "ribasso":
+                continue                                     # la rottura è solo un confronto: il robot non la usa
+            da = B[-1][0] - STORIA_ORE * 3600
+            storia += [piano_dati(B, x, rid) for x in episodi if B[x["i"]][0] >= da]
+            if finale["ordine"]:
+                correnti[rid] = piano_dati(B, finale["ordine"], rid)
+                storia.append(correnti[rid])
+            if finale["posizione"]:
+                aperti.append(piano_dati(B, finale["posizione"], rid))
+        ora = ora_piano(B, len(B) - 1)
+        per[sym] = {"prezzo": round(B[-1][4], 6), "prezzo_ora": utc(ora), "ora": utc(ora),
+                    "fino": utc(ora + datetime.timedelta(hours=FINESTRA)), "ordini": correnti, "posizioni": aperti,
+                    "storia_piani": storia}
+    giorni = len(next(iter(dati.values()))[0]) / 24
+    verifica = {}
+    for rid, v in acc.items():
+        tutti = v["anno1"] + v["anno2"]
+        verifica[rid] = {"anno1": stat(v["anno1"]), "anno2": stat(v["anno2"]), "tutto": stat(tutti),
+                         "prudente": {"anno1": stat(v["p1"]), "anno2": stat(v["p2"])},
+                         "al_giorno": round(len(tutti) / giorni, 2), "ordini": v["ordini"],
+                         "eseguiti": round(len(tutti) / max(1, v["ordini"]), 4)}
+    k = None
+    if kraken:
+        try:
+            k = controllo_kraken(log)
+        except Exception as e:                               # rete: il resto resta
+            log("[intraday] controllo su Kraken saltato: %s" % e)
+    return {"generato": datetime.date.today().isoformat(), "finestra_ore": FINESTRA, "tenuta_ore": TENUTA,
+            "stop_escursioni": STOP_ATR, "penetrazione": PENETRAZIONE, "costo_per_lato": COSTO,
+            "livelli": LIVELLI_ORE, "rottura": ROTTURA_ORE, "verifica": verifica, "kraken": k, "crypto": per}
+
+
+def ordini_correnti(log=print, max_age=3600):
+    """Solo gli ordini di adesso, per le pagine in diretta (live.py): -> {crypto: {prezzo, ora, fino, ordini}}."""
+    out = {}
+    for sym in simula.CRYPTO:
+        try:
+            B = candele(sym, max_age)
+        except Exception as e:
+            log("[intraday] %s saltato: %s" % (sym, e))
+            continue
+        a, m = serie(B)
+        i, ora = len(B) - 1, ora_piano(B, len(B) - 1)
+        out[sym] = {"prezzo": round(B[i][4], 6), "ora": utc(ora), "fino": utc(ora + datetime.timedelta(hours=FINESTRA)),
+                    "ordini": [piano_dati(B, dict(ordine_ore(B, i, a, m, "ribasso", l["e"]), fase="attesa", i=i), l["id"])
+                               for l in LIVELLI_ORE]}
+    return out
+
+
 def main():
+    if "--ore" in sys.argv:
+        r = analizza_ore(kraken="--senza-kraken" not in sys.argv)
+        f = lambda x: ("%5d ordini, %3.0f%% in guadagno, media %+.2f%%" % (x["n"], 100 * x["p_gain"], 100 * x["media"])) if x.get("n") else "nessuna"
+        print("ORDINI OGNI ORA (2 anni, 12 crypto, costi 0,2 % per lato, uno alla volta per moneta e profondità)")
+        for l in LIVELLI_ORE + [ROTTURA_ORE]:
+            v = r["verifica"][l["id"]]
+            print("  %-18s anno 1: %s\n  %-18s anno 2: %s · prudente (anno 2): %s · %.1f al giorno" % (
+                l["nome"], f(v["anno1"]), "", f(v["anno2"]), f(v["prudente"]["anno2"]), v["al_giorno"]))
+        if r["kraken"]:
+            print("\nKRAKEN (%d crypto, %d giorni)" % (r["kraken"]["crypto"], r["kraken"]["giorni"]))
+            for l in LIVELLI_ORE:
+                k = r["kraken"]["livelli"][l["id"]]
+                print("  %-18s %s · prudente: %s" % (l["nome"], f(k["base"]), f(k["prudente"])))
+        return 0
     if "--varianti" in sys.argv:
         v = varianti()
         for x in v["varianti"]:

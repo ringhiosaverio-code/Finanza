@@ -77,5 +77,41 @@ class Simboli(unittest.TestCase):
         self.assertEqual(len(L.simboli_da("s=" + ",".join("X%d" % i for i in range(300)))), L.MAX_SIMBOLI)
 
 
+
+
+class OrdiniOrari(unittest.TestCase):
+    def test_si_rifanno_una_volta_all_ora_due_minuti_dopo_l_ora_piena(self):
+        chiamate = []
+        o = L.Ordini(calcola=lambda log: chiamate.append(1) or {"BTC-EUR": {"ordini": []}})
+        base = 1700006400                                          # un'ora piena
+        o.prendi(adesso=base + 600)
+        o.prendi(adesso=base + 1800)                               # stessa ora: niente di nuovo
+        self.assertEqual(len(chiamate), 1)
+        o.prendi(adesso=base + 3600 + 30)                          # 30 s dopo l'ora piena: Yahoo non ha ancora la candela
+        self.assertEqual(len(chiamate), 1)
+        self.assertEqual(o.prendi(adesso=base + 3600 + 150), {"BTC-EUR": {"ordini": []}})
+        self.assertEqual(len(chiamate), 2)
+
+    def test_se_yahoo_non_risponde_riprova_dopo_un_minuto_e_tiene_gli_ultimi_ordini(self):
+        esiti = [{"BTC-EUR": {"ordini": ["vecchio"]}}, {}, RuntimeError("rete"), {"BTC-EUR": {"ordini": ["nuovo"]}}]
+
+        def calcola(log):
+            e = esiti.pop(0)
+            if isinstance(e, Exception):
+                raise e
+            return e
+        o = L.Ordini(calcola=calcola)
+        base = 1700006400
+        self.assertEqual(o.prendi(adesso=base + 600)["BTC-EUR"]["ordini"], ["vecchio"])
+        self.assertEqual(o.prendi(adesso=base + 3600 + 150)["BTC-EUR"]["ordini"], ["vecchio"])   # vuoto: restano i vecchi
+        self.assertEqual(len(esiti), 2)
+        o.prendi(adesso=base + 3600 + 170)                                                       # troppo presto per riprovare
+        self.assertEqual(len(esiti), 2)
+        self.assertEqual(o.prendi(adesso=base + 3600 + 215)["BTC-EUR"]["ordini"], ["vecchio"])   # eccezione: idem
+        self.assertEqual(len(esiti), 1)
+        self.assertEqual(o.prendi(adesso=base + 3600 + 280)["BTC-EUR"]["ordini"], ["nuovo"])
+        self.assertEqual(len(esiti), 0)
+
+
 if __name__ == "__main__":
     unittest.main()

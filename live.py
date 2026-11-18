@@ -13,6 +13,7 @@ passa le quotazioni di Yahoo Finance; la pagina le chiede ogni 5 secondi:
   azioni USA         in tempo reale durante la seduta (15:30-22:00 ora italiana)
   Borsa Italiana     azioni ed ETF .MI con 15 minuti di ritardo, come tutte le quotazioni gratuite
   crypto e cambio    in tempo reale, anche nel weekend
+  ordini crypto      gli ordini orari (intraday.py) si rifanno a ogni ora piena: il robot li esegue al tocco
 
 Le quotazioni si chiedono a Yahoo al massimo una volta ogni 5 secondi per titolo, 20 titoli per
 richiesta. Il portafoglio e il conto demo di questa versione restano nel browser che usi.
@@ -132,6 +133,35 @@ class Aperture:
         return out, errori
 
 
+class Ordini:
+    """Gli ordini orari delle crypto (intraday.ordini_correnti): si rifanno una volta all'ora, due minuti dopo
+    l'ora piena, quando Yahoo ha chiuso la candela oraria."""
+
+    RIPROVA = 60                                                 # secondi tra un tentativo e l'altro se Yahoo non risponde
+
+    def __init__(self, calcola=None):
+        self.calcola, self.lock = calcola, threading.Lock()
+        self.slot, self.dati, self.provato = None, {}, 0
+
+    def prendi(self, adesso=None):
+        adesso = time.time() if adesso is None else adesso
+        slot = int((adesso - 120) // 3600)
+        with self.lock:
+            if slot != self.slot and adesso - self.provato >= self.RIPROVA:
+                calcola = self.calcola
+                if calcola is None:
+                    import intraday                              # solo qui: live.py resta leggero
+                    calcola = intraday.ordini_correnti
+                self.provato = adesso
+                try:
+                    dati = calcola(lambda m: None)
+                except Exception:                                # rete: si riprova tra poco, intanto restano gli ultimi
+                    dati = {}
+                if dati:                                         # vuoto = Yahoo non ha risposto: l'ora non è fatta
+                    self.dati, self.slot = dati, slot
+            return self.dati
+
+
 def simboli_da(query):
     s = (urllib.parse.parse_qs(query).get("s") or [""])[0]
     out = []
@@ -142,7 +172,7 @@ def simboli_da(query):
     return out[:MAX_SIMBOLI]
 
 
-def server(quot, porta, host="127.0.0.1", aper=None):
+def server(quot, porta, host="127.0.0.1", aper=None, ordini=None):
     class Gestore(BaseHTTPRequestHandler):
         def invia(self, codice, tipo, corpo):
             self.send_response(codice)
@@ -162,6 +192,13 @@ def server(quot, porta, host="127.0.0.1", aper=None):
             elif u.path == "/aperture" and aper:
                 q, err = aper.prendi(simboli_da(u.query))
                 self.invia(200, "application/json", json.dumps({"prezzi": q, "errori": err}).encode())
+            elif u.path == "/ordini" and ordini:
+                try:
+                    corpo = json.dumps({"ora": datetime.datetime.now().isoformat(timespec="seconds"), "crypto": ordini.prendi()}).encode()
+                except Exception as e:                           # rete o dati: la pagina riprova
+                    self.invia(502, "application/json", json.dumps({"errore": str(e)[:100]}).encode())
+                    return
+                self.invia(200, "application/json", corpo)
             elif u.path in ("/", "/index.html"):
                 try:
                     with open(APP, "rb") as fh:                    # sempre l'ultima app generata da app.py
@@ -201,7 +238,7 @@ def main(argv=None):
     if not os.path.exists(APP):
         print("[live] manca trader/app.html: genera prima l'app con python3 app.py")
         return 1
-    srv = server(Quotazioni(), a.porta, "0.0.0.0" if a.rete else "127.0.0.1", Aperture())
+    srv = server(Quotazioni(), a.porta, "0.0.0.0" if a.rete else "127.0.0.1", Aperture(), Ordini())
     url = "http://127.0.0.1:%d" % a.porta
     print("[live] l'app con le quotazioni in tempo reale: %s · Ctrl+C per fermare" % url)
     if a.rete:

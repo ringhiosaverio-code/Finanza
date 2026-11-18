@@ -57,14 +57,23 @@ alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York.
 - **Esercitati**: un conto finto da 10.000 € ai prezzi di chiusura dell'ultimo aggiornamento, con i
   costi (0,1 %, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro.
   Prima di comprare mostra il giudizio, quando vendi confronta il risultato con il piano.
-- **Crypto intraday** (`intraday.py`): per ogni crypto due piani validi 24 ore, "compra il
-  ribasso" e "compra la rottura", con entrata, protezione, obiettivo e scadenza. Verifica sulle
-  candele orarie degli ultimi 2 anni (12 crypto, piani alle 18 e alle 22, costi 0,2 % per lato):
-  in guadagno il 29-44 % delle volte, media da -0,4 % a -0,5 % per operazione, in entrambi gli
-  anni. In 24 ore il movimento è quasi testa o croce e i costi lo rendono una perdita: l'app dice
-  "Per ora no" e suggerisce di provare nel conto demo. Provate anche 9 varianti fissate prima di
-  guardare i dati (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni,
-  `python3 intraday.py --varianti`): la migliore sul primo anno ha perso anche sul secondo.
+- **Crypto, ordini ogni ora** (`intraday.py`): a ogni ora piena, per ognuna delle 12 crypto, tre
+  ordini "compra il ribasso" validi un'ora: entrata a 1,5, 2 o 3 escursioni medie orarie (ATR delle
+  ultime 24 candele) sotto il prezzo, protezione 3 escursioni sotto l'entrata, obiettivo il prezzo
+  di partenza, uscita comunque dopo 24 ore. Una posizione alla volta per crypto e profondità. Gli
+  ordini sono molti di più (circa 27 al giorno sulle 12 crypto) e la strategia è cambiata, quindi è
+  stata verificata da capo: 2 anni di candele orarie di Yahoo, primo anno contro secondo, costi 0,2 %
+  per lato. Media per operazione: leggero +0,36 % e +0,24 %, medio +0,60 % e +0,39 %, profondo
+  +0,62 % e +0,63 % (in guadagno il 70-82 % delle volte: tante piccole vincite, poche perdite
+  grandi, quando la protezione scatta). Con una prova prudente (l'ordine scatta solo se il minimo
+  scende ancora di un quarto di escursione) restano +0,13 %, +0,28 % e +0,50 % nel secondo anno.
+  Controllo indipendente sulle candele di Kraken (12 crypto, ultimi 30 giorni): +0,18 %, +0,48 %,
+  +1,0 %. La rottura, tenuta come confronto, perde (-0,4 % e -0,5 %). Limiti: un ordine limite
+  sul minimo di una candela non è garantito che si esegua (nella realtà una parte di quelli che
+  tornano subito su non scatta), 2 anni sono pochi e gli ultimi trimestri sono più deboli dei
+  primi, finestre di 2 ore o più perdono, e il robot è un conto finto: niente ordini veri.
+  `python3 intraday.py --ore` rifà la verifica. I due piani al giorno di prima (rottura compresa,
+  media da -0,4 % a -0,5 %) restano nella sezione Crypto come "Come eravamo partiti".
 - **Crypto**: le 12 principali in euro (Bitcoin, Ethereum, Solana…) con le stesse regole: probabilità
   a 3 mesi di calendario, oscillazione, calo massimo storico (Bitcoin fino a -83 %) e giudizio.
 
@@ -280,14 +289,14 @@ notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la 
 Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10.000 € per strategia e niente soldi veri. Non invia ordini a nessun broker: le operazioni sono simulate a prezzi reali (Yahoo Finance).
 
 - **Azioni in seduta** (esercitazione, in media perde): sui 14 titoli più scambiati di USA e Milano. Se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura. Compra e vende solo a borsa aperta, dal lunedì al venerdì (New York 9:30–16:00, Milano 9:00–17:30), mai di notte. Costi: quelli scelti in Commissioni.
-- **Crypto, piani di 24 ore** (esercitazione, in media perde): ogni piano "compra il ribasso" e "compra la rottura" ha 1/24 del capitale; entra al livello ed esce alla protezione, all'obiettivo o alla scadenza. 24 ore su 24.
+- **Crypto, ordini ogni ora** (provata su 2 anni, vedi sopra): ogni ora mette tre ordini "compra il ribasso" per crypto, ognuno con 1/36 del capitale (12 crypto per 3 profondità); l'ordine vale un'ora, poi si esce alla protezione, all'obiettivo o dopo 24 ore. 24 ore su 24, solo crypto.
 - **Strategie di notte ritirate**: il robot non compra più azioni a borsa chiusa. Le posizioni rimaste da prima si chiudono alla prossima apertura. La verifica di notte resta nei libri.
 
 **Operazioni in diretta.** Il registro in cima alla scheda elenca ogni operazione, tutte o solo azioni o solo crypto, con l'ora (con i secondi per quelle di oggi), il prezzo, l'importo investito o incassato, il risultato e la fonte (in diretta, prezzi ufficiali, candele orarie). Una riga in alto compare in tutte le pagine mentre una sessione è aperta, e ogni operazione nuova avvisa (con notifica del dispositivo, se hai concesso gli avvisi e la pagina è in un'altra scheda). Il registro tiene le ultime 1000 operazioni.
 
 **Sessioni.** Inizia sessione (da oggi, o rigiocando l'ultima settimana o le ultime due) e Termina sessione: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano, poi il robot si ferma. Ogni strategia si avvia e si ferma da sola.
 
-In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (ogni 5 secondi), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi). A pagina chiusa il cloud rifà le operazioni alle 18:10 e alle 22:10 con i prezzi ufficiali e le candele orarie (`robot_cloud.js`), senza cambiare quelle già registrate.
+In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (prezzi ogni 5 secondi e ordini rifatti a ogni ora piena, `/ordini`), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi, con gli ordini dell'ultimo aggiornamento dell'app). A pagina chiusa il cloud rifà le operazioni alle 18:10 e alle 22:10 con i prezzi ufficiali e le candele orarie (`robot_cloud.js`), senza cambiare quelle già registrate. Per vedere gli ordini crypto rinnovati davvero ogni ora serve quindi `live.py` acceso.
 
 Il robot salva a ogni operazione e lo storico ogni 10 minuti. Verifica: rigiocando da inizio novembre 2026, le operazioni in seduta coincidono con il calcolo in Python (stesse liste, stessi risultati); le crypto usano la stessa logica già verificata sulle candele orarie.
 ### I dati di oggi: seduta in corso e chiusura mancante
@@ -355,16 +364,18 @@ con la sola libreria standard di Python:
 
 - **prezzi** in euro da Kraken (dati pubblici gratuiti), una richiesta al secondo per tutte e 12
   le crypto; se Kraken chiede di rallentare, il programma aspetta e riprova;
-- **piani**: gli stessi due di `intraday.py`, nati alle 17 e alle 21 UTC (18 e 22 in Italia d'inverno)
-  e ricalcolati poco dopo ogni ora dalle candele orarie di Yahoo (solo candele chiuse);
-- **stato** di ogni piano, seguito secondo per secondo come nella verifica: *in attesa*, *dentro*
-  (l'entrata è scattata), *chiuso* (protezione, obiettivo o 24 ore passate). Protezione e
-  obiettivo contano solo dopo l'entrata; il piano precedente resta visibile finché ci sei dentro;
+- **ordini**: i tre ordini orari di `intraday.py` (ribasso leggero, medio e profondo), rifatti due
+  minuti e mezzo dopo ogni ora piena dalle candele orarie di Yahoo (solo candele chiuse);
+- **stato** di ogni ordine, seguito secondo per secondo come nella verifica: *in attesa* (vale
+  un'ora), *dentro* (l'entrata è scattata), *chiuso* (protezione, obiettivo o 24 ore passate).
+  Protezione e obiettivo contano solo dopo l'entrata; una posizione resta visibile finché ci sei
+  dentro, anche quando l'ordine di quell'ora è scaduto;
 - **avvisi**, con suono e notifica se li attivi, a ogni passaggio. I livelli già superati prima
   dell'avvio non fanno avviso: la tabella li mostra.
 
-La pagina è servita solo su 127.0.0.1. Nella verifica di 2 anni, con i costi, nessuna regola
-intraday ha guadagnato in media: è uno strumento per seguire i piani, non un motivo per usarli.
+La pagina è servita solo su 127.0.0.1. La verifica di 2 anni dà un guadagno medio per operazione
+dopo i costi, ma un ordine limite sul minimo di una candela oraria non è garantito che si esegua:
+è uno strumento per seguire gli ordini del robot, non una promessa di guadagno.
 
 ## Test
 

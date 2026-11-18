@@ -129,10 +129,15 @@ def piano_giornata(log=print):
 
 
 def crypto_intraday(log=print):
-    """Piani crypto per le prossime 24 ore, verifica di 2 anni e varianti provate (intraday.py)."""
+    """Ordini crypto rinnovati ogni ora con la loro verifica (intraday.analizza_ore), e i due piani al giorno di
+    prima con le varianti provate, come confronto (intraday.py)."""
     try:
         r = intraday.analizza(log)
         r["varianti"] = intraday.varianti(log)
+        try:
+            r["ore"] = intraday.analizza_ore(log)
+        except Exception as e:                               # rete o dati: restano i piani di prima
+            log("[app] ordini orari saltati: %s" % e)
         return r
     except Exception as e:                                   # rete o dati: l'app si genera lo stesso
         log("[app] intraday saltato: %s" % e)

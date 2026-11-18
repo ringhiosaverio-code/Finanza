@@ -1412,14 +1412,15 @@ function renderCrypto() {
     .sort((a, b) => b.h.scenari.prudente.p_gain - a.h.scenari.prudente.p_gain);
   const btc = SIM['BTC-EUR'], w = SIM['SWDA.MI'];
   v.innerHTML = `
-  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-lungo">medio e lungo termine</button> e <button type="button" class="linkb" data-vai="crypto-24">le prossime 24 ore</button>.</p></div>
+  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-lungo">medio e lungo termine</button> e <button type="button" class="linkb" data-vai="crypto-ore">gli ordini di ogni ora</button>.</p></div>
   ${btc && w ? `<div class="alert" role="note"><div class="ic">!</div><p><b>Molto più rischiose di azioni ed ETF.</b> Bitcoin oscilla del ${pc(btc.volatilita, 0, false)} in un anno, un ETF sul mondo intero (SWDA) del ${pc(w.volatilita, 0, false)}. Nella sua storia Bitcoin ha perso fino al ${pc(-btc.calo_massimo, 0, false)} dal picco. Una crypto non è un'azienda: non ha utili né dividendi, il prezzo dipende solo da domanda e offerta. Se le compri, solo con soldi che puoi permetterti di perdere.</p></div>` : ''}
   <div class="scroll card"><table>
     <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno alla durata</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
       return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b> <span class="note">a ${esc(h.orizzonte)}</span></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
   ${cryptoLungoHTML()}
-  ${intradayHTML()}
+  ${ordiniOreHTML()}
+  <details style="margin-top:12px"><summary><b>Come eravamo partiti</b>: due piani al giorno, ognuno valido 24 ore</summary>${intradayHTML()}</details>
   <p class="note">Tocca una riga della prima tabella per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
   v.querySelectorAll('tr.clk').forEach(r => { const go = () => { simSt.q = r.dataset.q; location.hash = 'simula'; };
     r.addEventListener('click', go); r.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); });
@@ -1493,6 +1494,40 @@ function variantiHTML(Va) {
 }
 
 /* ---------------- crypto intraday: le prossime 24 ore ---------------- */
+/* ---------------- crypto intraday: ordini rinnovati ogni ora ---------------- */
+function ordiniOreHTML() {
+  const O = D.intraday && D.intraday.ore; if (!O || !O.crypto) return '';
+  const V = O.verifica, K = O.kraken, L = O.livelli, f = x => nf(x, dec(x));
+  const hhmm = s => new Date(s.replace(' UTC', 'Z').replace(' ', 'T')).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
+  const vt = s => s && s.n ? `<b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b><br><span class="note">${p100(s.p_gain)} in guadagno · ${s.n} op.</span>` : 'n/d';
+  const righe = L.concat([O.rottura]).map(l => { const v = V[l.id], k = K && K.livelli && K.livelli[l.id];
+    return `<tr><td class="l" style="white-space:normal"><b>${esc(l.nome)}</b><br><span class="note">${esc(l.desc)}</span></td><td>${vt(v.anno1)}</td><td>${vt(v.anno2)}</td><td>${vt(v.prudente.anno2)}</td><td>${k ? vt(k.base) : 'n/d'}</td><td>${nf(v.al_giorno, 1)}</td></tr>`; }).join('');
+  const tuttiPositivi = L.every(l => V[l.id].anno1.media > 0 && V[l.id].anno2.media > 0 && V[l.id].prudente.anno1.media > 0 && V[l.id].prudente.anno2.media > 0);
+  const kraken = K && K.livelli && L.every(l => K.livelli[l.id].base.media > 0 && K.livelli[l.id].prudente.media > 0);
+  const aGiorno = L.reduce((t, l) => t + V[l.id].al_giorno, 0), medie = L.map(l => V[l.id].anno2.media), mediePr = L.map(l => V[l.id].prudente.anno2.media);
+  const items = Object.entries(O.crypto).map(([sym, x]) => ({sym, x, s: SIM[sym]})).filter(o => o.s);
+  const aperti = items.flatMap(({x, s}) => (x.posizioni || []).map(p => ({p, s})));
+  const nome = id => (L.find(l => l.id === id) || {nome: id}).nome.toLowerCase();
+  const ordine = (x, id) => { const p = x.ordini[id]; return p ? `compra a <b>${f(p.entrata)}</b><br><span class="neg">protezione ${f(p.protezione)}</span> · <span class="pos">obiettivo ${f(p.obiettivo)}</span>` : '<span class="note">già in posizione</span>'; };
+  const primo = items[0] && items[0].x;
+  return `<div class="card" id="crypto-ore"><h2>Intraday: ordini rinnovati ogni ora</h2>
+    <p class="sub" style="margin-top:4px">Ogni ora piena, per ogni crypto, tre ordini limite di acquisto sotto il prezzo dell'ultima candela oraria (${L.map(l => nf(l.e, 1)).join(', ')} escursioni orarie), ognuno valido un'ora. Se uno scatta: protezione ${O.stop_escursioni} escursioni sotto l'entrata, obiettivo il prezzo di partenza, fuori al più tardi dopo ${O.tenuta_ore} ore; finché c'è una posizione di quella profondità non se ne aprono altre. Costi ${pc(O.costo_per_lato, 1, false)} per lato. In media circa ${nf(aGiorno, 0)} operazioni al giorno su ${items.length} crypto. L'ora è il passo più fine che si può verificare su 2 anni: Yahoo dà candele da un minuto solo per gli ultimi 7 giorni. Il prezzo si segue poi ogni 5 secondi (<code>live.py</code>) o ogni secondo (<code>crypto_live.py</code>).</p>
+    <div class="scroll" style="margin-top:10px"><table>
+      <thead><tr><th class="l">Ordine</th><th>Primo anno</th><th>Secondo anno</th><th>Prudente, 2° anno</th><th>Kraken${K ? `, ${K.giorni} giorni` : ''}</th><th>Al giorno</th></tr></thead>
+      <tbody>${righe}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Media per operazione dopo i costi, e quante in guadagno. <b>Prudente</b>: l'ordine scatta solo se il prezzo scende un quarto di escursione sotto il livello. <b>Kraken</b>: gli stessi ordini sulle candele di un exchange vero in euro.</p>
+    <div class="verdetto ${tuttiPositivi ? 'v-cautela' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${tuttiPositivi ? '!' : '✕'}</span><div><b>${tuttiPositivi ? 'In guadagno nei dati, con cautela' : 'Per ora no'}</b><p>${tuttiPositivi
+      ? `Tutti e tre i livelli hanno guadagnato in media dopo i costi in entrambi gli anni (secondo anno: da ${pc(Math.min(...medie), 2)} a ${pc(Math.max(...medie), 2)} a operazione; nella prova prudente da ${pc(Math.min(...mediePr), 2)} a ${pc(Math.max(...mediePr), 2)})${kraken ? ` e anche su Kraken negli ultimi ${K.giorni} giorni` : ''}. La rottura, con lo stesso passo orario, perde. Se l'ordine vale 2 ore o più perde anche il ribasso: le entrate arrivano dentro un ribasso che continua.`
+      : 'Nei dati almeno un livello non ha guadagnato in media dopo i costi, in uno dei due anni o nella prova prudente.'}</p></div></div>
+      <details><summary>Perché non è una garanzia</summary><p class="note" style="margin-top:6px">La verifica assume che un ordine limite venga eseguito quando il minimo della candela lo tocca: nella realtà un ordine sul minimo può restare in coda e non eseguirsi, e i prezzi di Yahoo (di più exchange) sono un po' più favorevoli di quelli di un exchange solo (Kraken). I dati sono due anni di crypto sopravvissute; i guadagni calano nei trimestri recenti. I numeri passati non garantiscono quelli futuri. Per vederlo succedere senza rischi c'è il robot nel conto demo, in In giornata. Non è consulenza finanziaria.</p></details></div>
+    <div class="scroll" style="margin-top:12px"><table>
+      <thead><tr><th class="l">Crypto</th><th>Prezzo</th>${L.map(l => `<th class="l">${esc(l.nome)}</th>`).join('')}</tr></thead>
+      <tbody>${items.map(({sym, x, s}) => `<tr><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(tk(sym))}</span></td><td>${f(x.prezzo)} €<br><span class="note">${hhmm(x.prezzo_ora || x.ora)}</span>${liveSpan(sym)}</td>${L.map(l => `<td class="l">${ordine(x, l.id)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:8px">${primo ? `Ordini validi fino alle ${hhmm(primo.fino)} (ora italiana): poi si rifanno, ogni ora piena, dall'ultima candela chiusa. ` : ''}I livelli valgono per i prezzi dell'ultimo aggiornamento: l'app si rigenera due volte al giorno, ma gli ordini si rifanno ogni ora in <code>live.py</code> e in <code>crypto_live.py</code>.</p>
+    ${aperti.length ? `<p class="note" style="margin-top:8px"><b>Posizioni ancora aperte</b> (entrate scattate, protezione e obiettivo non ancora): ${aperti.map(({p, s}) => `${esc(s.name)}, ${nome(p.regola)}: entrato a ${f(p.prezzo_entrata)} €, protezione ${f(p.protezione)} €, obiettivo ${f(p.obiettivo)} €, fuori entro ${hhmm(p.scade)}`).join(' · ')}.</p>` : ''}
+    <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>Prezzi in diretta, con avvisi.</b> Dentro Claude un'app non può collegarsi alle borse. Sul tuo computer, nella cartella del progetto: <code>python3 live.py</code> apre questa app con i prezzi ogni 5 secondi, rifà gli ordini a ogni ora piena e il robot li esegue appena il prezzo li tocca; <code>python3 crypto_live.py</code> mostra i prezzi di Kraken ogni secondo, a che punto è ogni ordine e un avviso, anche con suono, a ogni entrata, protezione, obiettivo o scadenza. Serve solo Python 3; i prezzi sono pubblici e gratuiti.</p></div></div>`;
+}
+
 function intradayHTML() {
   const I = D.intraday; if (!I || !I.crypto) return '';
   const R = I.regole, V = I.verifica;
@@ -1505,12 +1540,12 @@ function intradayHTML() {
     obiettivo: `<span class="note">già chiuso: obiettivo (${pc(p.rendimento, 1)})</span><br>`, protezione: `<span class="note">già chiuso: protezione (${pc(p.rendimento, 1)})</span><br>`,
     scaduto: '<span class="note">scaduto</span><br>', scaduto_dentro: '<span class="note">scaduto: si vende</span><br>'})[p.fase] || '';
   const aperti = items.flatMap(({x, s}) => (x.precedenti || []).filter(p => p.fase === 'dentro').map(p => ({p, s})));
-  return `<div class="card" id="crypto-24"><h2>Intraday: le prossime 24 ore</h2>
-    <p class="sub" style="margin-top:4px">Due piani per ogni crypto, validi 24 ore dall'ultimo aggiornamento, e com'è andata la stessa regola negli ultimi 2 anni (piani rifatti ogni giorno alle 18 e alle 22 ora italiana, 12 crypto, costi 0,2 % per operazione).</p>
+  return `<div class="card" id="crypto-24"><h2>I due piani al giorno di prima</h2>
+    <p class="sub" style="margin-top:4px">Due piani per ogni crypto, validi 24 ore dall'ultimo aggiornamento, e com'è andata la stessa regola negli ultimi 2 anni (piani rifatti ogni giorno alle 18 e alle 22 ora italiana, 12 crypto, costi 0,2 % per operazione). Sono stati sostituiti dagli ordini di ogni ora, qui sopra: il robot non li usa più.</p>
     <div class="scroll" style="margin-top:10px"><table>
       <thead><tr><th class="l">Regola</th><th class="l">Primo anno</th><th class="l">Secondo anno</th><th>Ordini eseguiti</th></tr></thead>
       <tbody>${R.map(r => `<tr><td class="l"><b>${esc(r.nome)}</b><br><span class="note">${esc(r.desc)}</span></td><td class="l">${vtxt(V[r.id].anno1)}</td><td class="l">${vtxt(V[r.id].anno2)}</td><td>${p100(V[r.id].tutto.eseguite)}</td></tr>`).join('')}</tbody></table></div>
-    <div class="verdetto v-no" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">✕</span><div><b>Per ora no</b><p>${nessuna ? 'Nessuna regola intraday ha guadagnato in media, in nessuno dei due anni: in 24 ore il movimento delle crypto è quasi testa o croce, e i costi (0,4 % tra entrata e uscita) lo trasformano in una perdita. Se vuoi provare, fallo nel conto demo.' : 'Le regole intraday sono andate quasi in pareggio: i costi pesano più del movimento atteso.'}</p></div></div></div>
+    <div class="verdetto v-no" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">✕</span><div><b>Per ora no</b><p>${nessuna ? 'Con piani di 24 ore nessuna regola ha guadagnato in media, in nessuno dei due anni: il movimento delle crypto è quasi testa o croce, e i costi (0,4 % tra entrata e uscita) lo trasformano in una perdita. Per questo si è passati agli ordini di ogni ora, che nei dati vanno meglio.' : 'Con piani di 24 ore le regole sono andate quasi in pareggio: i costi pesano più del movimento atteso.'}</p></div></div></div>
     <div class="scroll" style="margin-top:12px"><table>
       <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th class="l">Compra il ribasso</th><th class="l">Compra la rottura</th><th class="l">Fino a</th><th class="l">Su questa crypto (ribasso)</th></tr></thead>
       <tbody>${items.map(({sym, x, s}) => { const a = x.piani.ribasso, b = x.piani.rottura, st = x.storia.ribasso;
@@ -1770,7 +1805,7 @@ function renderGiornata(soloGioco) {
     <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Regola</th><th>Fino al ${tagl - 1}</th><th>Dal ${tagl}</th></tr></thead>
       <tbody>${R.map(r => `<tr><td class="l" style="white-space:normal;min-width:240px"><b>${esc(r.nome)}</b> <span class="note">· ${esc(r.fonte)}</span><br><span class="note">${esc(r.desc)}</span></td><td>${cG(r.prima)}</td><td>${cG(r.dopo)}</td></tr>`).join('')}</tbody></table></div>
     ${recentiHTML()}
-    <p class="note" style="margin-top:8px">Sulle candele orarie (primo intervallo, momento della giornata, rotture, figure, RSI) il risultato è lo stesso: vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>. Per le crypto ci sono i piani di 24 ore nella sezione <a href="#crypto" style="color:var(--accent)">Crypto</a> e, sul tuo computer, <code>python3 crypto_live.py</code> con i prezzi ogni secondo.</p></div>` : ''}`;
+    <p class="note" style="margin-top:8px">Sulle candele orarie (primo intervallo, momento della giornata, rotture, figure, RSI) il risultato è lo stesso: vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>. Per le crypto ci sono gli ordini di ogni ora nella sezione <a href="#crypto" style="color:var(--accent)">Crypto</a> e, sul tuo computer, <code>python3 crypto_live.py</code> con i prezzi ogni secondo.</p></div>` : ''}`;
   giocoEventi();
   robotEventi();
 }
@@ -1796,7 +1831,7 @@ function renderMetodo() {
     <h3>Prezzi in tempo reale</h3>
     <p>L'app si rigenera alle 18:10 e alle 22:10 con le chiusure del giorno: probabilità, giudizi e piani nascono da lì. I prezzi in tempo reale, quando ci sono, compaiono accanto a ogni prezzo ("ora …") e servono per decidere il momento: nell'<b>app desktop di Claude</b> con il pulsante "Prezzi in tempo reale" in alto (usa il browser integrato di Claude, ogni 30 secondi), oppure sul tuo computer con <b>python3 live.py</b> (ogni 5 secondi, in qualsiasi browser). Fonte Yahoo Finance: azioni USA in tempo reale, Borsa Italiana con 15 minuti di ritardo, crypto e cambio in tempo reale.</p>
     <h3>Il robot</h3>
-    <p>Il robot compra e vende da solo in due conti finti da 10.000 €: <b>azioni</b>, sui titoli più scambiati di USA e Milano, solo durante la seduta (se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura: in media perde); <b>crypto</b>, con i piani di 24 ore, sempre. Le azioni non si comprano mai di notte: la strategia di notte ha dato i risultati migliori nelle verifiche con costi molto bassi, ma a borsa chiusa non si può comprare, quindi resta solo nei libri e nelle verifiche. Ogni operazione è registrata con ora, prezzo, importo e fonte; con i prezzi in tempo reale compare mentre succede. Il robot non invia ordini a nessun broker: le operazioni sono simulate a prezzi reali (Yahoo Finance).</p>
+    <p>Il robot compra e vende da solo in due conti finti da 10.000 €: <b>azioni</b>, sui titoli più scambiati di USA e Milano, solo durante la seduta (se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura: in media perde); <b>crypto</b>, con gli ordini rinnovati ogni ora, sempre. Le azioni non si comprano mai di notte: la strategia di notte ha dato i risultati migliori nelle verifiche con costi molto bassi, ma a borsa chiusa non si può comprare, quindi resta solo nei libri e nelle verifiche. Ogni operazione è registrata con ora, prezzo, importo e fonte; con i prezzi in tempo reale compare mentre succede. Il robot non invia ordini a nessun broker: le operazioni sono simulate a prezzi reali (Yahoo Finance).</p>
     <h3>Crypto a medio e lungo termine</h3>
     <p>Nella sezione Crypto: compra e tieni contro la regola della tendenza (dentro quando il prezzo è sopra la media dei suoi ultimi 200 o 50 giorni, fuori in euro quando è sotto, 0,2 % a ogni cambio), su tutta la storia di ogni crypto e su un paniere a pesi uguali, divisa in due metà per vedere se regge; quante volte si è chiuso in guadagno tenendo 1 mese, 1, 2 e 4 anni; se conviene investire tutto subito o a rate; e cosa dicono gli studi pubblicati (Liu e Tsyvinski, Detzel e altri, Zarattini e altri, Fondo Monetario, BlackRock, Vanguard), con le tasse italiane.</p>
     <h3>Quanto tenere</h3>
@@ -1804,7 +1839,7 @@ function renderMetodo() {
     <h3>Il pacchetto</h3>
     <p>Il consiglio più verificato dell'app: i <b>10 strumenti più forti</b> del giorno tra azioni, ETF, obbligazionari e oro (crescita dell'ultimo anno, senza l'ultimo mese, divisa per le oscillazioni degli ultimi 3 mesi; solo quelli sopra la media a 200 giorni e con il prezzo non bloccato), <b>in parti uguali</b>, tenuti per il periodo scelto dalla verifica (oggi 1 anno). Rifatto ogni mese dal 2004 con i soli prezzi di quel giorno e costi inclusi, è finito in guadagno molto più spesso di un solo strumento, anche del primo della lista per probabilità. La verifica mostra anche che dividere conta più che scegliere: 10 strumenti presi a caso tra i candidati sono andati quasi uguale. Il caso peggiore resta pesante (il pacchetto di marzo 2008 ha perso il 45 % in un anno) e le azioni sono quelle negli indici oggi, quindi i numeri sono un po' ottimisti.</p>
     <h3>Crypto intraday</h3>
-    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Lo stesso per 9 varianti provate allo stesso modo (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni): scelta la migliore sul primo anno, sul secondo ha perso ancora. Anche le regole dei libri più famosi (candele giapponesi, rotture, RSI, primo intervallo) sono state provate sulle candele orarie di crypto e azioni USA: nessuna resta in guadagno dopo i costi (vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>). Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
+    <p>Ogni ora piena, per ogni crypto, l'app fa tre ordini limite di acquisto sotto il prezzo dell'ultima candela oraria, a 1,5, 2 e 3 escursioni orarie (<b>ribasso leggero, medio e profondo</b>), ognuno valido un'ora. Se uno scatta: protezione 3 escursioni sotto l'entrata, obiettivo il prezzo di partenza, e al più tardi si esce dopo 24 ore; finché c'è una posizione di quella profondità non se ne aprono altre. L'ora è il passo più fine che si può verificare su 2 anni (Yahoo dà candele da un minuto solo per gli ultimi 7 giorni); il prezzo si segue poi ogni 5 secondi con live.py o ogni secondo con crypto_live.py. Verifica: su 2 anni di candele orarie, con il primo anno separato dal secondo, tutti e tre i livelli hanno guadagnato in media dopo i costi (0,2 % per lato), anche nella prova prudente in cui il prezzo deve scendere un quarto di escursione sotto il livello, e così su Kraken negli ultimi 30 giorni. Con ordini validi 2 ore o più perdono, e la rottura, con lo stesso passo orario, perde in entrambi gli anni. Cautele: la verifica assume che un ordine limite venga eseguito quando il minimo della candela lo tocca, e non è garantito; i dati sono due anni di crypto sopravvissute; i numeri passati non garantiscono quelli futuri. Prima di questa versione le regole erano due piani al giorno, validi 24 ore, e nessuna guadagnava (il confronto è nella sezione Crypto). Per seguire gli ordini secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni ordine (in attesa, dentro, chiuso) e un avviso a ogni passaggio.</p>
     <h3>La verifica di 25 anni</h3>
     <p>Ogni mese dal 2004, per tutti gli strumenti, la probabilità di guadagno è stata rifatta con i soli prezzi di quel giorno e confrontata con com'è andata (<code>python3 verifica.py</code>). In media è prudente di un paio di punti; i "Sì" sono andati in guadagno più spesso dei "Con cautela" e dei "Per ora no", con perdite più piccole. Tre modi per migliorarla (miscela con la frequenza del gruppo, ricalibratura per tutti e per gruppo) sono stati provati su anni mai visti e nessuno prevede meglio: la stima resta quella prudente, con un avviso sopra il 70 %, dove in passato è stata troppo ottimista.</p>
     <h3>Perché sì e perché no</h3>
@@ -1843,11 +1878,11 @@ $('#all-list').innerHTML = SIM_LIST.map(s => `<option value="${esc((s.isin ? s.i
 // A pagina chiusa le operazioni si rifanno con i prezzi ufficiali (aste, massimi e minimi del giorno) e le
 // candele orarie delle crypto; con le quotazioni in tempo reale succedono dal vivo. Quello che è
 // registrato non cambia e non si conta due volte. Lo stesso codice gira nel cloud (robot_cloud.js).
-const ROBOT_CAPITALE = 10000, ROBOT_PIANI = 24, ROBOT_COSTO_CRYPTO = 0.002, TOBIN = 0.001;
+const ROBOT_CAPITALE = 10000, ROBOT_PIANI = 36, ROBOT_COSTO_CRYPTO = 0.002, TOBIN = 0.001;
 // Azioni: solo durante la seduta del loro mercato, mai di notte. Crypto: 24 ore su 24.
 const STRATEGIE = {
   giornata: {nome: 'Azioni in seduta (Oops!)', breve: 'Azioni', stato: 'esercitazione', chip: 'bassa'},
-  crypto: {nome: 'Crypto, piani di 24 ore', breve: 'Crypto', stato: 'esercitazione', chip: 'bassa'},
+  crypto: {nome: 'Crypto, ordini ogni ora', breve: 'Crypto', stato: 'provata', chip: 'media'},
   // ritirate: il robot non compra più di notte; restano solo per chiudere le posizioni che hanno ancora
   usa_notte: {nome: 'Azioni USA, di notte (ritirata)', breve: 'USA notte', stato: 'ritirata', chip: 'media', mercato: 'usa', n: 10, ritirata: true},
   ita_notte: {nome: 'Azioni italiane, di notte (ritirata)', breve: 'Italia notte', stato: 'ritirata', chip: 'media', mercato: 'italia', n: 5, ritirata: true},
@@ -1912,6 +1947,15 @@ function robotMigra(v) {                                                        
   return senzaRitirate(R);
 }
 function evento(R, e) { R.registro = (R.registro || []).concat([e]).slice(-1000); }
+const ROBOT_MAX_BYTE = 235000;                                                    // l'archivio dell'app accetta documenti fino a 256 KiB (262.144 byte)
+function potaStato(R) {                                                           // il registro tiene fino a 1000 eventi, meno se lo stato si avvicina al limite
+  if (!R.registro || R.registro.length < 400) return false;
+  const n = JSON.stringify(R).length;
+  if (n <= ROBOT_MAX_BYTE) return false;
+  const medio = Math.max(100, JSON.stringify(R.registro).length / R.registro.length);
+  R.registro = R.registro.slice(Math.min(R.registro.length - 200, Math.ceil((n - ROBOT_MAX_BYTE) / medio) + 10));
+  return true;
+}
 const chiaveOp = e => [e.t, e.s, e.sym, e.azione, e.prezzo, e.nota].join('|');     // riconosce un'operazione già vista
 const dataRoma = d => d.toLocaleDateString('sv-SE', {timeZone: 'Europe/Rome'});
 const oraDi = t => { const d = new Date(t); return dataRoma(d) === dataRoma(new Date()) ? d.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Rome'}) : d.toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}); };
@@ -2053,18 +2097,32 @@ function robotGiornata(R, adesso) {
 }
 
 /* crypto: i piani di 24 ore */
-function pianiCrypto() {
-  const out = {};
-  for (const [s, x] of Object.entries((D.intraday && D.intraday.crypto) || {}))
+function pianiCrypto(R) {
+  const out = {}, O = D.intraday && D.intraday.ore, aperti = (R && R.conti.crypto.piani) || {};
+  for (const [s, x] of Object.entries((D.intraday && D.intraday.crypto) || {}))   // i due piani al giorno di prima: solo per chiudere quelli già in posizione
+    for (const p of (x.storia_piani || [])) { const k = `${s}|${p.regola}|${p.ora}`; if (aperti[k] && aperti[k].fase === 'dentro') out[k] = Object.assign({sym: s}, p); }
+  for (const [s, x] of Object.entries((O && O.crypto) || {}))                     // gli ordini orari degli ultimi 7 giorni, come sono andati
     for (const p of (x.storia_piani || [])) out[`${s}|${p.regola}|${p.ora}`] = Object.assign({sym: s}, p);
+  for (const [s, x] of Object.entries(LIVE.ordini || {}))                         // gli ordini dell'ora, rifatti da live.py
+    for (const p of (x.ordini || [])) {
+      const k = `${s}|${p.regola}|${p.ora}`;
+      if (out[k] || Object.values(aperti).some(r => r.sym === s && r.regola === p.regola && r.fase === 'dentro')) continue;   // una posizione alla volta per moneta e profondità
+      out[k] = Object.assign({sym: s}, p);
+    }
   return out;
 }
-function cryptoEntra(R, r, prezzo, quando, fonte) {
+const NOTE_REGOLA = {ribasso15: 'compra il ribasso leggero', ribasso20: 'compra il ribasso medio', ribasso30: 'compra il ribasso profondo', ribasso: 'compra il ribasso', rottura: 'compra la rottura'};
+const eRibasso = r => String(r.regola).startsWith('ribasso');
+const TENUTA_ORE = 24;                                                            // ore al massimo in posizione, dall'entrata
+function cryptoEntra(R, r, prezzo, quando, fonte, scade) {
   const C = R.conti.crypto, quota = ROBOT_CAPITALE / ROBOT_PIANI;
+  if (Object.values(C.piani).some(x => x !== r && x.sym === r.sym && x.regola === r.regola && x.fase === 'dentro')) { r.fase = 'saltato'; r.nota = 'posizione già aperta'; return; }
   if (C.cassa < quota - 1e-9) { r.fase = 'saltato'; r.nota = 'liquidità finita'; return; }
   C.cassa -= quota;
   Object.assign(r, {fase: 'dentro', prezzo_entrata: r6(prezzo), quando: isoN(quando), qty: quota * (1 - ROBOT_COSTO_CRYPTO) / prezzo, speso: quota, fonte_entrata: fonte});
-  evento(R, {t: isoN(quando), s: 'crypto', sym: r.sym, azione: 'compra', prezzo: r6(prezzo), importo: r6(quota), nota: r.regola === 'ribasso' ? 'compra il ribasso' : 'compra la rottura', fonte});
+  if (scade) r.scade = isoN(scade);
+  else if (r.regola !== 'ribasso' && r.regola !== 'rottura') r.scade = new Date(Date.parse(isoN(quando)) + TENUTA_ORE * 3600e3).toISOString();
+  evento(R, {t: isoN(quando), s: 'crypto', sym: r.sym, azione: 'compra', prezzo: r6(prezzo), importo: r6(quota), nota: NOTE_REGOLA[r.regola] || 'compra', fonte});
 }
 function cryptoEsce(R, r, prezzo, quando, fase, fonte) {
   const C = R.conti.crypto, incasso = r.qty * prezzo * (1 - ROBOT_COSTO_CRYPTO), rr = incasso / r.speso - 1;
@@ -2075,10 +2133,12 @@ function cryptoEsce(R, r, prezzo, quando, fase, fonte) {
     nota: {obiettivo: 'obiettivo raggiunto', protezione: 'protezione', scaduto: '24 ore passate', manuale: fonte}[fase] || fase, fonte});
 }
 function robotCrypto(R, adesso) {
-  const C = R.conti.crypto, dati = pianiCrypto();
+  const C = R.conti.crypto, dati = pianiCrypto(R);
   let cambiato = false;
   if (C.attiva) {
     const ora = adesso.toISOString();
+    for (const r of Object.values(C.piani))                                       // i piani del sistema vecchio (due al giorno) non si aprono più
+      if (r.fase === 'attesa' && (r.regola === 'ribasso' || r.regola === 'rottura')) { r.fase = 'annullato'; cambiato = true; }
     for (const [k, p] of Object.entries(dati)) {                                  // dalle candele orarie
       if (isoN(p.ora) < dalDi(R, 'crypto')) continue;
       let r = C.piani[k];
@@ -2086,29 +2146,29 @@ function robotCrypto(R, adesso) {
       if (PASSI[p.fase] <= PASSI[r.fase]) continue;
       if (r.fase === 'attesa') {
         if (p.fase === 'scaduto') { r.fase = 'scaduto'; cambiato = true; continue; }
-        cryptoEntra(R, r, p.prezzo_entrata, p.quando, 'candele orarie'); cambiato = true;
+        cryptoEntra(R, r, p.prezzo_entrata, p.quando, 'candele orarie', p.scade); cambiato = true;
         if (r.fase !== 'dentro') continue;
       }
       if (r.fase === 'dentro' && PASSI[p.fase] === 2 && p.fase !== 'scaduto') {
-        const uscita = p.fase === 'obiettivo' ? p.obiettivo : p.fase === 'protezione' ? p.protezione : p.prezzo_entrata * (1 + p.rendimento + 2 * ROBOT_COSTO_CRYPTO);
-        cryptoEsce(R, r, uscita, p.chiusura || p.fino, p.fase === 'scaduto_dentro' ? 'scaduto' : p.fase, 'candele orarie'); cambiato = true;
+        const uscita = p.prezzo_uscita || (p.fase === 'obiettivo' ? p.obiettivo : p.fase === 'protezione' ? p.protezione : p.prezzo_entrata * (1 + p.rendimento + 2 * ROBOT_COSTO_CRYPTO));
+        cryptoEsce(R, r, uscita, p.chiusura || p.scade || p.fino, p.fase === 'scaduto_dentro' ? 'scaduto' : p.fase, 'candele orarie'); cambiato = true;
       }
     }
     for (const r of Object.values(C.piani)) {                                     // dal vivo
       if (r.fase !== 'attesa' && r.fase !== 'dentro') continue;
-      const q = LIVE.q[r.sym], fresco = q && q.p && q.t && adesso - q.t * 1000 < 10 * 60e3, fino = isoN(r.fino);
+      const q = LIVE.q[r.sym], fresco = q && q.p && q.t && adesso - q.t * 1000 < 10 * 60e3, fino = isoN(r.fino), scade = isoN(r.scade || r.fino);
       if (r.fase === 'attesa') {
         if (ora >= fino) { r.fase = 'scaduto'; cambiato = true; continue; }
-        if (fresco && (r.regola === 'ribasso' ? q.p <= r.entrata : q.p >= r.entrata)) { cryptoEntra(R, r, q.p, ora, 'dal vivo'); cambiato = true; }
+        if (fresco && (eRibasso(r) ? q.p <= r.entrata : q.p >= r.entrata)) { cryptoEntra(R, r, q.p, ora, 'dal vivo'); cambiato = true; }
       }
       if (r.fase === 'dentro' && fresco) {
         if (q.p <= r.protezione) { cryptoEsce(R, r, q.p, ora, 'protezione', 'dal vivo'); cambiato = true; }
         else if (q.p >= r.obiettivo) { cryptoEsce(R, r, q.p, ora, 'obiettivo', 'dal vivo'); cambiato = true; }
-        else if (ora >= fino) { cryptoEsce(R, r, q.p, ora, 'scaduto', 'dal vivo'); cambiato = true; }
+        else if (ora >= scade) { cryptoEsce(R, r, q.p, ora, 'scaduto', 'dal vivo'); cambiato = true; }
       }
     }
   }
-  C.ops = C.ops.slice(-200);
+  C.ops = C.ops.slice(-30);                                                       // solo un ricordo: il registro ha tutto
   // si tolgono solo i piani chiusi già usciti dai dati (7 giorni): altrimenti tornerebbero come nuovi
   for (const [k, r] of Object.entries(C.piani)) {
     if (PASSI[r.fase] === 2 && !dati[k]) { delete C.piani[k]; cambiato = true; }
@@ -2135,7 +2195,7 @@ function posizioniAperte(R) {
   }
   for (const p of Object.values(R.conti.giornata.posizioni)) out.push({k: 'giornata', sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `in chiusura (${oraItaliana(mercatoDi(p.sym), 'chiude', p.d)})`, cur: mercatoDi(p.sym) === 'usa' ? '$' : '€', costo: R.costo});
   for (const r of Object.values(R.conti.crypto.piani)) if (r.fase === 'dentro') {
-    const fino = new Date(isoN(r.fino)).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'});
+    const fino = new Date(isoN(r.scade || r.fino)).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'});
     out.push({k: 'crypto', sym: r.sym, entrata: r.prezzo_entrata, ora: prezzoOra(r.sym, r.prezzo_entrata), quando: r.quando,
       esce: `sotto ${nf(r.protezione, dec(r.protezione))} o sopra ${nf(r.obiettivo, dec(r.obiettivo))}, entro ${fino}`, cur: '€', costo: 2 * ROBOT_COSTO_CRYPTO});
   }
@@ -2145,6 +2205,7 @@ function simboliRobot() {
   if (!ROBOT) return [];
   const out = new Set(), C = ROBOT.conti;
   for (const r of Object.values(C.crypto.piani)) if ((C.crypto.attiva && r.fase === 'attesa') || r.fase === 'dentro') out.add(r.sym);
+  if (C.crypto.attiva) Object.keys((D.intraday && D.intraday.ore && D.intraday.ore.crypto) || {}).forEach(s => out.add(s));
   for (const k of ['usa_notte', 'ita_notte']) if (C[k].aperta) C[k].aperta.titoli.forEach(s => out.add(s));
   if (C.giornata.attiva) Object.keys((D.giornata && D.giornata.candele) || {}).forEach(s => out.add(s));
   Object.values(C.giornata.posizioni).forEach(p => out.add(p.sym));
@@ -2162,7 +2223,7 @@ function robotPasso(R, adesso) {
   const ultimo = st[st.length - 1];
   if (!ultimo || ultimo.d !== oggi) { st.push(v); R.storico = st.slice(-400); cambiato = true; }
   else if (Object.keys(STRATEGIE).some(k => Math.abs((ultimo[k] || 0) - v[k]) > 0.5)) st[st.length - 1] = v;     // lo storico si salva ogni 10 minuti
-  return cambiato;
+  return potaStato(R) || cambiato;
 }
 function robotGiro() {
   if (!ROBOT) return;
@@ -2189,6 +2250,17 @@ function daChiedere(R, adesso) {                                                
     if (!x || !x.o || (chiuso && x.c == null && C.giornata.posizioni[s + '|' + p.d])) out.add(s);
   }
   return [...out].filter(s => !ROBOT_CHIESTI[s] || adesso - ROBOT_CHIESTI[s] > 4 * 60e3);
+}
+async function robotOrdini() {                                                    // live.py: gli ordini dell'ora, rifatti a ogni ora piena
+  if (!ROBOT || !ROBOT.conti.crypto.attiva || LIVE.fonte !== 'locale' || robotOrdini.va) return;
+  const slot = Math.floor((Date.now() / 1000 - 120) / 3600);                      // come live.py: due minuti dopo l'ora piena la candela è chiusa
+  if (LIVE.ordiniSlot === slot) return;
+  robotOrdini.va = true;
+  try {
+    const r = await fetch('/ordini', {cache: 'no-store'});
+    if (r.ok) { const j = await r.json(); LIVE.ordini = j.crypto || {}; if (Object.keys(LIVE.ordini).length) LIVE.ordiniSlot = slot; robotGiro(); }
+  } catch (e) {}
+  robotOrdini.va = false;
 }
 async function robotAperture() {                                                  // live.py: le aste e le sedute di oggi
   if (!ROBOT || LIVE.fonte !== 'locale' || robotAperture.va) return;
@@ -2244,8 +2316,10 @@ function robotModulo(primo) {
     <div style="margin-top:10px;display:grid;gap:6px">${Object.entries(STRATEGIE).filter(([, S]) => !S.ritirata).map(([k, S]) => `<label><input type="checkbox" id="rb-${k}" checked> ${S.nome} <span class="chip ${S.chip}">${S.stato}</span></label>`).join('')}</div>`;
 }
 function robotAttese() {
-  const ver = D.intraday && D.intraday.verifica, oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops');
-  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>azioni in seduta (Oops!)</b> ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione in media negli ultimi anni' : 'in perdita dopo i costi'}; <b>crypto</b> ${ver && ver.ribasso ? `${pc(ver.ribasso.tutto.media, 2)} e ${pc(ver.rottura.tutto.media, 2)} a operazione` : 'in perdita dopo i costi'}. Le azioni non si comprano di notte: la strategia di notte, che regge con costi bassi, è verificata nella sezione Dai libri e non fa più parte del robot. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
+  const oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops'), O = D.intraday && D.intraday.ore, vo = O && O.verifica;
+  const medie = vo ? O.livelli.map(l => vo[l.id].anno2.media) : [];
+  const crypto = vo ? `da ${pc(Math.min(...medie), 2)} a ${pc(Math.max(...medie), 2)} a operazione nel secondo anno, dopo i costi, con ordini che nella realtà potrebbero non eseguirsi sempre al livello (vedi la sezione Crypto)` : 'in perdita dopo i costi';
+  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>azioni in seduta (Oops!)</b> ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione in media negli ultimi anni' : 'in perdita dopo i costi'}; <b>crypto, ordini ogni ora</b> ${crypto}. Le azioni non si comprano di notte: la strategia di notte, che regge con costi bassi, è verificata nella sezione Dai libri e non fa più parte del robot. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
 }
 const quandoBreve = t => new Date(t).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 function robotHTML() {
@@ -2502,6 +2576,7 @@ async function avviaLive() {
     giri++;
     if (giri % 30 === 0) robotGiro();
     if (giri % 60 === 1) robotAperture();
+    if (giri % 15 === 3) robotOrdini();
     if (!LIVE.fonte || document.hidden) return;
     if (Date.now() - LIVE.ultimo >= (LIVE.fonte === 'locale' ? 5000 : 30000)) giroLive();
   }, 1000);

@@ -203,6 +203,102 @@ class Stato(unittest.TestCase):
         self.assertNotIn("silenzio", json.dumps(dati))
 
 
+def ordine(rid="ribasso20", ora="2030-01-01 20:00 UTC", fase="attesa", **kw):
+    """Un ordine orario come lo dà intraday.analizza_ore: vale un'ora, entrata 97, protezione 94, obiettivo 100."""
+    d = {"regola": rid, "ora": ora, "fino": "2030-01-01 21:00 UTC", "entrata": 97.0, "protezione": 94.0,
+         "obiettivo": 100.0, "fase": fase}
+    d.update(kw)
+    return d
+
+
+def crypto_ore(ordini=(), posizioni=(), ora="2030-01-01 20:00 UTC"):
+    return {"BTC-EUR": {"prezzo": 100.0, "prezzo_ora": ora, "ora": ora, "fino": "2030-01-01 21:00 UTC",
+                        "ordini": {o["regola"]: o for o in ordini}, "posizioni": list(posizioni), "storia_piani": []}}
+
+
+class OrdiniOrari(unittest.TestCase):
+    def test_un_ordine_orario_vale_un_ora_poi_si_esce_al_piu_tardi_dopo_24_ore(self):
+        p = dict(ordine(), sym="BTC-EUR", attuale=True)
+        self.assertEqual(L.avanza(p, 96.8, ADESSO), ["entrata"])
+        self.assertEqual((p["fase"], p["prezzo_entrata"]), ("dentro", 96.8))
+        self.assertEqual(p["scade"], I.utc(ADESSO + datetime.timedelta(hours=I.TENUTA)))
+        dopo = ADESSO + datetime.timedelta(hours=5)             # l'ordine è scaduto da un pezzo, la posizione no
+        self.assertEqual(L.avanza(p, 98.0, dopo), [])
+        self.assertEqual(p["fase"], "dentro")
+        self.assertEqual(L.avanza(p, 98.0, ADESSO + datetime.timedelta(hours=I.TENUTA, minutes=1)), ["scadenza"])
+        self.assertEqual(p["fase"], "scaduto_dentro")
+        self.assertAlmostEqual(p["rendimento"], 98.0 / 96.8 - 1 - 2 * I.COSTO, 6)
+
+    def test_l_ordine_che_non_scatta_in_un_ora_scade_senza_operazione(self):
+        p = dict(ordine(), sym="BTC-EUR", attuale=True)
+        self.assertEqual(L.avanza(p, 99.0, ADESSO + datetime.timedelta(hours=2)), [])
+        self.assertEqual(p["fase"], "scaduto")
+
+    def test_il_ribasso_orario_entra_al_prezzo_se_apre_sotto_il_livello(self):
+        p = dict(ordine("ribasso30"), sym="BTC-EUR", attuale=True)
+        self.assertEqual(L.avanza(p, 95.0, ADESSO), ["entrata"])
+        self.assertEqual(p["prezzo_entrata"], 95.0)
+        self.assertEqual(L.avanza(p, 93.9, ADESSO), ["protezione"])
+        self.assertAlmostEqual(p["rendimento"], 94.0 / 95.0 - 1 - 2 * I.COSTO, 6)
+
+    def test_da_seguire_prende_gli_ordini_di_adesso_e_le_posizioni_aperte(self):
+        aperta = ordine("ribasso15", ora="2030-01-01 17:00 UTC", fase="dentro", prezzo_entrata=96.9,
+                        scade="2030-01-02 17:30 UTC")
+        seguiti = L.da_seguire(crypto_ore([ordine("ribasso20"), ordine("ribasso30")], [aperta]))
+        self.assertEqual(sorted(k[1] for k in seguiti), ["ribasso15", "ribasso20", "ribasso30"])
+        self.assertTrue(seguiti[("BTC-EUR", "ribasso20", "2030-01-01 20:00 UTC")]["attuale"])
+        self.assertFalse(seguiti[("BTC-EUR", "ribasso15", "2030-01-01 17:00 UTC")]["attuale"])
+
+    def test_stato_segue_gli_ordini_e_avvisa_all_entrata_dopo_l_avvio(self):
+        s = L.Stato()
+        s.unisci(crypto_ore([ordine("ribasso15"), ordine("ribasso20"), ordine("ribasso30")]), {})
+        s.controlla_livelli("BTC-EUR", 99.0, ADESSO)
+        self.assertEqual(s.eventi, [])
+        s.controlla_livelli("BTC-EUR", 96.9, ADESSO)            # sotto l'entrata (97): scattano tutti e tre
+        self.assertEqual(sorted(e["regola"] for e in s.eventi), ["ribasso15", "ribasso20", "ribasso30"])
+        self.assertEqual({e["evento"] for e in s.eventi}, {"entrata"})
+
+    def test_all_avvio_le_posizioni_gia_dentro_non_fanno_avviso(self):
+        dentro = ordine("ribasso20", ora="2030-01-01 17:00 UTC", fase="dentro", prezzo_entrata=96.9,
+                        scade="2030-01-02 17:30 UTC")
+        s = L.Stato()
+        s.unisci(crypto_ore([ordine("ribasso15")], [dentro]), {})
+        s.controlla_livelli("BTC-EUR", 100.5, ADESSO)           # l'obiettivo di una posizione che c'era già: tabella sì, avviso no
+        self.assertEqual(s.eventi, [])
+        self.assertEqual(s.seguiti[("BTC-EUR", "ribasso20", "2030-01-01 17:00 UTC")]["fase"], "obiettivo")
+
+    def test_il_ricalcolo_non_perde_una_posizione_entrata_dal_vivo(self):
+        s = L.Stato()
+        s.unisci(crypto_ore([ordine("ribasso15")]), {})
+        s.controlla_livelli("BTC-EUR", 96.9, ADESSO)            # dentro dal vivo: le candele ancora non lo sanno
+        s.unisci(crypto_ore([ordine("ribasso15", ora="2030-01-01 21:00 UTC", fino="2030-01-01 22:00 UTC")],
+                            ora="2030-01-01 21:00 UTC"), {})
+        vecchia = s.seguiti[("BTC-EUR", "ribasso15", "2030-01-01 20:00 UTC")]
+        self.assertEqual(vecchia["fase"], "dentro")
+        self.assertFalse(vecchia["attuale"])
+        self.assertTrue(s.seguiti[("BTC-EUR", "ribasso15", "2030-01-01 21:00 UTC")]["attuale"])
+        s.controlla_livelli("BTC-EUR", 100.2, ADESSO)           # esce all'obiettivo dal vivo
+        self.assertEqual([e["evento"] for e in s.eventi if e["evento"] != "entrata"], ["obiettivo"])
+
+    def test_un_ordine_scaduto_senza_entrata_sparisce_al_ricalcolo(self):
+        s = L.Stato()
+        s.unisci(crypto_ore([ordine("ribasso15")]), {})
+        s.unisci(crypto_ore([ordine("ribasso15", ora="2030-01-01 21:00 UTC", fino="2030-01-01 22:00 UTC")],
+                            ora="2030-01-01 21:00 UTC"), {})
+        self.assertEqual(list(s.seguiti), [("BTC-EUR", "ribasso15", "2030-01-01 21:00 UTC")])
+
+    def test_aggiorna_piani_usa_gli_ordini_orari(self):
+        r = {"crypto": crypto_ore([ordine("ribasso20")]), "verifica": {"ribasso20": {"anno2": {"n": 1}}}}
+        s = L.Stato()
+        with mock.patch.object(L.intraday, "analizza_ore", return_value=r) as m:
+            s.aggiorna_piani()
+        self.assertFalse(m.call_args[1]["kraken"])               # niente controllo su Kraken a ogni ora
+        self.assertEqual(list(s.seguiti), [("BTC-EUR", "ribasso20", "2030-01-01 20:00 UTC")])
+        self.assertEqual(s.piani["BTC-EUR"]["ora"], "2030-01-01 20:00 UTC")
+        self.assertIsNone(s.piani["BTC-EUR"]["storia"])          # il formato orario non ha la "storia" dei due piani
+        self.assertIn("ribasso20", json.loads(s.json())["verifica"])
+
+
 class Kraken(unittest.TestCase):
     def test_legge_tutte_le_coppie_con_le_chiavi_di_kraken(self):
         result = {}
