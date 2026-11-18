@@ -7,10 +7,14 @@ Le regole sono quelle dei libri e degli studi (vedi REGOLE), verificate da libri
 candele giornaliere: nessuna resta in guadagno dopo i costi in entrambi i periodi. Il piano serve a
 esercitarsi con una regola precisa e con i numeri veri davanti, non perché guadagni.
 
-Il piano usa la regola "Oops!" di Larry Williams (Long-Term Secrets to Short-Term Trading, 1999):
+Due piani. Il primo usa la regola "Oops!" di Larry Williams (Long-Term Secrets to Short-Term Trading, 1999):
 se la seduta apre sotto il minimo della seduta prima, si compra quando il prezzo risale a quel
 minimo (ordine "stop") e si vende in chiusura. È la regola andata più vicina al pareggio, uguale nei
 due periodi. Per ogni titolo: il livello, quante volte è successo nella sua storia e com'è andata.
+Il secondo è l'unica regola di breve periodo che regge, ma non è in giornata: il "momento notturno"
+(Lou, Polk, Skouras 2019), i 10 titoli USA con le notti migliori delle ultime 21, comprati in
+chiusura e venduti all'apertura dopo. Regge solo con costi molto bassi (fino a 0,02 % tra entrata
+e uscita, ordini sulle aste di chiusura e apertura): libri.py lo verifica su 25 anni.
 Solo libreria standard.
 """
 
@@ -148,7 +152,71 @@ def piani(log=print):
                         "minimo": round(L[-1], 4), "massimo": round(H[-1], 4), "atr": round(a14, 4),
                         "distanza": round(L[-1] / C[-1] - 1, 4), "apertura": APERTURA[m], "vendi_entro": CHIUSURA[m],
                         "scambi": round(scambi), "storia": storia(d, O, H, L, C, cfg["costo"] / 100)})
-    return {"regola": "oops", "regole": REGOLE, "piani": out, "costi": {m: settimana.MERCATI[m]["costo"] / 100 for m in PER_MERCATO}}
+    try:
+        notte = piano_notte(log)
+    except Exception as e:                                       # rete o dati: il resto del piano resta
+        log("[giornata] piano della notte saltato: %s" % e)
+        notte = None
+    return {"regola": "oops", "regole": REGOLE, "piani": out, "costi": {m: settimana.MERCATI[m]["costo"] / 100 for m in PER_MERCATO},
+            "notte": notte}
+
+
+NOTTI = 21            # notti su cui si misura il "momento notturno"
+TOP_NOTTE = 10        # quanti titoli si comprano
+SOGLIA_COSTI = 0.0002 # regge (in entrambe le metà, t >= 2) con costi fino a 0,02 % tra entrata e uscita (libri.py)
+
+
+def notti(sym):
+    """I rendimenti notturni (logaritmo di apertura / chiusura del giorno prima) di un titolo, compresa
+    l'apertura di oggi se la seduta è già iniziata. -> (date, rendimenti, ultima chiusura, data della chiusura)."""
+    import math
+    text = simula.fetch_max(sym)
+    res = json.loads(text)["chart"]["result"][0]
+    meta, q = res.get("meta", {}), res["indicators"]["quote"][0]
+    off = meta.get("gmtoffset", 0)
+    adj = (res["indicators"].get("adjclose") or [{}])[0].get("adjclose") or q["close"]
+    righe = {}
+    for t, o, c, a in zip(res["timestamp"], q["open"], q["close"], adj):
+        if o is None or o <= 0:
+            continue
+        d = datetime.datetime.fromtimestamp(t + off, datetime.timezone.utc).strftime("%Y-%m-%d")
+        f = (a / c) if (a and c) else 1.0
+        righe[d] = (o * f, a if (a and c) else None)                    # apertura corretta, chiusura (None se in corso)
+    giorni = sorted(righe)
+    date, rend = [], []
+    for g0, g1 in zip(giorni, giorni[1:]):
+        c0, o1 = righe[g0][1], righe[g1][0]
+        if c0 and o1:
+            date.append(g1)
+            rend.append(math.log(o1 / c0))
+    chiuse = [g for g in giorni if righe[g][1]]
+    return date, rend, (righe[chiuse[-1]][1] if chiuse else None), (chiuse[-1] if chiuse else None)
+
+
+def piano_notte(log=print, adesso=None):
+    """Il momento notturno (Lou, Polk, Skouras 2019): i TOP_NOTTE titoli USA con la media più alta dei
+    rendimenti delle ultime NOTTI notti; si comprano in chiusura e si vendono all'apertura dopo."""
+    righe = []
+    for sym in settimana.MERCATI["usa"]["universo"]:
+        try:
+            date, rend, chiusura, giorno = notti(sym)
+        except (simula.SimError, ValueError, KeyError, OSError) as e:
+            log("[giornata] %s saltato: %s" % (sym, e))
+            continue
+        if len(rend) > NOTTI and chiusura:
+            m = sum(rend[-NOTTI:]) / NOTTI
+            righe.append({"symbol": sym, "media_notte": round(m, 6), "ultima_notte": date[-1], "chiusura": round(chiusura, 4),
+                          "data_chiusura": giorno, "notti_su": round(sum(1 for x in rend[-NOTTI:] if x > 0) / NOTTI, 3)})
+    righe.sort(key=lambda r: -r["media_notte"])
+    ny = adesso or settimana.now_in("America/New_York")
+    oggi = ny.strftime("%Y-%m-%d")
+    aperta_oggi = oggi in settimana.trading_days_after((ny - datetime.timedelta(days=7)).strftime("%Y-%m-%d"), 10, "usa")
+    compra = oggi if aperta_oggi and (ny.hour, ny.minute) < (15, 50) else settimana.trading_days_after(oggi, 1, "usa")[0]
+    vendi = settimana.trading_days_after(compra, 1, "usa")[0]
+    return {"titoli": righe[:TOP_NOTTE], "notti": NOTTI, "compra": compra, "vendi": vendi, "candidati": len(righe),
+            "ordini": {"compra": "al prezzo di chiusura (MOC), entro le 21:50 ora italiana",
+                       "vendi": "al prezzo di apertura (MOO), entro le 15:28 ora italiana"},
+            "soglia_costi": SOGLIA_COSTI}
 
 
 def main():
@@ -159,6 +227,13 @@ def main():
         print("  %-8s %-6s chiusura %10.3f  livello %10.3f (%+.1f%%)  storia: %d volte, %.0f%% in guadagno, media %+.2f%% dopo i costi" % (
             p["symbol"], p["mercato"], p["chiusura"], p["minimo"], 100 * p["distanza"], s.get("n", 0),
             100 * s.get("p_gain", 0), 100 * s.get("media", 0)))
+    n = r.get("notte")
+    if n:
+        print("\nMOMENTO NOTTURNO: compra alla chiusura del %s, vendi all'apertura del %s (solo con costi fino a %.2f %%)" % (
+            n["compra"], n["vendi"], 100 * n["soglia_costi"]))
+        for t in n["titoli"]:
+            print("  %-6s media delle ultime %d notti %+.3f %% · in salita %2.0f %% delle notti · chiusura %s" % (
+                t["symbol"], n["notti"], 100 * t["media_notte"], 100 * t["notti_su"], t["chiusura"]))
     return 0
 
 

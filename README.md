@@ -251,6 +251,30 @@ La sezione mostra il verdetto, il perché, il piano Oops! per la prossima seduta
 scambiati (livello, orari, storia della regola su ogni titolo) e un gioco: 240 giornate vere di
 azioni USA, ora per ora, in cui decidi entrata, protezione e obiettivo e vedi com'è andata.
 
+### Di notte: la sola regola breve che regge (momento notturno)
+
+Cercando un algoritmo per guadagnare in giornata sono state provate anche le strategie pubblicate di
+recente: ORB a 60 minuti sui titoli "in gioco" (volume della prima ora 1,5 volte la media; Zarattini
+e Aziz 2023-24) e la "zona di rumore" sugli indici USA (Zarattini, Barbon e Aziz 2024), su azioni e
+crypto. Nessuna guadagna, nemmeno con costi bassi (`libri.py`, prova "recenti").
+
+L'unica regola breve che regge è il contrario dell'intraday: il **momento notturno** (Lou, Polk e
+Skouras 2019). Ogni giorno i 10 titoli USA con la media più alta dei rendimenti delle ultime 21
+notti, comprati in chiusura (ordine MOC) e venduti all'apertura del giorno dopo (ordine MOO). Su 25
+anni (`libri.py`, prova "momento_notte"):
+
+| Costi tra entrata e uscita | L'anno, dal 2001 | L'anno, dal 2016 | Calo massimo | Regge |
+|---|---|---|---|---|
+| 0,02 % | +23 % | +15 % | -28 % | sì |
+| 0,05 % | +14 % | +6 % | -35 % | no (t 1,6 nella seconda metà) |
+| 0,10 % | +1 % | -6 % | -72 % | no |
+
+In guadagno 22 anni su 26 (con 0,02 %), il peggiore il 2022 (-18 %); con 5 o 20 titoli, 10 o 63
+notti cambia poco. Funziona solo con costi da aste e commissioni dello 0,01 % per ordine (almeno
+5.000 € per titolo con una commissione minima di 0,50 €); con una commissione fissa di 5-10 € su
+cifre piccole perde. Titoli di oggi (numeri un po' ottimisti), tasse escluse, rischio delle notizie
+notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la mostra in In giornata.
+
 ## Quotazioni in tempo reale nell'app
 
 L'app pubblicata si rigenera alle 18:10 e alle 22:10; i prezzi in tempo reale arrivano in due modi,
@@ -302,7 +326,7 @@ intraday ha guadagnato in media: è uno strumento per seguire i piani, non un mo
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata e live, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte e live, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

@@ -23038,5 +23038,516 @@
     ]
    ]
   }
+ ],
+ "momento_notte": {
+  "livelli": [
+   {
+    "costo": 0.0,
+    "anno": 0.2943,
+    "calo": -0.2498,
+    "anno_dopo": 0.2077,
+    "calo_dopo": -0.2498,
+    "prima": {
+     "n": 3140,
+     "p_gain": 0.5904,
+     "media": 0.0014,
+     "extra": 0.0014,
+     "t": 5.64,
+     "mesi": 151
+    },
+    "dopo": {
+     "n": 3140,
+     "p_gain": 0.5809,
+     "media": 0.00075,
+     "extra": 0.00075,
+     "t": 4.69,
+     "mesi": 151
+    },
+    "meta": "2014-05-23",
+    "regge": true
+   },
+   {
+    "costo": 0.0002,
+    "anno": 0.2307,
+    "calo": -0.2795,
+    "anno_dopo": 0.1484,
+    "calo_dopo": -0.2795,
+    "prima": {
+     "n": 3140,
+     "p_gain": 0.5764,
+     "media": 0.0012,
+     "extra": 0.0012,
+     "t": 4.77,
+     "mesi": 151
+    },
+    "dopo": {
+     "n": 3140,
+     "p_gain": 0.5662,
+     "media": 0.00055,
+     "extra": 0.00055,
+     "t": 3.45,
+     "mesi": 151
+    },
+    "meta": "2014-05-23",
+    "regge": true
+   },
+   {
+    "costo": 0.0005,
+    "anno": 0.1412,
+    "calo": -0.3537,
+    "anno_dopo": 0.0648,
+    "calo_dopo": -0.3537,
+    "prima": {
+     "n": 3140,
+     "p_gain": 0.557,
+     "media": 0.0009,
+     "extra": 0.0009,
+     "t": 3.46,
+     "mesi": 151
+    },
+    "dopo": {
+     "n": 3140,
+     "p_gain": 0.5414,
+     "media": 0.00025,
+     "extra": 0.00025,
+     "t": 1.58,
+     "mesi": 151
+    },
+    "meta": "2014-05-23",
+    "regge": false
+   },
+   {
+    "costo": 0.0008,
+    "anno": 0.0581,
+    "calo": -0.48,
+    "anno_dopo": -0.0128,
+    "calo_dopo": -0.4466,
+    "prima": {
+     "n": 3140,
+     "p_gain": 0.5373,
+     "media": 0.0006,
+     "extra": 0.0006,
+     "t": 2.14,
+     "mesi": 151
+    },
+    "dopo": {
+     "n": 3140,
+     "p_gain": 0.5169,
+     "media": -5e-05,
+     "extra": -5e-05,
+     "t": -0.28,
+     "mesi": 151
+    },
+    "meta": "2014-05-23",
+    "regge": false
+   },
+   {
+    "costo": 0.001,
+    "anno": 0.0061,
+    "calo": -0.7156,
+    "anno_dopo": -0.0613,
+    "calo_dopo": -0.5561,
+    "prima": {
+     "n": 3140,
+     "p_gain": 0.5258,
+     "media": 0.0004,
+     "extra": 0.0004,
+     "t": 1.27,
+     "mesi": 151
+    },
+    "dopo": {
+     "n": 3140,
+     "p_gain": 0.5,
+     "media": -0.00025,
+     "extra": -0.00025,
+     "t": -1.53,
+     "mesi": 151
+    },
+    "meta": "2014-05-23",
+    "regge": false
+   }
+  ],
+  "anni_002": {
+   "2001": 0.0425,
+   "2002": 0.3658,
+   "2003": 0.1988,
+   "2004": 0.2863,
+   "2005": 0.4395,
+   "2006": 0.2639,
+   "2007": 0.329,
+   "2008": 0.4,
+   "2009": 1.2611,
+   "2010": 0.3225,
+   "2011": -0.0302,
+   "2012": -0.0039,
+   "2013": 0.4779,
+   "2014": 0.1393,
+   "2015": 0.0887,
+   "2016": -0.0345,
+   "2017": 0.2639,
+   "2018": 0.0902,
+   "2019": 0.1409,
+   "2020": 0.6247,
+   "2021": 0.1289,
+   "2022": -0.1805,
+   "2023": 0.0479,
+   "2024": 0.3412,
+   "2025": 0.2098,
+   "2026": 0.1562
+  },
+  "sensibilita": [
+   {
+    "notti": 10,
+    "titoli": 5,
+    "prima": 0.00136,
+    "dopo": 0.00072
+   },
+   {
+    "notti": 10,
+    "titoli": 10,
+    "prima": 0.001,
+    "dopo": 0.00063
+   },
+   {
+    "notti": 10,
+    "titoli": 20,
+    "prima": 0.00073,
+    "dopo": 0.00047
+   },
+   {
+    "notti": 21,
+    "titoli": 5,
+    "prima": 0.00159,
+    "dopo": 0.00075
+   },
+   {
+    "notti": 21,
+    "titoli": 10,
+    "prima": 0.00109,
+    "dopo": 0.00059
+   },
+   {
+    "notti": 21,
+    "titoli": 20,
+    "prima": 0.0007,
+    "dopo": 0.00046
+   },
+   {
+    "notti": 63,
+    "titoli": 5,
+    "prima": 0.00187,
+    "dopo": 0.00068
+   },
+   {
+    "notti": 63,
+    "titoli": 10,
+    "prima": 0.00126,
+    "dopo": 0.00057
+   },
+   {
+    "notti": 63,
+    "titoli": 20,
+    "prima": 0.00079,
+    "dopo": 0.00043
+   }
+  ],
+  "notti": 21,
+  "titoli": 10,
+  "riferimento": {
+   "lordo_notte": 0.000404
+  },
+  "da": "2001-11-30",
+  "a": "2026-11-16",
+  "soglia": 0.0002
+ },
+ "recenti": [
+  {
+   "gruppo": "Azioni USA",
+   "nome": "ORB 60 minuti sui titoli in gioco, solo acquisti",
+   "fonte": "Zarattini, Aziz 2023-24",
+   "costo": 0.001,
+   "basso": 0.0002,
+   "normale": {
+    "prima": {
+     "n": 1951,
+     "p_gain": 0.1492,
+     "media": -0.00095,
+     "extra": -0.00095,
+     "t": -8.03,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 2003,
+     "p_gain": 0.1403,
+     "media": -0.00126,
+     "extra": -0.00126,
+     "t": -8.81,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "bassi": {
+    "prima": {
+     "n": 1951,
+     "p_gain": 0.1522,
+     "media": -0.00015,
+     "extra": -0.00015,
+     "t": -1.23,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 2003,
+     "p_gain": 0.1443,
+     "media": -0.00046,
+     "extra": -0.00046,
+     "t": -3.39,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "da": "2024-01-12",
+   "meta": "2025-06-16",
+   "a": "2026-11-16"
+  },
+  {
+   "gruppo": "Azioni USA",
+   "nome": "ORB 60 minuti sui titoli in gioco, anche allo scoperto",
+   "fonte": "Zarattini, Aziz 2023-24",
+   "costo": 0.001,
+   "basso": 0.0002,
+   "normale": {
+    "prima": {
+     "n": 3972,
+     "p_gain": 0.146,
+     "media": -0.00102,
+     "extra": -0.00102,
+     "t": -8.22,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 3898,
+     "p_gain": 0.1491,
+     "media": -0.00109,
+     "extra": -0.00109,
+     "t": -7.92,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "bassi": {
+    "prima": {
+     "n": 3972,
+     "p_gain": 0.1493,
+     "media": -0.00022,
+     "extra": -0.00022,
+     "t": -1.64,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 3898,
+     "p_gain": 0.1519,
+     "media": -0.00029,
+     "extra": -0.00029,
+     "t": -2.32,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "da": "2024-01-12",
+   "meta": "2025-06-17",
+   "a": "2026-11-16"
+  },
+  {
+   "gruppo": "Indici USA",
+   "nome": "Zona di rumore, solo acquisti",
+   "fonte": "Zarattini, Barbon, Aziz 2024",
+   "costo": 0.001,
+   "basso": 0.0002,
+   "normale": {
+    "prima": {
+     "n": 479,
+     "p_gain": 0.3299,
+     "media": -0.00085,
+     "extra": -0.00085,
+     "t": -1.25,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 466,
+     "p_gain": 0.3112,
+     "media": -0.00096,
+     "extra": -0.00096,
+     "t": -4.84,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "bassi": {
+    "prima": {
+     "n": 479,
+     "p_gain": 0.4154,
+     "media": -5e-05,
+     "extra": -5e-05,
+     "t": 0.17,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 466,
+     "p_gain": 0.4227,
+     "media": -0.00016,
+     "extra": -0.00016,
+     "t": -0.82,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "da": "2024-01-18",
+   "meta": "2025-06-26",
+   "a": "2026-11-11"
+  },
+  {
+   "gruppo": "Indici USA",
+   "nome": "Zona di rumore, anche allo scoperto",
+   "fonte": "Zarattini, Barbon, Aziz 2024",
+   "costo": 0.001,
+   "basso": 0.0002,
+   "normale": {
+    "prima": {
+     "n": 955,
+     "p_gain": 0.3257,
+     "media": -0.00087,
+     "extra": -0.00087,
+     "t": -3.83,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 1002,
+     "p_gain": 0.2844,
+     "media": -0.00108,
+     "extra": -0.00108,
+     "t": -6.21,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "bassi": {
+    "prima": {
+     "n": 955,
+     "p_gain": 0.4042,
+     "media": -7e-05,
+     "extra": -7e-05,
+     "t": -0.57,
+     "mesi": 18
+    },
+    "dopo": {
+     "n": 1002,
+     "p_gain": 0.3733,
+     "media": -0.00028,
+     "extra": -0.00028,
+     "t": -1.53,
+     "mesi": 18
+    },
+    "regge": false
+   },
+   "da": "2024-01-12",
+   "meta": "2025-06-18",
+   "a": "2026-11-16"
+  },
+  {
+   "gruppo": "Crypto",
+   "nome": "ORB 60 minuti sulle crypto in gioco, solo acquisti",
+   "fonte": "Zarattini, Aziz 2023-24",
+   "costo": 0.004,
+   "basso": 0.002,
+   "normale": {
+    "prima": {
+     "n": 243,
+     "p_gain": 0.0988,
+     "media": -0.00529,
+     "extra": -0.00529,
+     "t": -4.66,
+     "mesi": 12
+    },
+    "dopo": {
+     "n": 244,
+     "p_gain": 0.1189,
+     "media": -0.00363,
+     "extra": -0.00363,
+     "t": -4.05,
+     "mesi": 13
+    },
+    "regge": false
+   },
+   "bassi": {
+    "prima": {
+     "n": 243,
+     "p_gain": 0.107,
+     "media": -0.00329,
+     "extra": -0.00329,
+     "t": -2.91,
+     "mesi": 12
+    },
+    "dopo": {
+     "n": 244,
+     "p_gain": 0.1189,
+     "media": -0.00163,
+     "extra": -0.00163,
+     "t": -2.23,
+     "mesi": 13
+    },
+    "regge": false
+   },
+   "da": "2024-12-04",
+   "meta": "2025-11-26",
+   "a": "2026-11-15"
+  },
+  {
+   "gruppo": "Crypto",
+   "nome": "Zona di rumore, solo acquisti",
+   "fonte": "Zarattini, Barbon, Aziz 2024",
+   "costo": 0.004,
+   "basso": 0.002,
+   "normale": {
+    "prima": {
+     "n": 5759,
+     "p_gain": 0.1849,
+     "media": -0.00419,
+     "extra": -0.00419,
+     "t": -10.07,
+     "mesi": 12
+    },
+    "dopo": {
+     "n": 5409,
+     "p_gain": 0.1649,
+     "media": -0.00358,
+     "extra": -0.00358,
+     "t": -6.7,
+     "mesi": 13
+    },
+    "regge": false
+   },
+   "bassi": {
+    "prima": {
+     "n": 5759,
+     "p_gain": 0.2344,
+     "media": -0.00219,
+     "extra": -0.00219,
+     "t": -5.44,
+     "mesi": 12
+    },
+    "dopo": {
+     "n": 5409,
+     "p_gain": 0.2241,
+     "media": -0.00158,
+     "extra": -0.00158,
+     "t": -3.12,
+     "mesi": 13
+    },
+    "regge": false
+   },
+   "da": "2024-12-04",
+   "meta": "2025-11-21",
+   "a": "2026-11-17"
+  }
  ]
 }

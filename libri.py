@@ -427,6 +427,189 @@ def prova_giornata(dati, log):
     return out, notte
 
 
+def sedute_orarie(path, crypto):
+    """Candele orarie con il volume, raggruppate per seduta (azioni USA: 7 candele; crypto: giorno UTC, 24)."""
+    res = json.load(open(path))["chart"]["result"][0]
+    q, letto = res["indicators"]["quote"][0], os.path.getmtime(path)
+    vol = q.get("volume") or [0] * len(res["timestamp"])
+    B = [(t, o, h, l, c, v or 0) for t, o, h, l, c, v in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"], vol)
+         if None not in (o, h, l, c) and t + 3600 <= letto and (t % 3600 == 0 if crypto else t % 1800 == 0)]
+    sess = {}
+    for b in B:
+        dt = datetime.datetime.fromtimestamp(b[0] - (0 if crypto else 5 * 3600), datetime.timezone.utc)
+        sess.setdefault(dt.strftime("%Y-%m-%d"), []).append(b)
+    n = 24 if crypto else 7
+    return [(d, v) for d, v in sorted(sess.items()) if len(v) == n]
+
+
+def orb_in_gioco(dati, top, rvol_min=1.5):
+    """ORB a 60 minuti sui titoli "in gioco" (Zarattini, Aziz 2023-24): volume della prima ora almeno 1,5
+    volte la media delle 14 sedute prima, i `top` con il rapporto più alto; direzione della prima ora;
+    entrata alla sua chiusura, protezione a 0,1 ATR (14 sedute), uscita in chiusura. -> (lunghi, corti)."""
+    per_giorno = {}
+    for s, S in dati.items():
+        vol1 = [v[0][5] for _, v in S]
+        for i in range(15, len(S)):
+            d, bars = S[i]
+            media = float(np.mean(vol1[i - 14:i]))
+            prev = [S[j][1] for j in range(i - 14, i)]
+            tr = [max(max(b[2] for b in prev[j]) - min(b[3] for b in prev[j]), abs(max(b[2] for b in prev[j]) - prev[j - 1][-1][4]),
+                      abs(min(b[3] for b in prev[j]) - prev[j - 1][-1][4])) for j in range(1, len(prev))]
+            a = float(np.mean(tr)) if tr else 0.0
+            if media > 0 and a > 0 and vol1[i] / media >= rvol_min:
+                per_giorno.setdefault(d, []).append((vol1[i] / media, s, bars, a))
+    lunghi, corti = [], []
+    for d, L in per_giorno.items():
+        for _, s, bars, a in sorted(L, key=lambda x: -x[0])[:top]:
+            o, e = bars[0][1], bars[0][4]
+            if e == o:
+                continue
+            lungo = e > o
+            stop, uscita = (e - 0.1 * a if lungo else e + 0.1 * a), bars[-1][4]
+            for b in bars[1:]:
+                if (lungo and b[1] <= stop) or (not lungo and b[1] >= stop):
+                    uscita = b[1]
+                    break
+                if (lungo and b[3] <= stop) or (not lungo and b[2] >= stop):
+                    uscita = stop
+                    break
+            (lunghi if lungo else corti).append((d, uscita / e - 1 if lungo else e / uscita - 1))
+    return lunghi, corti
+
+
+def zona_rumore(S, scoperto):
+    """La zona di rumore (Zarattini, Barbon, Aziz 2024): confini = max/min(apertura, chiusura di ieri) +- la
+    media, sulle 14 sedute prima, del movimento dall'apertura alla stessa ora; si entra quando una chiusura
+    oraria esce dai confini, si esce oltre max(confine, VWAP) o in chiusura. -> [(data, rendimento lordo)]."""
+    out, n = [], len(S[0][1])
+    for i in range(15, len(S)):
+        d, bars = S[i]
+        O, Cp = bars[0][1], S[i - 1][1][-1][4]
+        sig = [float(np.mean([abs(S[j][1][k][4] / S[j][1][0][1] - 1) for j in range(i - 14, i)])) for k in range(n)]
+        pv = vv = 0.0
+        pos, entr = 0, None
+        for k in range(n - 1):
+            b = bars[k]
+            pv += (b[2] + b[3] + b[4]) / 3 * max(b[5], 1)
+            vv += max(b[5], 1)
+            U, L, c = max(O, Cp) * (1 + sig[k]), min(O, Cp) * (1 - sig[k]), b[4]
+            if pos == 1 and c < max(U, pv / vv):
+                out.append((d, c / entr - 1))
+                pos = 0
+            elif pos == -1 and c > min(L, pv / vv):
+                out.append((d, entr / c - 1))
+                pos = 0
+            if pos == 0 and c > U:
+                pos, entr = 1, c
+            elif pos == 0 and scoperto and c < L:
+                pos, entr = -1, c
+        if pos:
+            out.append((d, bars[-1][4] / entr - 1 if pos == 1 else entr / bars[-1][4] - 1))
+    return out
+
+
+def prova_recenti(log):
+    """Le strategie intraday pubblicate di recente, sulle candele orarie: ORB sui titoli in gioco e zona di
+    rumore, su azioni USA (indici per la zona di rumore) e crypto. Prima metà contro seconda, costi normali
+    e bassi (futures sugli indici, exchange crypto economici)."""
+    US = {s: sedute_orarie(os.path.join(CACHE_H, s + ".json"), False)
+          for s in INDICI_USA + settimana.MERCATI["usa"]["universo"] if os.path.exists(os.path.join(CACHE_H, s + ".json"))}
+    CR = {s: sedute_orarie(os.path.join(intraday.CACHE, s + ".json"), True)
+          for s in simula.CRYPTO if os.path.exists(os.path.join(intraday.CACHE, s + ".json"))}
+    titoli = {s: v for s, v in US.items() if s not in INDICI_USA}
+    prove = []
+    lu, co = orb_in_gioco(titoli, 20)
+    prove += [("Azioni USA", "ORB 60 minuti sui titoli in gioco, solo acquisti", "Zarattini, Aziz 2023-24", lu, (0.001, 0.0002)),
+              ("Azioni USA", "ORB 60 minuti sui titoli in gioco, anche allo scoperto", "Zarattini, Aziz 2023-24", lu + co, (0.001, 0.0002))]
+    zl = [x for s in INDICI_USA if s in US for x in zona_rumore(US[s], False)]
+    zs = [x for s in INDICI_USA if s in US for x in zona_rumore(US[s], True)]
+    prove += [("Indici USA", "Zona di rumore, solo acquisti", "Zarattini, Barbon, Aziz 2024", zl, (0.001, 0.0002)),
+              ("Indici USA", "Zona di rumore, anche allo scoperto", "Zarattini, Barbon, Aziz 2024", zs, (0.001, 0.0002))]
+    cl, cc = orb_in_gioco(CR, 3)
+    prove += [("Crypto", "ORB 60 minuti sulle crypto in gioco, solo acquisti", "Zarattini, Aziz 2023-24", cl, (0.004, 0.002))]
+    zc = [x for S in CR.values() for x in zona_rumore(S, False)]
+    prove += [("Crypto", "Zona di rumore, solo acquisti", "Zarattini, Barbon, Aziz 2024", zc, (0.004, 0.002))]
+    out = []
+    for gruppo, nome, fonte, righe, (costo, basso) in prove:
+        date = sorted({d for d, _ in righe})
+        meta = date[len(date) // 2] if date else ""
+        r = {"gruppo": gruppo, "nome": nome, "fonte": fonte, "costo": costo, "basso": basso}
+        for chiave, c in (("normale", costo), ("bassi", basso)):
+            a = riassunto([(d, 0, x - c, 0.0) for d, x in righe if d < meta], 0.0)
+            b = riassunto([(d, 0, x - c, 0.0) for d, x in righe if d >= meta], 0.0)
+            r[chiave] = {"prima": a, "dopo": b, "regge": regge(a, b)}
+        r.update(da=date[0] if date else None, meta=meta, a=date[-1] if date else None)
+        out.append(r)
+        log("[libri] recenti %-11s %-52s normali: %s | %s · bassi: %s | %s" % (gruppo, nome, fmt(r["normale"]["prima"]), fmt(r["normale"]["dopo"]),
+                                                                              fmt(r["bassi"]["prima"]), fmt(r["bassi"]["dopo"])))
+    return out
+
+
+def prova_notte(log, costi=(0.0, 0.0002, 0.0005, 0.0008, 0.001)):
+    """Il momento notturno (Lou, Polk, Skouras 2019), come lo usa giornata.piano_notte: ogni giorno i 10
+    titoli USA con la media più alta dei rendimenti delle ultime 21 notti, comprati in chiusura e venduti
+    all'apertura dopo. Fino a 25 anni; rendimento l'anno e calo massimo per livello di costo, le due metà
+    con t per mese, anno per anno, e la sensibilità a quante notti e quanti titoli (solo controllo)."""
+    dati = {}
+    for sym in settimana.MERCATI["usa"]["universo"]:
+        try:
+            d, O, H, L, C, V = giornata.giornaliere(sym)
+        except Exception as e:                                       # rete, dati mancanti
+            log("[libri] %s saltato: %s" % (sym, e))
+            continue
+        dati[sym] = (d, np.array(O), np.array(C))
+
+    def segnali(finestra):
+        per = {}
+        for sym, (d, O, C) in dati.items():
+            cs = np.concatenate([[0.0], np.cumsum(np.log(O[1:] / C[:-1]))])
+            for t in range(finestra + 1, len(C) - 1):
+                per.setdefault(d[t], []).append(((cs[t] - cs[t - finestra]) / finestra, O[t + 1] / C[t] - 1))
+        return per
+
+    def notti_strategia(per, top, costo):
+        return [(dd, float(np.mean([r for _, r in sorted(L, reverse=True)[:top]])) - costo)
+                for dd, L in sorted(per.items()) if len(L) >= 30]
+
+    def annuo(R):
+        x = np.array([r for _, r in R])
+        if not len(x):
+            return None, None
+        eq = np.cumprod(1 + x)
+        return round(float(eq[-1] ** (252 / len(x)) - 1), 4), round(float((eq / np.maximum.accumulate(eq) - 1).min()), 4)
+
+    per = segnali(giornata.NOTTI)
+    livelli = []
+    for c in costi:
+        R = notti_strategia(per, giornata.TOP_NOTTE, c)
+        a, dd = annuo(R)
+        a2, dd2 = annuo([r for r in R if r[0] >= TAGLIO])
+        meta = sorted({d for d, _ in R})[len(R) // 2]
+        p1 = riassunto([(d, 0, r, 0.0) for d, r in R if d < meta], 0.0)
+        p2 = riassunto([(d, 0, r, 0.0) for d, r in R if d >= meta], 0.0)
+        livelli.append({"costo": c, "anno": a, "calo": dd, "anno_dopo": a2, "calo_dopo": dd2, "prima": p1, "dopo": p2,
+                        "meta": meta, "regge": regge(p1, p2)})
+        log("[libri] notte, costo %.2f%%: %+.1f%% l'anno (calo %.0f%%), dal %s %+.1f%% · %s | %s%s" % (
+            100 * c, 100 * a, 100 * dd, TAGLIO[:4], 100 * a2, fmt(p1), fmt(p2), " · REGGE" if regge(p1, p2) else ""))
+    R = notti_strategia(per, giornata.TOP_NOTTE, 0.0002)
+    anni = {}
+    for d, r in R:
+        anni.setdefault(d[:4], []).append(r)
+    per_anno = {y: round(float(np.prod([1 + x for x in v]) - 1), 4) for y, v in sorted(anni.items())}
+    sens = []
+    for finestra in (10, 21, 63):
+        P = per if finestra == giornata.NOTTI else segnali(finestra)
+        for top in (5, 10, 20):
+            R = notti_strategia(P, top, 0.0002)
+            sens.append({"notti": finestra, "titoli": top,
+                         "prima": round(float(np.mean([r for d, r in R if d < TAGLIO])), 5),
+                         "dopo": round(float(np.mean([r for d, r in R if d >= TAGLIO])), 5)})
+    tutti = [(dd, float(np.mean([r for _, r in L]))) for dd, L in sorted(per.items()) if len(L) >= 30]
+    return {"livelli": livelli, "anni_002": per_anno, "sensibilita": sens, "notti": giornata.NOTTI, "titoli": giornata.TOP_NOTTE,
+            "riferimento": {"lordo_notte": round(float(np.mean([r for _, r in tutti])), 6)},
+            "da": min(per), "a": max(per), "soglia": giornata.SOGLIA_COSTI}
+
+
 def rigioca(log, quanti=240, seme=7):
     """Giornate vere di azioni USA per esercitarsi: la seduta prima e quella del giorno, 7 candele orarie
     ciascuna, in rapporto alla chiusura della seduta prima. La data si scopre dopo aver giocato."""
@@ -582,7 +765,8 @@ def analizza(log=print):
     return {"generato": datetime.date.today().isoformat(), "taglio": TAGLIO,
             "giorno": prova_giorno(dati, log), "entrata": prova_entrata(dati, log),
             "momento": prova_momento(dati, log), "ora": prova_ora(log),
-            "giornata": stessa, "notte": notte, "rigioca": rigioca(log)}
+            "giornata": stessa, "notte": notte, "rigioca": rigioca(log), "momento_notte": prova_notte(log),
+            "recenti": prova_recenti(log)}
 
 
 def main():

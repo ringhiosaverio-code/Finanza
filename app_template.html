@@ -1551,6 +1551,39 @@ function renderLibri() {
   <p class="note">Fonti: Nison, <i>Japanese Candlestick Charting Techniques</i> (1991); Bulkowski, <i>Encyclopedia of Candlestick Charts</i> (2008); Connors e Alvarez, <i>Short Term Trading Strategies That Work</i> (2008); Williams, <i>Long-Term Secrets to Short-Term Trading</i> (1999); Crabel, <i>Day Trading with Short Term Price Patterns and Opening Range Breakout</i> (1990); Faith, <i>Way of the Turtle</i> (2007); Pagonidis, <i>The IBS Effect</i> (2014); Lakonishok e Smidt (1988); Jegadeesh (1990); Gao, Han, Li e Zhou (2018); Zarattini e Aziz (2023). Le regole sono state scritte dai libri, non ottimizzate su questi dati. Elenco dei titoli di oggi (chi è uscito dagli indici non c'è), esecuzione ideale, senza tasse. Verifica del ${dt(B.generato, {year: 'numeric'})}. Non è consulenza finanziaria.</p>`;
 }
 
+/* ---------------- di notte: il momento notturno (Lou, Polk, Skouras 2019) ---------------- */
+function notteHTML() {
+  const V = D.libri && D.libri.momento_notte, P = D.giornata && D.giornata.notte; if (!V) return '';
+  const L = V.livelli, ok = L.filter(x => x.regge), soglia = ok.length ? Math.max(...ok.map(x => x.costo)) : null;
+  const c2 = L.find(x => Math.abs(x.costo - .0002) < 1e-9) || L[1], c10 = L.find(x => Math.abs(x.costo - .001) < 1e-9) || L[L.length - 1];
+  const A = Object.entries(V.anni_002 || {}), neg = A.filter(([, r]) => r < 0), peg = A.reduce((m, x) => x[1] < m[1] ? x : m, ['', 9]);
+  const tagl = D.libri.taglio ? new Date(D.libri.taglio).getFullYear() : 2016;
+  const riga = x => `<tr${x.regge ? ' style="background:var(--surface2)"' : ''}><td class="l">${pc(x.costo, 2, false)}</td><td class="${x.anno >= 0 ? 'pos' : 'neg'}"><b>${pc(x.anno, 0)}</b></td><td class="${x.anno_dopo >= 0 ? 'pos' : 'neg'}">${pc(x.anno_dopo, 0)}</td><td class="neg">${pc(x.calo, 0)}</td><td class="l"><span class="chip ${x.regge ? 'alta' : 'bassa'}">${x.regge ? 'regge' : 'non regge'}</span></td></tr>`;
+  const titoli = P && P.titoli && P.titoli.length ? `<h3 style="margin-top:14px">La lista per la prossima chiusura</h3>
+    <p class="note">Compra alla chiusura di <b>${dtl(P.compra)}</b> con un ordine ${esc(P.ordini.compra)}; vendi all'apertura di <b>${dtl(P.vendi)}</b> con un ordine ${esc(P.ordini.vendi)}. In parti uguali.</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Titolo</th><th>Notti, media</th><th>Notti in salita</th><th>Ultima chiusura</th></tr></thead>
+      <tbody>${P.titoli.map((t, i) => `<tr><td class="l"><b>${i + 1}. ${esc(tk(t.symbol))}</b> <span class="note nm2">${esc(((SIM[t.symbol] || {}).name || '').slice(0, 26))}</span></td><td class="pos">${pc(t.media_notte, 2)}</td><td>${p100(t.notti_su)}</td><td>${nf(t.chiusura, dec(t.chiusura))} $${liveSpan(t.symbol)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:6px">Media delle ultime ${V.notti} notti: dalla chiusura all'apertura del giorno dopo. Spesso i titoli scelti sono dello stesso settore: è una scommessa concentrata.</p>` : '';
+  return `<div class="card"><h2>Di notte: la sola regola breve che regge</h2>
+    <p class="sub" style="margin-top:4px">Non è in giornata, è il contrario: le azioni guadagnano soprattutto di notte, e quelle con le notti migliori dell'ultimo mese tendono a continuare (Lou, Polk, Skouras, "A tug of war", 2019). Ogni giorno i <b>${V.titoli} titoli USA</b> con la media più alta delle ultime ${V.notti} notti: <b>comprati in chiusura</b>, <b>venduti all'apertura</b> del giorno dopo.</p>
+    <div class="verdetto v-cautela" style="margin-top:10px"><div class="vh"><span class="vi" aria-hidden="true">!</span><div><b>Con cautela: guadagna solo con costi molto bassi</b>
+      <p>Dal ${new Date(V.da).getFullYear()}, con ${pc(c2.costo, 2, false)} di costi tra entrata e uscita: <b>${pc(c2.anno, 0)} l'anno</b> (dal ${tagl}: ${pc(c2.anno_dopo, 0)}), in guadagno ${A.length - neg.length} anni su ${A.length}, il peggiore il ${peg[0]} (${pc(peg[1], 0)}), calo massimo ${pc(c2.calo, 0)}. Con ${pc(c10.costo, 1, false)}, i costi di una commissione fissa su cifre piccole, dal ${tagl} ha perso il ${pc(-c10.anno_dopo, 0, false)} l'anno.${soglia != null ? ` Regge, in entrambi i periodi, fino a ${pc(soglia, 2, false)} di costi.` : ''}</p></div></div></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Costi tra entrata e uscita</th><th>L'anno, dal ${new Date(V.da).getFullYear()}</th><th>L'anno, dal ${tagl}</th><th>Calo massimo</th><th class="l"></th></tr></thead><tbody>${L.map(riga).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:6px">Anno per anno, con ${pc(c2.costo, 2, false)} di costi: ${A.map(([y, r]) => `${y} <span class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 0)}</span>`).join(' · ')}. Con 5 o 20 titoli, 10 o 63 notti, il risultato cambia poco.</p>
+    <p class="note" style="margin-top:6px"><b>Come tenere i costi così bassi.</b> Ordini sulle aste di chiusura e di apertura (MOC e MOO): si compra e si vende al prezzo ufficiale, senza pagare la differenza tra prezzo di acquisto e di vendita. Commissioni di circa lo 0,01 % per ordine: con una commissione minima di 0,50 € servono almeno 5.000 € per titolo, 50.000 € in tutto. Con una banca o un broker da 5-10 € a ordine su cifre di qualche migliaio di euro, perde.</p>
+    ${titoli}
+    <p class="note" style="margin-top:8px"><b>I rischi.</b> Di notte possono uscire notizie (risultati, crisi) e l'apertura può essere molto più bassa: è da lì che vengono sia il guadagno sia il rischio. I titoli sono quelli nell'indice oggi: chi è uscito non c'è, i numeri sono un po' ottimisti. Tasse escluse (26 % sui guadagni), titoli in dollari. Non è consulenza finanziaria.</p></div>`;
+}
+function recentiHTML() {
+  const R = D.libri && D.libri.recenti; if (!R || !R.length) return '';
+  const c = s => s && s.n >= 30 ? `<b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b> <span class="note">(t ${nf(s.t, 1)})</span>` : 'n/d';
+  return `<h3 style="margin-top:14px">Strategie pubblicate di recente, sulle candele orarie</h3>
+    <p class="note">Media per operazione dopo i costi: prima metà · seconda metà del periodo (azioni dal ${R[0].da ? new Date(R[0].da).getFullYear() : ''}, crypto 2 anni). Costi normali e bassi (futures sugli indici, exchange crypto economici).</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Strategia</th><th>Costi normali</th><th>Costi bassi</th></tr></thead>
+      <tbody>${R.map(r => `<tr><td class="l" style="white-space:normal;min-width:220px"><b>${esc(r.nome)}</b> <span class="note">· ${esc(r.gruppo)} · ${esc(r.fonte)}</span></td><td>${c(r.normale.prima)} · ${c(r.normale.dopo)}<br><span class="note">${pc(r.costo, 2, false)}</span></td><td>${c(r.bassi.prima)} · ${c(r.bassi.dopo)}<br><span class="note">${pc(r.basso, 2, false)}</span></td></tr>`).join('')}</tbody></table></div>`;
+}
+
+
 /* ---------------- in giornata: comprare e vendere nella stessa seduta ---------------- */
 const GIOCO_KEY = 'finanza-giornata-gioco';
 const giocoVuoto = () => ({giocate: 0, comprate: 0, vinte: 0, somma: 0, visti: []});
@@ -1650,7 +1683,8 @@ function renderGiornata(soloGioco) {
   const ex = P.find(p => p.mercato === 'usa') || P[0];
   v.innerHTML = `<div><h1>In giornata</h1><p class="sub" style="margin-top:4px">Comprare e vendere nella stessa seduta: le regole dei libri messe alla prova su 25 anni, il piano per la prossima seduta e un gioco per esercitarti su giornate vere.</p></div>
   ${ogni ? `<div class="verdetto v-${regge.length ? 'cautela' : 'no'}"><div class="vh"><span class="vi" aria-hidden="true">${regge.length ? '!' : '✕'}</span><div><b>${regge.length ? 'Con cautela' : 'Per ora no'}</b>
-    <p>${regge.length ? `Regge: ${regge.map(r => esc(r.nome)).join(', ')}.` : `In ${new Date(B.generato).getFullYear() - 2001} anni di azioni USA, italiane ed ETF, comprare all'apertura e vendere in chiusura ha reso in media <b>${pc(ogni.dopo.media, 2)}</b> a operazione dopo i costi (in guadagno il ${p100(ogni.dopo.p_gain)} delle volte). Nessuna delle ${R.length - 1} regole provate è rimasta in guadagno in entrambi i periodi${gap ? `: la migliore fino al ${tagl - 1}, comprare i gap giù all'apertura (${pc(gap.prima.media, 2)}), dal ${tagl} ha perso (${pc(gap.dopo.media, 2)})` : ''}. Lo stesso sulle candele orarie di crypto e azioni USA.`} Se vuoi provare lo stesso, esercitati qui sotto o con cifre piccole. Per guadagnare, i dati dicono un'altra cosa: tenere più a lungo, come <a href="#oggi" style="color:var(--accent)">il pacchetto di Oggi</a>.</p></div></div></div>` : ''}
+    <p>${regge.length ? `Regge: ${regge.map(r => esc(r.nome)).join(', ')}.` : `In ${new Date(B.generato).getFullYear() - 2001} anni di azioni USA, italiane ed ETF, comprare all'apertura e vendere in chiusura ha reso in media <b>${pc(ogni.dopo.media, 2)}</b> a operazione dopo i costi (in guadagno il ${p100(ogni.dopo.p_gain)} delle volte). Nessuna delle ${R.length - 1} regole provate è rimasta in guadagno in entrambi i periodi${gap ? `: la migliore fino al ${tagl - 1}, comprare i gap giù all'apertura (${pc(gap.prima.media, 2)}), dal ${tagl} ha perso (${pc(gap.dopo.media, 2)})` : ''}. Lo stesso sulle candele orarie di crypto e azioni USA, anche con le strategie pubblicate di recente (titoli in gioco, zona di rumore).`} L'unica regola breve che regge è <b>di notte</b>, qui sotto, e solo con costi molto bassi. Per guadagnare con i costi normali, i dati dicono di tenere più a lungo, come <a href="#oggi" style="color:var(--accent)">il pacchetto di Oggi</a>.</p></div></div></div>` : ''}
+  ${notteHTML()}
   ${N.usa ? `<div class="card"><h2>Perché in giornata è così difficile</h2>
     <p class="sub" style="margin-top:4px">Le azioni guadagnano soprattutto <b>di notte</b>, tra la chiusura e l'apertura del giorno dopo, quando chi compra e vende in giornata non ha niente in mano. Di giorno il movimento medio è quasi zero, e ogni operazione paga i costi (0,1-0,2 % tra entrata e uscita, più la differenza tra prezzo di acquisto e di vendita).</p>
     <div class="tiles">${tile('usa', 'Azioni USA')}${tile('italia', 'Azioni italiane')}${tile('etf', 'ETF a Milano')}</div>
@@ -1665,6 +1699,7 @@ function renderGiornata(soloGioco) {
     <p class="sub" style="margin-top:4px">Comprate e vendute nella stessa seduta, su fino a 25 anni di candele giornaliere di azioni USA, italiane ed ETF. Media per operazione dopo i costi; t: quanto è solido (almeno 2 per contare).</p>
     <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Regola</th><th>Fino al ${tagl - 1}</th><th>Dal ${tagl}</th></tr></thead>
       <tbody>${R.map(r => `<tr><td class="l" style="white-space:normal;min-width:240px"><b>${esc(r.nome)}</b> <span class="note">· ${esc(r.fonte)}</span><br><span class="note">${esc(r.desc)}</span></td><td>${cG(r.prima)}</td><td>${cG(r.dopo)}</td></tr>`).join('')}</tbody></table></div>
+    ${recentiHTML()}
     <p class="note" style="margin-top:8px">Sulle candele orarie (primo intervallo, momento della giornata, rotture, figure, RSI) il risultato è lo stesso: vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>. Per le crypto ci sono i piani di 24 ore nella sezione <a href="#crypto" style="color:var(--accent)">Crypto</a> e, sul tuo computer, <code>python3 crypto_live.py</code> con i prezzi ogni secondo.</p></div>` : ''}`;
   giocoEventi();
 }
