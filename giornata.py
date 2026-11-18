@@ -157,8 +157,15 @@ def piani(log=print):
     except Exception as e:                                       # rete o dati: il resto del piano resta
         log("[giornata] piano della notte saltato: %s" % e)
         notte = None
+    candele = {}
+    for p in out:                                                # per il robot "in giornata": le ultime 45 sedute
+        try:
+            candele[p["symbol"]] = [[d, round(o, 4), round(h, 4), round(l, 4), round(c, 4) if c else None]
+                                    for d, o, h, l, c in serie_giorno_testo(simula.fetch_max(p["symbol"]))[-45:]]
+        except (simula.SimError, ValueError, KeyError, OSError) as e:
+            log("[giornata] %s saltato: %s" % (p["symbol"], e))
     return {"regola": "oops", "regole": REGOLE, "piani": out, "costi": {m: settimana.MERCATI[m]["costo"] / 100 for m in PER_MERCATO},
-            "notte": notte}
+            "notte": notte, "candele": candele}
 
 
 NOTTI = 21            # notti su cui si misura il "momento notturno"
@@ -166,21 +173,39 @@ TOP_NOTTE = 10        # quanti titoli si comprano
 SOGLIA_COSTI = 0.0002 # regge (in entrambe le metà, t >= 2) con costi fino a 0,02 % tra entrata e uscita (libri.py)
 
 
-def serie_notte_testo(text):
+def serie_notte_testo(text, adesso=None):
     """Dalla risposta del grafico di Yahoo: [(data, apertura, chiusura o None se la seduta è in corso)],
     corrette per dividendi e split come le chiusure."""
+    return [(d, o, c) for d, o, _, _, c in serie_giorno_testo(text, adesso, minmax=False)]
+
+
+def serie_giorno_testo(text, adesso=None, minmax=True):
+    """Come serie_notte_testo, con massimo e minimo (fin qui, se la seduta è in corso):
+    [(data, apertura, massimo, minimo, chiusura o None)]. Durante la seduta Yahoo mette come chiusura di
+    oggi il prezzo del momento: qui diventa None."""
     res = json.loads(text)["chart"]["result"][0]
     meta, q = res.get("meta", {}), res["indicators"]["quote"][0]
     off = meta.get("gmtoffset", 0)
     adj = (res["indicators"].get("adjclose") or [{}])[0].get("adjclose") or q["close"]
+    hi, lo = q.get("high") or [None] * len(q["open"]), q.get("low") or [None] * len(q["open"])
     righe = {}
-    for t, o, c, a in zip(res.get("timestamp") or [], q["open"], q["close"], adj):
-        if o is None or o <= 0:
+    for t, o, h, l, c, a in zip(res.get("timestamp") or [], q["open"], hi, lo, q["close"], adj):
+        if o is None or o <= 0 or (minmax and (h is None or l is None)):
             continue
         d = datetime.datetime.fromtimestamp(t + off, datetime.timezone.utc).strftime("%Y-%m-%d")
         f = (a / c) if (a and c) else 1.0
-        righe[d] = (o * f, a if (a and c) else None)                    # apertura corretta, chiusura (None se in corso)
-    return [(d, righe[d][0], righe[d][1]) for d in sorted(righe)]
+        righe[d] = (o * f, h * f if h else None, l * f if l else None, a if (a and c) else None)
+    if righe:
+        d = max(righe)
+        if settimana.seduta_in_corso(meta, d, adesso):           # prezzo del momento, non la chiusura
+            righe[d] = righe[d][:3] + (None,)
+        chiuse = [x for x in righe if righe[x][3] is not None]
+        extra = settimana.chiusura_mancante(meta, max(chiuse) if chiuse else None, adesso)
+        if extra and extra[0] in righe and righe[extra[0]][3] is None:   # Yahoo lascia vuota l'ultima seduta
+            x, c, h, lo = extra
+            o, h0, l0, _ = righe[x]
+            righe[x] = (o, max(h, h0) if h0 else h, min(lo, l0) if l0 else lo, c)
+    return [(d,) + righe[d] for d in sorted(righe)]
 
 
 def notti(sym):
@@ -201,7 +226,7 @@ def prezzi_notte(log=print, quante=45):
     """Aperture e chiusure ufficiali delle ultime `quante` sedute dei titoli USA: il robot dell'app ci
     rifà la lista di ogni giorno e chiude ogni notte con i prezzi veri. {simbolo: [[data, apertura, chiusura]]}"""
     out = {}
-    for sym in settimana.MERCATI["usa"]["universo"]:
+    for sym in settimana.MERCATI["usa"]["universo"] + settimana.MERCATI["italia"]["universo"]:
         try:
             S = serie_notte_testo(simula.fetch_max(sym))
         except (simula.SimError, ValueError, KeyError, OSError) as e:

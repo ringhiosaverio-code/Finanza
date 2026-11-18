@@ -275,26 +275,76 @@ notti cambia poco. Funziona solo con costi da aste e commissioni dello 0,01 % pe
 cifre piccole perde. Titoli di oggi (numeri un po' ottimisti), tasse escluse, rischio delle notizie
 notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la mostra in In giornata.
 
-### Il robot: compra e vende da solo, in un conto finto
+### Il robot: compra e vende da solo, in conti finti
 
 Nella sezione In giornata (e riassunto in Esercitati) il robot segue gli algoritmi dell'app senza
-interventi, con due conti finti da 10.000 € e niente soldi veri:
+interventi, con un conto finto da 10.000 € per ogni strategia e niente soldi veri:
 
-- **azioni USA, di notte**: per ogni giorno dall'accensione rifà la lista del momento notturno (le 21
-  notti fino all'apertura) e compra in chiusura, vende all'apertura dopo, ai prezzi ufficiali
-  (`giornata.prezzi_notte`: aperture e chiusure delle ultime 45 sedute; servita da `live.py`, le aste
-  arrivano dopo un minuto da `/aperture`). I costi li scegli tu: 0,02 % o 0,10 %;
-- **crypto, piani di 24 ore**: ogni piano "compra il ribasso" e "compra la rottura" nato dopo
-  l'accensione ha una quota di 1/24 del capitale; entra al livello ed esce alla protezione,
-  all'obiettivo o alla scadenza. Dal vivo con le quotazioni in tempo reale; a pagina chiusa usa i
-  piani rigiocati sulle candele orarie degli ultimi 7 giorni (`intraday.py`, `storia_piani`).
+- **azioni USA, di notte** (verificata): per ogni giorno della sessione rifà la lista del momento
+  notturno (i 10 titoli con le 21 notti migliori fino all'apertura), compra all'asta di chiusura e
+  vende a quella di apertura dopo, ai prezzi ufficiali. Commissioni a scelta: 0,02 % o 0,10 %;
+- **azioni italiane, di notte** (sperimentale): lo stesso sui titoli di Borsa Italiana, i 5 migliori,
+  con la Tobin tax dello 0,1 % in più (regge solo dal 2014, non nella prima metà dei dati);
+- **azioni in giornata, "Oops!"** (esercitazione, in media perde): sui 14 titoli più scambiati di USA
+  e Milano, se la seduta apre sotto il minimo di ieri compra quando il prezzo risale lì (dal massimo
+  della seduta, o dal vivo) e vende in chiusura; 1/14 del capitale per titolo;
+- **crypto, piani di 24 ore** (esercitazione, in media perde): ogni piano "compra il ribasso" e "compra
+  la rottura" ha 1/24 del capitale; entra al livello ed esce alla protezione, all'obiettivo o alla
+  scadenza.
 
-A pagina chiusa il robot non si ferma: a ogni aggiornamento dell'app (18:10 e 22:10) rifà le
-operazioni che avrebbe fatto; quello che ha già registrato non cambia. Si può farlo partire da oggi o
-rigiocare l'ultima settimana o le ultime due. Verifica: le 4 notti dall'11 al 17 novembre 2026
-coincidono con il calcolo in Python (stesse liste, stesso capitale, 9.929,77 €); le 133 operazioni
-crypto della settimana hanno la stessa media delle candele orarie (-0,98 %, una settimana in cui
-Bitcoin ha perso l'11 %). Lo stato del robot sta nell'archivio privato dell'app (o nel browser).
+Il **registro** mostra ogni operazione aperta e chiusa (quando, cosa, a che prezzo, il risultato e da
+dove viene: prezzi ufficiali, candele orarie o dal vivo); le **posizioni aperte** hanno il risultato in
+tempo reale. **Inizia sessione** (da oggi, o rigiocando l'ultima settimana o le ultime due) e
+**Termina sessione**: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in
+attesa si annullano, le azioni comprate per la notte si vendono all'apertura (di notte la borsa è
+chiusa); poi il robot si ferma.
+
+A pagina chiusa il robot non si ferma: a ogni aggiornamento rifà le operazioni che avrebbe fatto con
+i prezzi ufficiali (`giornata.prezzi_notte`: aperture e chiusure delle ultime 45 sedute di 146 titoli
+USA e italiani; `giornata.piani()["candele"]`: aperture, massimi, minimi e chiusure dei 14 titoli in
+giornata; `intraday.py`, `storia_piani`: i piani crypto rigiocati sulle candele orarie degli ultimi 7
+giorni). Quello che ha già registrato non cambia e non si conta due volte (anche con l'app aperta su
+più dispositivi: ogni salvataggio ha un numero di versione). Con `live.py` le aperture, i massimi e le
+chiusure di oggi arrivano da `/aperture` un minuto dopo le aste, solo per i titoli che servono e solo
+in orario di borsa.
+
+**Nel cloud**: `robot_cloud.js` apre l'app appena generata in un Chromium senza finestra, le passa lo
+stato salvato del robot e lo fa girare (è lo stesso codice), poi scrive il nuovo stato e un riassunto
+per la notifica. L'aggiornamento programmato (18:10 e 22:10 nei giorni feriali) legge lo stato
+dall'archivio dell'app, esegue `node robot_cloud.js stato.json nuovo.json`, lo riscrive (solo se la
+versione non è cambiata nel frattempo) e ti manda una notifica se ci sono operazioni nuove.
+
+Verifica: rigiocando le due settimane dal 4 al 18 novembre 2026, le notti USA (9) e italiane (9) e le
+18 operazioni in giornata coincidono con il calcolo in Python (stesse liste, stessi risultati, stesso
+capitale); le crypto usano la stessa logica già verificata sulle candele orarie.
+
+### I dati di oggi: seduta in corso e chiusura mancante
+
+Durante la seduta Yahoo mette come chiusura della barra di oggi il prezzo del momento: `giornata`
+(`serie_notte_testo`, `serie_giorno_testo`) la considera una chiusura solo a seduta finita
+(`settimana.seduta_in_corso`, dagli orari della seduta nei metadati). Se invece Yahoo lascia vuota
+la chiusura dell'ultima seduta (capita con Milano) la prende dai metadati (`chiusura_mancante`). Le
+cache dei grafici (12 ore) si rinnovano anche quando la seduta che descrivono è finita dopo che sono
+state scritte (`settimana.cache_valida`): così l'aggiornamento delle 22:10 ha le chiusure USA del
+giorno.
+
+## `crypto_lungo.py`: crypto a medio e lungo termine
+
+```bash
+python3 crypto_lungo.py      # stampa i risultati; app.py li mette nella sezione Crypto
+```
+
+Sulle chiusure giornaliere in euro delle 12 crypto dell'app, con regole fissate prima di guardare:
+compra e tieni contro la **regola della tendenza** (dentro quando la chiusura di ieri è sopra la media
+dei suoi ultimi 200 o 50 giorni, fuori in euro quando è sotto, 0,2 % a ogni cambio), su tutta la
+storia di ogni crypto (dal primo anno, saltando quello del lancio) e su un paniere a pesi uguali
+ribilanciato ogni mese, divisa in due metà; quante volte si è chiuso in guadagno tenendo 1 mese, 1, 2
+e 4 anni (Bitcoin ed Ethereum); 12 rate mensili contro tutto subito; e se oggi ogni crypto è sopra o
+sotto le sue medie. Risultati al 17 novembre 2026: su Bitcoin la tendenza ha ridotto il calo massimo
+(-65 % con 200 giorni, -62 % con 50, contro -83 %) con una crescita simile; non ha battuto sempre il
+compra e tieni; nella seconda metà dei dati tutte le crypto sono cresciute molto meno. La sezione
+dell'app aggiunge gli studi pubblicati (Liu e Tsyvinski 2021, Detzel e altri 2021, Zarattini, Pagani e
+Barbon 2025, Fondo Monetario 2022, BlackRock 2024, Vanguard) e le tasse italiane dal 2026 (33 %).
 
 ## Quotazioni in tempo reale nell'app
 
@@ -347,7 +397,7 @@ intraday ha guadagnato in media: è uno strumento per seguire i piani, non un mo
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot e live, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo e live, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

@@ -46,6 +46,7 @@ import importlib.util
 import json
 import math
 import os
+import re
 import sys
 import time
 import urllib.error
@@ -232,12 +233,34 @@ def now_new_york():
 
 # ------------------------------------------------------------------ dati
 
+FINE_SEDUTA = re.compile(r'"regular":\{[^{}]*?"end":(\d+)')
+
+
+def cache_valida(path, max_age_hours, adesso=None):
+    """Il grafico in cache, se è abbastanza recente e nessuna seduta è finita dopo che è stato scritto;
+    altrimenti None. Yahoo scrive nei metadati quando finisce la seduta che descrive: una cache scritta
+    a seduta aperta (per esempio alle 18:10 per le azioni USA) non vale più dopo la chiusura (5 minuti
+    dopo, quando c'è l'asta), anche se ha meno di max_age_hours."""
+    if not os.path.exists(path):
+        return None
+    adesso = time.time() if adesso is None else adesso
+    scritto = os.path.getmtime(path)
+    if adesso - scritto >= max_age_hours * 3600:
+        return None
+    with open(path, encoding="utf-8") as fh:
+        text = fh.read()
+    m = FINE_SEDUTA.search(text)
+    if m and scritto < int(m.group(1)) + 300 <= adesso:
+        return None
+    return text
+
+
 def fetch(sym, max_age_hours=12):
     """Il JSON del grafico Yahoo a 10 anni, con una cache in trader/cache/daily."""
     path = os.path.join(CACHE, sym + ".v2.json")          # v2: con i dividendi
-    if os.path.exists(path) and time.time() - os.path.getmtime(path) < max_age_hours * 3600:
-        with open(path, encoding="utf-8") as fh:
-            return fh.read()
+    text = cache_valida(path, max_age_hours)
+    if text is not None:
+        return text
     last = None
     for host in ("query2", "query1"):
         url = ("https://%s.finance.yahoo.com/v8/finance/chart/%s?range=10y&interval=1d"
@@ -282,6 +305,18 @@ def div_yield(text):
     return round(tot / last, 4)
 
 
+def seduta_in_corso(meta, d, adesso=None):
+    """La seduta del giorno d (data della borsa) è ancora aperta? Durante la seduta Yahoo dà come
+    chiusura della barra di oggi il prezzo del momento. Dopo la chiusura a volte descrive già la seduta
+    di domani: allora quella di oggi è finita."""
+    adesso = time.time() if adesso is None else adesso
+    off = meta.get("gmtoffset", 0)
+    giorno = lambda x: datetime.datetime.fromtimestamp(x + off, datetime.timezone.utc).strftime("%Y-%m-%d")
+    reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    start, end = reg.get("start"), reg.get("end")
+    return d == giorno(adesso) and (not start or not end or (giorno(start) == d and adesso < end))
+
+
 def chiusura_mancante(meta, ultima, adesso=None):
     """Yahoo a volte lascia vuota la barra dell'ultima seduta (prezzo None) ma ne dà la chiusura nei
     metadati. -> (data, prezzo, massimo, minimo) se quella seduta è finita ed è più recente di `ultima`,
@@ -294,12 +329,7 @@ def chiusura_mancante(meta, ultima, adesso=None):
     d = giorno(t)
     if ultima and d <= ultima:
         return None
-    adesso = time.time() if adesso is None else adesso
-    reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
-    start, end = reg.get("start"), reg.get("end")
-    # seduta di oggi non ancora finita: è un prezzo in corso. Dopo la chiusura Yahoo a volte descrive
-    # già la seduta di domani: allora quella di oggi è finita.
-    if d == giorno(adesso) and (not start or not end or (giorno(start) == d and adesso < end)):
+    if seduta_in_corso(meta, d, adesso):                         # è un prezzo in corso, non la chiusura
         return None
     h, lo = meta.get("regularMarketDayHigh") or p, meta.get("regularMarketDayLow") or p
     return d, float(p), float(max(h, p)), float(min(lo, p))

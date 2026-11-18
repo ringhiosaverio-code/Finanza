@@ -103,8 +103,9 @@ GRAFICO = "https://query2.finance.yahoo.com/v8/finance/chart/%s?range=1mo&interv
 
 
 class Aperture:
-    """Aperture e chiusure ufficiali delle ultime sedute (per il robot "di notte"): un grafico per titolo,
-    al massimo uno al minuto per titolo."""
+    """Aperture, chiusure, massimi e minimi ufficiali delle ultime sedute (per il robot "di notte" e "in
+    giornata"): [data, apertura, chiusura o None, massimo, minimo]; un grafico per titolo, al massimo uno
+    al minuto per titolo."""
 
     def __init__(self, fresco=60.0):
         self.fresco, self.lock, self.cache = fresco, threading.Lock(), {}
@@ -120,8 +121,8 @@ class Aperture:
                 try:
                     req = urllib.request.Request(GRAFICO % urllib.parse.quote(s), headers={"User-Agent": UA, "Accept": "application/json"})
                     with urllib.request.urlopen(req, timeout=10) as r:
-                        righe = giornata.serie_notte_testo(r.read().decode("utf-8", "replace"))
-                    c = (adesso, [[d, round(o, 4), round(cc, 4) if cc else None] for d, o, cc in righe[-10:]])
+                        righe = giornata.serie_giorno_testo(r.read().decode("utf-8", "replace"))
+                    c = (adesso, [[d, round(o, 4), round(cc, 4) if cc else None, round(h, 4), round(l, 4)] for d, o, h, l, cc in righe[-10:]])
                     with self.lock:
                         self.cache[s] = c
                 except (urllib.error.URLError, OSError, ValueError, KeyError) as e:

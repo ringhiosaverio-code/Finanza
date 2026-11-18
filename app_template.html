@@ -170,6 +170,8 @@ ol.steps{margin:0;padding:0}
 table{width:100%;border-collapse:collapse;font-size:13.5px}
 th,td{text-align:right;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
 th:first-child,td:first-child,th.l,td.l{text-align:left}
+table.stretta th,table.stretta td{padding:6px 4px}
+table.stretta th{white-space:normal;vertical-align:bottom}
 th{color:var(--muted);font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:.03em}
 details > summary{cursor:pointer;color:var(--ink2);font-size:14px}
 details[open] > summary{margin-bottom:10px}
@@ -248,6 +250,10 @@ footer{color:var(--muted);font-size:12.5px}
 .row-buy{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px 10px;padding:8px 0;border-bottom:1px solid var(--line)}
 .row-buy .pv-mini{font-family:var(--f-head);font-weight:700;margin-left:auto}
 .linkb{border:0;background:none;color:var(--accent);cursor:pointer;padding:0;font-size:inherit;text-decoration:underline}
+.reg{list-style:none;margin:6px 0 0;padding:0;font-size:13.5px;max-height:420px;overflow-y:auto}
+.reg li{padding:6px 0;border-bottom:1px solid var(--line)}
+.tag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;text-transform:uppercase;letter-spacing:.03em;background:var(--surface2);color:var(--ink2)}
+.tag.in{background:var(--accent-soft);color:var(--ink)}.tag.ok{color:var(--good)}.tag.ko{color:var(--crit)}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(560px,calc(100vw - 32px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
@@ -1400,16 +1406,72 @@ function renderCrypto() {
     .sort((a, b) => b.h.scenari.prudente.p_gain - a.h.scenari.prudente.p_gain);
   const btc = SIM['BTC-EUR'], w = SIM['SWDA.MI'];
   v.innerHTML = `
-  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno tenendole 3 mesi (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi.</p></div>
+  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-lungo">medio e lungo termine</button> e <button type="button" class="linkb" data-vai="crypto-24">le prossime 24 ore</button>.</p></div>
   ${btc && w ? `<div class="alert" role="note"><div class="ic">!</div><p><b>Molto più rischiose di azioni ed ETF.</b> Bitcoin oscilla del ${pc(btc.volatilita, 0, false)} in un anno, un ETF sul mondo intero (SWDA) del ${pc(w.volatilita, 0, false)}. Nella sua storia Bitcoin ha perso fino al ${pc(-btc.calo_massimo, 0, false)} dal picco. Una crypto non è un'azienda: non ha utili né dividendi, il prezzo dipende solo da domanda e offerta. Se le compri, solo con soldi che puoi permetterti di perdere.</p></div>` : ''}
   <div class="scroll card"><table>
-    <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno a 3 mesi</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
+    <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno alla durata</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
-      return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
+      return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b> <span class="note">a ${esc(h.orizzonte)}</span></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
+  ${cryptoLungoHTML()}
   ${intradayHTML()}
   <p class="note">Tocca una riga della prima tabella per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
   v.querySelectorAll('tr.clk').forEach(r => { const go = () => { simSt.q = r.dataset.q; location.hash = 'simula'; };
     r.addEventListener('click', go); r.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); });
+  v.querySelectorAll('[data-vai]').forEach(b => b.addEventListener('click', () => { const el = document.getElementById(b.dataset.vai); if (el) el.scrollIntoView({block: 'start'}); }));
+}
+
+/* ---------------- crypto: medio e lungo termine (crypto_lungo.py e gli studi) ---------------- */
+function cryptoLungoHTML() {
+  const A = D.crypto_lungo; if (!A) return '';
+  const nome = s => (SIM[s] && SIM[s].name) || tk(s), pr = x => x == null ? 'n/d' : pc(x, 0);
+  const R = Object.fromEntries((A.per_crypto || []).map(r => [r.symbol, r])), P = A.paniere || {};
+  const oggi = A.oggi || [], sopra = oggi.filter(x => x.sopra200);
+  const cella = m => m ? `<td><b class="${(m.anno || 0) >= 0 ? 'pos' : 'neg'}">${pr(m.anno)}</b><br><span class="note">calo ${pr(m.calo)}</span></td>` : '<td>n/d</td>';
+  const righe = (titolo, regole, dal) => `<tr><td class="l" colspan="4" style="padding-top:12px"><b>${titolo}</b> <span class="note">dal ${dal}</span></td></tr>`
+    + regole.map(([k, m]) => `<tr><td class="l" style="white-space:normal">${k}${m.dentro != null && m.dentro < 1 ? `<br><span class="note">dentro ${p100(m.dentro)}</span>` : ''}</td>${cella(m)}${cella(m.prima)}${cella(m.dopo)}</tr>`).join('');
+  const tab = ['BTC-EUR', 'ETH-EUR'].filter(s => R[s]).map(s => righe(nome(s), Object.entries(R[s].regole), dt(R[s].dal, {year: 'numeric'}))).join('')
+    + (P['compra e tieni'] ? righe(`Paniere di ${P.crypto} crypto`, [['compra e tieni', P['compra e tieni']], ['tendenza 200', P['tendenza 200']]], dt(P.dal, {year: 'numeric'})) : '');
+  const meta = R['BTC-EUR'] ? new Date(R['BTC-EUR'].meta).getFullYear() : '';
+  const tutte = (A.per_crypto || []).map(r => { const b = r.regole['compra e tieni'], t = r.regole['tendenza 200'], c = r.regole['tendenza 50'];
+    return `<tr><td class="l"><b>${esc(tk(r.symbol))}</b><br><span class="note">${nf(r.anni, 1)} anni</span></td>${cella(b)}${cella(t)}${cella(c)}</tr>`; }).join('');
+  const peggio = (A.per_crypto || []).filter(r => r.regole['compra e tieni'].calo <= -0.9).map(r => `${tk(r.symbol)} ${pc(r.regole['compra e tieni'].calo, 0)}`);
+  const DS = Object.keys(A.durate || {}), durNomi = DS.map(s => `<th>${esc(nome(s))}</th>`).join('');
+  const dur = ((A.durate || {})[DS[0]] || []).map((x0, i) => `<tr><td class="l"><b>${x0.durata}</b></td>${DS.map(s => { const x = A.durate[s][i];
+    return x ? `<td style="white-space:normal"><b>${p100(x.p_gain)}</b> in guadagno<br><span class="note">tipico ${pr(x.tipico)}, peggiore ${pr(x.peggiore)}</span></td>` : '<td>n/d</td>'; }).join('')}</tr>`).join('');
+  const rate = Object.entries(A.rate || {}).map(([s, x]) => `<tr><td class="l"><b>${esc(tk(s))}</b></td><td>${p100(x.subito_vince)}</td><td>tipico ${pr(x.subito.tipico)}<br><span class="note">peggiore <span class="neg">${pr(x.subito.peggiore)}</span></span></td><td>tipico ${pr(x.rate.tipico)}<br><span class="note">peggiore <span class="neg">${pr(x.rate.peggiore)}</span></span></td></tr>`).join('');
+  const b = R['BTC-EUR'] && R['BTC-EUR'].regole, rb = A.rate && A.rate['BTC-EUR'];
+  return `<div class="card" id="crypto-lungo"><h2>Medio e lungo termine: cosa dicono i dati e gli studi</h2>
+    <p class="sub" style="margin-top:4px">Per tenere crypto mesi o anni l'app ha provato, sulle crypto vere e con regole fissate prima di guardare, tre modi: <b>compra e tieni</b>; <b>tendenza 200</b>: dentro quando il prezzo di ieri è sopra la media degli ultimi 200 giorni, fuori (in euro) quando è sotto; <b>tendenza 50</b>, lo stesso con 50 giorni. Ogni cambio costa ${pc(A.costo, 1, false)}. Dove i dati dell'app non bastano, gli studi pubblicati più solidi.</p>
+    <div class="alert" role="note" style="margin-top:10px"><div class="ic">${sopra.length ? '↗' : '↘'}</div><p><b>Oggi: ${sopra.length} crypto su ${oggi.length} sopra la media a 200 giorni.</b> ${sopra.length === 0 ? 'La regola della tendenza dice di stare <b>fuori</b>, in euro, per tutte' : sopra.length === oggi.length ? 'La regola della tendenza dice di stare <b>dentro</b> per tutte' : `La regola della tendenza dice dentro per ${sopra.map(x => esc(tk(x.symbol))).join(', ')}, fuori per le altre`}. ${oggi.filter(x => x.symbol === 'BTC-EUR').map(x => `Bitcoin è ${x.sopra200 ? 'sopra' : 'sotto'} la sua media a 200 giorni del ${pc(Math.abs(x.dist200), 0, false)} da ${x.giorni} giorni e ${x.sopra50 ? 'sopra' : 'sotto'} quella a 50.`).join('')} Prezzi di chiusura del ${oggi[0] ? dt(oggi[0].data, {year: 'numeric'}) : ''}.</p></div>
+    <div class="scroll" style="margin-top:10px"><table class="stretta"><thead><tr><th class="l">Regola</th><th>Tutto</th><th>1ª metà</th><th>${meta ? `Dal ${meta}` : '2ª metà'}</th></tr></thead><tbody>${tab}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Crescita media l'anno e, sotto, il calo massimo dal picco; "dentro": la parte del tempo in cui la regola teneva la crypto. Il periodo è diviso in due metà uguali per vedere se il risultato regge.</p>
+    <p class="outcome" style="margin-top:8px">${b ? `Su Bitcoin la regola della tendenza ha <b>ridotto il calo massimo</b> (${pr(b['tendenza 200'].calo)} con la media a 200 giorni, ${pr(b['tendenza 50'].calo)} con quella a 50, contro ${pr(b['compra e tieni'].calo)} tenendo sempre) con una crescita simile: è il suo vero vantaggio. Non ha battuto sempre il compra e tieni: dipende dalla crypto e dal periodo. ` : ''}Nella seconda metà dei dati le crypto sono cresciute molto meno che nella prima: chi le compra oggi non deve aspettarsi le crescite dei primi anni.</p>
+    <details style="margin-top:10px"><summary><b>Tutte le ${(A.per_crypto || []).length} crypto</b>: crescita l'anno e calo massimo con le tre regole</summary>
+      <div class="scroll"><table class="stretta"><thead><tr><th class="l">Crypto</th><th>Tenere</th><th>Tend. 200</th><th>Tend. 50</th></tr></thead><tbody>${tutte}</tbody></table></div>
+      ${peggio.length ? `<p class="note" style="margin-top:6px">Tenendo sempre, ${peggio.length} crypto su ${(A.per_crypto || []).length} hanno perso più del 90 % dal massimo (${esc(peggio.join(', '))}). E sono quelle che esistono ancora: migliaia di altre sono sparite. Per questo Bitcoin ed Ethereum sono le meno peggio per tenere a lungo.</p>` : ''}</details>
+    <h3 style="margin-top:14px">Quanto tenere: quante volte si è chiuso in guadagno</h3>
+    <div class="scroll"><table class="stretta"><thead><tr><th class="l">Tenendo</th>${durNomi}</tr></thead><tbody>${dur}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Tutte le partenze possibili nella storia (tipico: il risultato a metà; peggiore: la partenza peggiore). Più si tiene, più spesso si è chiuso in guadagno, ma i periodi davvero separati sono pochi (a 4 anni appena ${((A.durate || {})['BTC-EUR'] || []).slice(-1).map(x => x.indipendenti).join('')} per Bitcoin): è la storia di chi è sopravvissuto, non una garanzia.</p>
+    <h3 style="margin-top:14px">Tutto subito o a rate?</h3>
+    <div class="scroll"><table class="stretta"><thead><tr><th class="l"></th><th>Subito vince</th><th>Tutto subito</th><th>12 rate</th></tr></thead><tbody>${rate}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Su tutte le finestre di 12 mesi. ${rb ? `Con Bitcoin investire tutto subito è andato meglio ${p100(rb.subito_vince)} delle volte, ma a rate il caso peggiore è stato ${pr(rb.rate.peggiore)} invece di ${pr(rb.subito.peggiore)}. ` : ''}È lo stesso risultato di Vanguard sulle azioni: tutto subito vince circa 2 volte su 3, le rate proteggono dagli anni peggiori.</p>
+    <h3 style="margin-top:14px">Cosa dicono gli studi</h3>
+    <ul class="note" style="margin:6px 0 0;padding-left:18px;display:grid;gap:6px">
+      <li><b>Liu e Tsyvinski</b>, Review of Financial Studies 2021: i rendimenti delle crypto non dipendono dai fattori di borsa o dell'economia ma da fattori loro: la <b>tendenza</b> (chi sale tende a continuare) e l'<b>attenzione</b> del pubblico. È la base della regola della tendenza.</li>
+      <li><b>Detzel, Liu, Strauss, Zhou e Zhu</b>, Financial Management 2021: il rapporto tra prezzo e medie mobili prevede i rendimenti di Bitcoin, anche fuori dal periodo usato per costruire la regola.</li>
+      <li><b>Zarattini, Pagani e Barbon</b>, Swiss Finance Institute 2025: un sistema di tendenza sulle 20 crypto più scambiate, su dati senza il difetto dei sopravvissuti, dopo i costi ha battuto il compra e tieni di Bitcoin. Studio recente, non ancora pubblicato su rivista.</li>
+      <li><b>Fondo Monetario Internazionale</b>, 2022: dal 2020 Bitcoin si muove insieme alle borse (correlazione con l'S&P 500 passata da 0,01 a 0,36): nei crolli non protegge il portafoglio.</li>
+      <li><b>BlackRock Investment Institute</b>, dicembre 2024: per chi crede nella diffusione di Bitcoin, l'<b>1-2 % del portafoglio</b> pesa sul rischio quanto una delle grandi azioni tecnologiche; oltre, il rischio sale in fretta (il 4 % porta circa il 14 % del rischio di un portafoglio 60/40).</li>
+      <li><b>Vanguard</b>: investire tutto subito batte le rate circa il 68 % delle volte; le rate aiutano soprattutto a non vendere in preda alla paura.</li>
+    </ul>
+    <h3 style="margin-top:14px">In pratica</h3>
+    <ol class="steps" style="margin-top:6px">
+      <li><span><b>Quota piccola.</b> Al massimo qualche punto del patrimonio (gli studi: 1-2 %), solo soldi che puoi permetterti di perdere: il calo massimo tipico è oltre il 75 %.</span></li>
+      <li><span><b>Prima Bitcoin, poi Ethereum.</b> Le altre crypto hanno perso spesso più del 90 % e molte sono sparite.</span></li>
+      <li><span><b>Una regola scritta prima.</b> Tenere e ribilanciare una volta l'anno, oppure la regola della tendenza a 200 giorni (controllo una volta al giorno, o alla settimana). Cambiare regola dopo un crollo è l'errore più costoso.</span></li>
+      <li><span><b>Le tasse.</b> In Italia dal 2026 le plusvalenze sulle crypto pagano il <b>33 %</b> (26 % solo per gli e-money token in euro), senza più la franchigia di 2.000 €, più lo 0,2 % l'anno sul valore. Ogni uscita della regola della tendenza con un guadagno paga: i risultati sopra sono prima delle tasse.</span></li>
+    </ol>
+    <p class="note" style="margin-top:8px">Dati Yahoo Finance in euro, chiusure giornaliere, dal primo anno di storia di ogni crypto (il primo, quello del lancio, si salta). Costi ${pc(A.costo, 1, false)} a ogni cambio, senza tasse. Calcolato il ${esc(A.generato || '')}. Non è consulenza finanziaria.</p></div>`;
 }
 
 /* ---------------- crypto intraday: le varianti provate ---------------- */
@@ -1437,7 +1499,7 @@ function intradayHTML() {
     obiettivo: `<span class="note">già chiuso: obiettivo (${pc(p.rendimento, 1)})</span><br>`, protezione: `<span class="note">già chiuso: protezione (${pc(p.rendimento, 1)})</span><br>`,
     scaduto: '<span class="note">scaduto</span><br>', scaduto_dentro: '<span class="note">scaduto: si vende</span><br>'})[p.fase] || '';
   const aperti = items.flatMap(({x, s}) => (x.precedenti || []).filter(p => p.fase === 'dentro').map(p => ({p, s})));
-  return `<div class="card"><h2>Intraday: le prossime 24 ore</h2>
+  return `<div class="card" id="crypto-24"><h2>Intraday: le prossime 24 ore</h2>
     <p class="sub" style="margin-top:4px">Due piani per ogni crypto, validi 24 ore dall'ultimo aggiornamento, e com'è andata la stessa regola negli ultimi 2 anni (piani rifatti ogni giorno alle 18 e alle 22 ora italiana, 12 crypto, costi 0,2 % per operazione).</p>
     <div class="scroll" style="margin-top:10px"><table>
       <thead><tr><th class="l">Regola</th><th class="l">Primo anno</th><th class="l">Secondo anno</th><th>Ordini eseguiti</th></tr></thead>
@@ -1727,6 +1789,10 @@ function renderMetodo() {
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
     <h3>Prezzi in tempo reale</h3>
     <p>L'app si rigenera alle 18:10 e alle 22:10 con le chiusure del giorno: probabilità, giudizi e piani nascono da lì. I prezzi in tempo reale, quando ci sono, compaiono accanto a ogni prezzo ("ora …") e servono per decidere il momento: nell'<b>app desktop di Claude</b> con il pulsante "Prezzi in tempo reale" in alto (usa il browser integrato di Claude, ogni 30 secondi), oppure sul tuo computer con <b>python3 live.py</b> (ogni 5 secondi, in qualsiasi browser). Fonte Yahoo Finance: azioni USA in tempo reale, Borsa Italiana con 15 minuti di ritardo, crypto e cambio in tempo reale.</p>
+    <h3>Il robot</h3>
+    <p>In <b>In giornata</b> il robot compra e vende da solo in quattro conti finti da 10.000 €, uno per strategia, così vedi quale guadagna e quale perde: <b>azioni USA di notte</b> (i 10 titoli con le notti migliori delle ultime 21, comprati all'asta di chiusura e venduti a quella di apertura: l'unica regola breve che regge nelle verifiche, con costi molto bassi), <b>azioni italiane di notte</b> (i 5 migliori, con la Tobin tax dello 0,1 %: sperimentale, regge solo dal 2014), <b>azioni in giornata</b> ("Oops!" sui titoli più scambiati di USA e Milano: se la seduta apre sotto il minimo di ieri compra quando risale lì e vende in chiusura) e <b>crypto</b> (i piani di 24 ore). La sessione la avvii e la termini tu: terminando, crypto e azioni in giornata si vendono subito, quelle comprate per la notte all'apertura. Il registro mostra ogni operazione aperta e chiusa, le posizioni aperte hanno il risultato in tempo reale. A pagina chiusa il robot non si ferma: a ogni aggiornamento rifà le operazioni con i prezzi ufficiali (aste, massimi e minimi del giorno, candele orarie delle crypto), anche nel cloud, che ti manda una notifica. Quello che è registrato non cambia e non si conta due volte.</p>
+    <h3>Crypto a medio e lungo termine</h3>
+    <p>Nella sezione Crypto: compra e tieni contro la regola della tendenza (dentro quando il prezzo è sopra la media dei suoi ultimi 200 o 50 giorni, fuori in euro quando è sotto, 0,2 % a ogni cambio), su tutta la storia di ogni crypto e su un paniere a pesi uguali, divisa in due metà per vedere se regge; quante volte si è chiuso in guadagno tenendo 1 mese, 1, 2 e 4 anni; se conviene investire tutto subito o a rate; e cosa dicono gli studi pubblicati (Liu e Tsyvinski, Detzel e altri, Zarattini e altri, Fondo Monetario, BlackRock, Vanguard), con le tasse italiane.</p>
     <h3>Quanto tenere</h3>
     <p>Per ogni strumento la Macchina del Tempo calcola la probabilità di guadagno e il caso peggiore (1 volta su 10) a 1 mese, 3 mesi, 6 mesi e 1 anno. L'app sceglie <b>il periodo con la probabilità più alta tra quelli in cui 1 volta su 10 non si perde più del 10 %</b>, la stessa soglia del giudizio "Sì". Così uno strumento tranquillo (un obbligazionario, un ETF poco volatile) si tiene più a lungo, perché il tempo fa salire la probabilità senza far crescere troppo il rischio; uno che oscilla molto si tiene meno. Se nessun periodo resta entro il rischio vale quello della categoria. Rifatta ogni mese dal 2004 con i soli prezzi di quel giorno, questa scelta è andata in guadagno più spesso della durata unica per categoria, sia fino al 2016 sia dopo (vedi "Funziona?").</p>
     <h3>Il pacchetto</h3>
@@ -1761,37 +1827,85 @@ const draw = {
   demo: () => { const b = $('#dm-line'); if (b && DEMO && (DEMO.storico || []).length > 1) lineChart(b, DEMO.storico.map(x => x.d), DEMO.storico.map(x => x.v), 'EUR'); },
 };
 $('#all-list').innerHTML = SIM_LIST.map(s => `<option value="${esc((s.isin ? s.isin + ' — ' : '') + s.name + ' (' + tk(s.symbol) + ')')}"></option>`).join('');
-/* ---------------- il robot: compra e vende da solo, in un conto finto ---------------- */
-// Due strategie, ognuna con il suo conto finto da 10.000 €.
-//  notte:  azioni USA, ogni giorno i 10 titoli con le notti migliori delle ultime 21 (la lista si rifà
-//          per ogni giorno dai prezzi ufficiali), comprati alla chiusura e venduti all'apertura dopo.
-//          Prezzi: D.giornata.notte.prezzi (aggiornamento dell'app) o, servita da live.py, /aperture.
-//  crypto: i piani di 24 ore (compra il ribasso, compra la rottura) delle 12 crypto, una quota di 1/24
-//          del capitale ciascuno. Dal vivo con le quotazioni in tempo reale; a pagina chiusa li rifà con
-//          le candele orarie (D.intraday.crypto[s].storia_piani). Quello che è già registrato non cambia.
-const ROBOT_CAPITALE = 10000, ROBOT_PIANI = 24, ROBOT_COSTO_CRYPTO = 0.002;
-const PASSI = {attesa: 0, dentro: 1, obiettivo: 2, protezione: 2, scaduto: 2, scaduto_dentro: 2, saltato: 2};
-let ROBOT = null, robotSalvo = false, robotUltimo = 0;
-const robotNuovo = (inizio, costo, notte, crypto) => ({versione: 1, inizio, acceso: new Date().toISOString(),
-  notte: {attiva: notte, costo, capitale: ROBOT_CAPITALE, fatte: {}, aperta: null, ops: [], n: 0, vinte: 0},
-  crypto: {attiva: crypto, cassa: ROBOT_CAPITALE, piani: {}, ops: [], n: 0, vinte: 0}, storico: []});
+/* ---------------- il robot: compra e vende da solo, in conti finti ---------------- */
+// Quattro strategie, ognuna con il suo conto finto da 10.000 €:
+//  usa_notte  azioni USA, i 10 con le notti migliori delle ultime 21: comprati in chiusura, venduti all'apertura (verificata)
+//  ita_notte  azioni italiane, i 5 con le notti migliori, con la Tobin tax dello 0,1 % (sperimentale)
+//  giornata   "Oops!" sui titoli più scambiati di USA e Milano: se la seduta apre sotto il minimo di ieri,
+//             compra quando risale lì e vende in chiusura (esercitazione: in media perde)
+//  crypto     i piani di 24 ore: entrata al livello, uscita a protezione, obiettivo o scadenza (esercitazione)
+// A pagina chiusa le operazioni si rifanno con i prezzi ufficiali (aste, massimi e minimi del giorno) e le
+// candele orarie delle crypto; con le quotazioni in tempo reale succedono dal vivo. Quello che è
+// registrato non cambia e non si conta due volte. Lo stesso codice gira nel cloud (robot_cloud.js).
+const ROBOT_CAPITALE = 10000, ROBOT_PIANI = 24, ROBOT_COSTO_CRYPTO = 0.002, TOBIN = 0.001;
+const STRATEGIE = {
+  usa_notte: {nome: 'Azioni USA, di notte', breve: 'USA notte', stato: 'verificata', chip: 'alta', mercato: 'usa', n: 10},
+  ita_notte: {nome: 'Azioni italiane, di notte', breve: 'Italia notte', stato: 'sperimentale', chip: 'media', mercato: 'italia', n: 5},
+  giornata: {nome: 'Azioni in giornata (Oops!)', breve: 'In giornata', stato: 'esercitazione', chip: 'bassa'},
+  crypto: {nome: 'Crypto, piani di 24 ore', breve: 'Crypto', stato: 'esercitazione', chip: 'bassa'},
+};
+const ORARI = {usa: {apre: '15:30', chiude: '22:00'}, italia: {apre: '09:00', chiude: '17:30'}};     // ora italiana
+const PASSI = {attesa: 0, dentro: 1, obiettivo: 2, protezione: 2, scaduto: 2, scaduto_dentro: 2, saltato: 2, annullato: 2, manuale: 2};
+let ROBOT = null, robotSalvo = false, robotUltimo = 0, robotVisti = null, robotTutto = false;
+const ROBOT_CHIESTI = {}, ROBOT_FESTA = {};                                      // ultima richiesta a /aperture; borsa chiusa oggi
 const r4 = x => Math.round(x * 1e4) / 1e4, r6 = x => Math.round(x * 1e6) / 1e6;
+const mercatoDi = s => /\.MI$/.test(s) ? 'italia' : 'usa';
+const isoDaUTC = s => s.replace(' UTC', ':00Z').replace(' ', 'T');
+const isoN = s => new Date(String(s).includes('UTC') ? isoDaUTC(s) : s).toISOString();
+function oraRoma(d, hhmm) {                                                       // l'istante di un'ora italiana in un giorno
+  const g = new Date(d + 'T' + hhmm + ':00Z');
+  const roma = new Date(g.toLocaleString('en-US', {timeZone: 'Europe/Rome'})), utc = new Date(g.toLocaleString('en-US', {timeZone: 'UTC'}));
+  return new Date(g.getTime() - (roma - utc)).toISOString();
+}
+function adessoRoma(adesso) {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-GB', {timeZone: 'Europe/Rome', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short', hourCycle: 'h23'}).formatToParts(adesso).map(x => [x.type, x.value]));
+  return {d: `${p.year}-${p.month}-${p.day}`, hm: `${p.hour}:${p.minute}`, feriale: !['Sat', 'Sun'].includes(p.weekday)};
+}
+const contoVuoto = (k, attiva) => k === 'crypto' ? {attiva, cassa: ROBOT_CAPITALE, piani: {}, ops: [], n: 0, vinte: 0}
+  : k === 'giornata' ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
+  : {attiva, capitale: ROBOT_CAPITALE, fatte: {}, aperta: null, ops: [], n: 0, vinte: 0};
+function robotNuovo(inizio, costo, scelte) {
+  const conti = {};
+  for (const k of Object.keys(STRATEGIE)) conti[k] = contoVuoto(k, !!scelte[k]);
+  const ora = new Date().toISOString();
+  return {versione: 2, id: Math.random().toString(36).slice(2, 10), rev: 0, inizio, dal: inizio + 'T00:00:00.000Z', costo, conti, registro: [], storico: [], sessione: {aperta: true, da: ora, chiusa: null}};
+}
+function robotMigra(v) {                                                          // dal robot della prima versione
+  if (!v || v.versione === 2) return v;
+  const R = robotNuovo(v.inizio, (v.notte && v.notte.costo) || 0.0002, {});
+  if (v.notte) { R.conti.usa_notte = Object.assign(contoVuoto('usa_notte', false), v.notte); delete R.conti.usa_notte.costo; }
+  if (v.crypto) R.conti.crypto = Object.assign(contoVuoto('crypto', false), v.crypto);
+  R.storico = (v.storico || []).map(x => ({d: x.d, usa_notte: x.notte, crypto: x.crypto}));
+  R.sessione = {aperta: !!(R.conti.usa_notte.attiva || R.conti.crypto.attiva), da: v.acceso || R.sessione.da, chiusa: null};
+  if (!R.sessione.aperta) R.sessione.chiusa = R.sessione.da;
+  return R;
+}
+function evento(R, e) { R.registro = (R.registro || []).concat([e]).slice(-1000); }
+const dalDi = (R, k) => (R.conti[k].dal || '') > R.dal ? R.conti[k].dal : R.dal;
 
+/* i dati: aperture, chiusure, massimi e minimi ufficiali (aggiornamento dell'app) e, servite da live.py, le sedute di oggi */
 function prezziNotte() {
   const out = {};
-  for (const [s, rows] of Object.entries((D.giornata && D.giornata.notte && D.giornata.notte.prezzi) || {})) {
-    const m = out[s] = {};
-    for (const [d, o, c] of rows) m[d] = [o, c];
-  }
-  for (const [s, rows] of Object.entries(LIVE.aperture || {})) {                 // da live.py: appena escono dalle aste
+  for (const [s, rows] of Object.entries((D.giornata && D.giornata.notte && D.giornata.notte.prezzi) || {})) { const m = out[s] = {}; for (const [d, o, c] of rows) m[d] = [o, c]; }
+  for (const [s, rows] of Object.entries(LIVE.aperture || {})) {
     const m = out[s] = out[s] || {};
     for (const [d, o, c] of rows) m[d] = [o || (m[d] && m[d][0]), c == null ? (m[d] ? m[d][1] : null) : c];
   }
   return out;
 }
-function listaNotte(P, giorno, n = 10, notti = 21) {
+function candeleGiornata() {
+  const out = {};
+  for (const [s, rows] of Object.entries((D.giornata && D.giornata.candele) || {})) { const m = out[s] = {}; for (const [d, o, h, l, c] of rows) m[d] = {o, h, l, c}; }
+  for (const [s, rows] of Object.entries(LIVE.aperture || {})) {
+    if (!out[s]) continue;
+    for (const [d, o, c, h, l] of rows) { const x = out[s][d] || {}; out[s][d] = {o: o || x.o, h: h != null ? Math.max(h, x.h || h) : x.h, l: l != null ? Math.min(l, x.l || l) : x.l, c: c != null ? c : x.c}; }
+  }
+  return out;
+}
+function listaNotte(P, giorno, n, mercato, notti = 21) {
   const righe = [];
   for (const [s, m] of Object.entries(P)) {
+    if (mercatoDi(s) !== mercato) continue;
     const date = Object.keys(m).filter(d => d <= giorno).sort();
     if (date[date.length - 1] !== giorno || !m[giorno][0]) continue;
     const r = [];
@@ -1800,190 +1914,355 @@ function listaNotte(P, giorno, n = 10, notti = 21) {
   }
   return righe.sort((a, b) => b.m - a.m).slice(0, n).map(x => x.s);
 }
-function robotNotte(R) {
-  const N = R.notte; if (!N.attiva) return false;
-  const P = prezziNotte(), giorni = [...new Set(Object.values(P).flatMap(m => Object.keys(m)))].sort();
+
+/* di notte: per ogni giorno compra la lista alla chiusura e la vende all'apertura dopo */
+function robotNotte(R, k) {
+  const S = STRATEGIE[k], N = R.conti[k], O = ORARI[S.mercato];
+  const tieni = N.aperta && N.aperta.stato === 'in mano' ? N.aperta : null;
+  if (!N.attiva && !tieni) { if (N.aperta) { N.aperta = null; return true; } return false; }
+  const costo = R.costo + (S.mercato === 'italia' ? TOBIN : 0);
+  const P = prezziNotte(), giorni = [...new Set(Object.entries(P).filter(([s]) => mercatoDi(s) === S.mercato).flatMap(([, m]) => Object.keys(m)))].sort();
+  if (tieni && !giorni.includes(tieni.data)) return false;                      // dati non arrivati: si aspetta
   let cambiato = false, aperta = null;
   for (let i = 0; i < giorni.length; i++) {
-    const d = giorni[i]; if (d < R.inizio || N.fatte[d]) continue;
-    const lista = listaNotte(P, d); if (lista.length < 10) continue;
-    const chiusure = lista.map(s => P[s][d] && P[s][d][1]);
-    if (chiusure.some(c => !c)) { aperta = {stato: 'stasera', data: d, titoli: lista}; break; }          // seduta di d non ancora chiusa
-    const d1 = giorni[i + 1], aperture = d1 ? lista.map(s => P[s][d1] && P[s][d1][0]) : [];
+    const d = giorni[i], mio = !!tieni && tieni.data === d;
+    if (N.fatte[d] || (!mio && (!N.attiva || oraRoma(d, O.chiude) < dalDi(R, k)))) continue;
+    const lista = mio ? tieni.titoli : listaNotte(P, d, S.n, S.mercato); if (lista.length < S.n) continue;
+    const chiusure = lista.map(s => P[s] && P[s][d] && P[s][d][1]);
+    if (chiusure.some(c => !c)) { aperta = {stato: 'stasera', data: d, titoli: lista}; break; }     // la seduta non è ancora chiusa
+    if (!mio) evento(R, {t: oraRoma(d, O.chiude), s: k, sym: lista.join(','), azione: 'compra', nota: `${lista.length} titoli all'asta di chiusura`, fonte: 'prezzi ufficiali'});
+    const d1 = giorni[i + 1], aperture = d1 ? lista.map(s => P[s] && P[s][d1] && P[s][d1][0]) : [];
     if (!d1 || aperture.some(o => !o)) { aperta = {stato: 'in mano', data: d, titoli: lista, prezzi: chiusure.map(r6), capitale: r4(N.capitale)}; break; }
-    const lordo = lista.reduce((t, s, k) => t + aperture[k] / chiusure[k] - 1, 0) / lista.length, r = lordo - N.costo;
-    N.capitale = N.capitale * (1 + r);
-    N.fatte[d] = 1; N.n++; if (r > 0) N.vinte++;
+    const r = lista.reduce((t, s, j) => t + aperture[j] / chiusure[j] - 1, 0) / lista.length - costo;
+    N.capitale = N.capitale * (1 + r); N.fatte[d] = 1; N.n++; if (r > 0) N.vinte++;
     N.ops.push({d, d1, titoli: lista, r: r6(r), capitale: r4(N.capitale)});
+    evento(R, {t: oraRoma(d1, O.apre), s: k, sym: lista.join(','), azione: 'vende', r: r6(r), nota: `${lista.length} titoli all'asta di apertura`, fonte: 'prezzi ufficiali'});
     cambiato = true;
   }
   N.ops = N.ops.slice(-120);
-  const k = Object.keys(N.fatte).sort(); if (k.length > 90) for (const x of k.slice(0, k.length - 90)) delete N.fatte[x];
+  const f = Object.keys(N.fatte).sort(); if (f.length > 90) for (const x of f.slice(0, f.length - 90)) delete N.fatte[x];
   if (JSON.stringify(aperta) !== JSON.stringify(N.aperta)) { N.aperta = aperta; cambiato = true; }
   return cambiato;
 }
+
+/* in giornata (Oops!): se apre sotto il minimo di ieri, compra quando risale lì e vende in chiusura */
+function robotGiornata(R, adesso) {
+  const G = R.conti.giornata; if (!G.attiva && !Object.keys(G.posizioni).length) return false;
+  const C = candeleGiornata(), n = Math.max(1, Object.keys(C).length);
+  let cambiato = false;
+  const compra = (s, d, livello, t, fonte, circa) => {
+    const quota = Math.min(ROBOT_CAPITALE / n, G.cassa); if (quota < 1) return;
+    G.posizioni[s + '|' + d] = {sym: s, d, entrata: livello, quota, t, fonte};
+    G.cassa -= quota; cambiato = true;
+    evento(R, {t, s: 'giornata', sym: s, azione: 'compra', prezzo: r6(livello), nota: 'risalito al minimo di ieri', fonte, circa});
+  };
+  const vende = (key, prezzo, t, nota, fonte) => {
+    const p = G.posizioni[key], r = prezzo / p.entrata - 1 - R.costo;
+    G.cassa += p.quota * (1 + r); G.n++; if (r > 0) G.vinte++; G.fatte[key] = 1; delete G.posizioni[key]; cambiato = true;
+    evento(R, {t, s: 'giornata', sym: p.sym, azione: 'vende', prezzo: r6(prezzo), r: r6(r), nota, fonte});
+  };
+  for (const [s, m] of Object.entries(C)) {
+    const date = Object.keys(m).sort(), O = ORARI[mercatoDi(s)];
+    for (let i = 1; i < date.length; i++) {
+      const d = date[i], ieri = m[date[i - 1]], oggi = m[d], key = s + '|' + d;
+      if (G.fatte[key] || !ieri || !ieri.l || !oggi || !oggi.o) continue;
+      if (!G.posizioni[key] && G.attiva && oggi.o < ieri.l) {
+        const q = LIVE.q[s], fresco = q && q.p && q.t && adessoRoma(new Date(q.t * 1000)).d === d && adesso - q.t * 1000 < 40 * 60e3;
+        if (oraRoma(d, O.apre) >= dalDi(R, 'giornata') && oggi.h != null && oggi.h >= ieri.l) compra(s, d, ieri.l, oraRoma(d, O.apre), 'prezzi ufficiali', true);
+        else if (fresco && adesso.toISOString() >= dalDi(R, 'giornata') && Math.max(q.p, q.hi || 0) >= ieri.l) compra(s, d, ieri.l, adesso.toISOString(), 'dal vivo');
+      }
+      if (!G.posizioni[key]) continue;
+      const fine = oraRoma(d, O.chiude), q = LIVE.q[s];
+      if (oggi.c != null) vende(key, oggi.c, fine, 'in chiusura', 'prezzi ufficiali');
+      else if (q && q.p && q.t && adessoRoma(new Date(q.t * 1000)).d === d && q.t * 1000 >= Date.parse(fine) - 60e3) vende(key, q.p, fine, 'in chiusura', 'dal vivo');
+    }
+  }
+  const f = Object.keys(G.fatte).sort(); if (f.length > 600) for (const x of f.slice(0, f.length - 600)) delete G.fatte[x];
+  return cambiato;
+}
+
+/* crypto: i piani di 24 ore */
 function pianiCrypto() {
   const out = {};
   for (const [s, x] of Object.entries((D.intraday && D.intraday.crypto) || {}))
     for (const p of (x.storia_piani || [])) out[`${s}|${p.regola}|${p.ora}`] = Object.assign({sym: s}, p);
   return out;
 }
-function cryptoEntra(C, r, prezzo, quando, fonte) {
-  const quota = ROBOT_CAPITALE / ROBOT_PIANI;
+function cryptoEntra(R, r, prezzo, quando, fonte) {
+  const C = R.conti.crypto, quota = ROBOT_CAPITALE / ROBOT_PIANI;
   if (C.cassa < quota - 1e-9) { r.fase = 'saltato'; r.nota = 'liquidità finita'; return; }
   C.cassa -= quota;
-  Object.assign(r, {fase: 'dentro', prezzo_entrata: r6(prezzo), quando, qty: quota * (1 - ROBOT_COSTO_CRYPTO) / prezzo, speso: quota, fonte_entrata: fonte});
+  Object.assign(r, {fase: 'dentro', prezzo_entrata: r6(prezzo), quando: isoN(quando), qty: quota * (1 - ROBOT_COSTO_CRYPTO) / prezzo, speso: quota, fonte_entrata: fonte});
+  evento(R, {t: isoN(quando), s: 'crypto', sym: r.sym, azione: 'compra', prezzo: r6(prezzo), nota: r.regola === 'ribasso' ? 'compra il ribasso' : 'compra la rottura', fonte});
 }
-function cryptoEsce(C, r, prezzo, quando, fase, fonte) {
-  const incasso = r.qty * prezzo * (1 - ROBOT_COSTO_CRYPTO), rr = incasso / r.speso - 1;
+function cryptoEsce(R, r, prezzo, quando, fase, fonte) {
+  const C = R.conti.crypto, incasso = r.qty * prezzo * (1 - ROBOT_COSTO_CRYPTO), rr = incasso / r.speso - 1;
   C.cassa += incasso; C.n++; if (rr > 0) C.vinte++;
-  Object.assign(r, {fase, prezzo_uscita: r6(prezzo), chiusura: quando, rendimento: r6(rr), fonte_uscita: fonte});
-  C.ops.push({sym: r.sym, regola: r.regola, ora: r.ora, entrata: r.prezzo_entrata, uscita: r6(prezzo), r: r6(rr), fase, quando, fonte: fonte});
+  Object.assign(r, {fase, prezzo_uscita: r6(prezzo), chiusura: isoN(quando), rendimento: r6(rr), fonte_uscita: fonte});
+  C.ops.push({sym: r.sym, regola: r.regola, ora: r.ora, entrata: r.prezzo_entrata, uscita: r6(prezzo), r: r6(rr), fase, quando: isoN(quando), fonte});
+  evento(R, {t: isoN(quando), s: 'crypto', sym: r.sym, azione: 'vende', prezzo: r6(prezzo), r: r6(rr),
+    nota: {obiettivo: 'obiettivo raggiunto', protezione: 'protezione', scaduto: '24 ore passate', manuale: fonte}[fase] || fase, fonte});
 }
 function robotCrypto(R, adesso) {
-  const C = R.crypto; if (!C.attiva) return false;
+  const C = R.conti.crypto, dati = pianiCrypto();
   let cambiato = false;
-  const ora = adesso.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-  for (const [k, p] of Object.entries(pianiCrypto())) {                          // dalle candele orarie
-    if (p.ora < R.inizio + ' 00:00 UTC') continue;
-    let r = C.piani[k];
-    if (!r) { r = C.piani[k] = {sym: p.sym, regola: p.regola, ora: p.ora, fino: p.fino, entrata: p.entrata, protezione: p.protezione, obiettivo: p.obiettivo, fase: 'attesa'}; cambiato = true; }
-    if (PASSI[p.fase] <= PASSI[r.fase]) continue;
-    if (r.fase === 'attesa') {
-      if (p.fase === 'scaduto') { r.fase = 'scaduto'; cambiato = true; continue; }
-      cryptoEntra(C, r, p.prezzo_entrata, p.quando, 'candele'); cambiato = true;
-      if (r.fase !== 'dentro') continue;
+  if (C.attiva) {
+    const ora = adesso.toISOString();
+    for (const [k, p] of Object.entries(dati)) {                                  // dalle candele orarie
+      if (isoN(p.ora) < dalDi(R, 'crypto')) continue;
+      let r = C.piani[k];
+      if (!r) { r = C.piani[k] = {sym: p.sym, regola: p.regola, ora: p.ora, fino: p.fino, entrata: p.entrata, protezione: p.protezione, obiettivo: p.obiettivo, fase: 'attesa'}; cambiato = true; }
+      if (PASSI[p.fase] <= PASSI[r.fase]) continue;
+      if (r.fase === 'attesa') {
+        if (p.fase === 'scaduto') { r.fase = 'scaduto'; cambiato = true; continue; }
+        cryptoEntra(R, r, p.prezzo_entrata, p.quando, 'candele orarie'); cambiato = true;
+        if (r.fase !== 'dentro') continue;
+      }
+      if (r.fase === 'dentro' && PASSI[p.fase] === 2 && p.fase !== 'scaduto') {
+        const uscita = p.fase === 'obiettivo' ? p.obiettivo : p.fase === 'protezione' ? p.protezione : p.prezzo_entrata * (1 + p.rendimento + 2 * ROBOT_COSTO_CRYPTO);
+        cryptoEsce(R, r, uscita, p.chiusura || p.fino, p.fase === 'scaduto_dentro' ? 'scaduto' : p.fase, 'candele orarie'); cambiato = true;
+      }
     }
-    if (r.fase === 'dentro' && PASSI[p.fase] === 2 && p.fase !== 'scaduto') {
-      const uscita = p.fase === 'obiettivo' ? p.obiettivo : p.fase === 'protezione' ? p.protezione : p.prezzo_entrata * (1 + p.rendimento + 2 * ROBOT_COSTO_CRYPTO);
-      cryptoEsce(C, r, uscita, p.chiusura || p.fino, p.fase === 'scaduto_dentro' ? 'scaduto' : p.fase, 'candele'); cambiato = true;
-    }
-  }
-  for (const r of Object.values(C.piani)) {                                       // dal vivo
-    if (r.fase !== 'attesa' && r.fase !== 'dentro') continue;
-    const q = LIVE.q[r.sym], fresco = q && q.p && q.t && Date.now() - q.t * 1000 < 10 * 60e3;
-    if (r.fase === 'attesa') {
-      if (ora >= r.fino) { r.fase = 'scaduto'; cambiato = true; continue; }
-      if (fresco && (r.regola === 'ribasso' ? q.p <= r.entrata : q.p >= r.entrata)) { cryptoEntra(C, r, q.p, ora, 'dal vivo'); cambiato = true; }
-    }
-    if (r.fase === 'dentro' && fresco) {
-      if (q.p <= r.protezione) { cryptoEsce(C, r, q.p, ora, 'protezione', 'dal vivo'); cambiato = true; }
-      else if (q.p >= r.obiettivo) { cryptoEsce(C, r, q.p, ora, 'obiettivo', 'dal vivo'); cambiato = true; }
-      else if (ora >= r.fino) { cryptoEsce(C, r, q.p, ora, 'scaduto', 'dal vivo'); cambiato = true; }
+    for (const r of Object.values(C.piani)) {                                     // dal vivo
+      if (r.fase !== 'attesa' && r.fase !== 'dentro') continue;
+      const q = LIVE.q[r.sym], fresco = q && q.p && q.t && adesso - q.t * 1000 < 10 * 60e3, fino = isoN(r.fino);
+      if (r.fase === 'attesa') {
+        if (ora >= fino) { r.fase = 'scaduto'; cambiato = true; continue; }
+        if (fresco && (r.regola === 'ribasso' ? q.p <= r.entrata : q.p >= r.entrata)) { cryptoEntra(R, r, q.p, ora, 'dal vivo'); cambiato = true; }
+      }
+      if (r.fase === 'dentro' && fresco) {
+        if (q.p <= r.protezione) { cryptoEsce(R, r, q.p, ora, 'protezione', 'dal vivo'); cambiato = true; }
+        else if (q.p >= r.obiettivo) { cryptoEsce(R, r, q.p, ora, 'obiettivo', 'dal vivo'); cambiato = true; }
+        else if (ora >= fino) { cryptoEsce(R, r, q.p, ora, 'scaduto', 'dal vivo'); cambiato = true; }
+      }
     }
   }
   C.ops = C.ops.slice(-200);
   // si tolgono solo i piani chiusi già usciti dai dati (7 giorni): altrimenti tornerebbero come nuovi
-  const nei_dati = new Set(Object.keys(pianiCrypto()));
-  for (const [k, r] of Object.entries(C.piani)) if (PASSI[r.fase] === 2 && !nei_dati.has(k)) delete C.piani[k];
+  for (const [k, r] of Object.entries(C.piani)) {
+    if (PASSI[r.fase] === 2 && !dati[k]) { delete C.piani[k]; cambiato = true; }
+    else if (PASSI[r.fase] === 2 && Object.keys(r).length > 1) { C.piani[k] = {fase: r.fase}; cambiato = true; }
+  }
   return cambiato;
 }
+
+/* valori, posizioni aperte, simboli da seguire */
 function prezzoOra(sym, riserva) { const q = LIVE.q[sym]; return q && q.p ? q.p : (SIM[sym] ? SIM[sym].prezzo : riserva); }
-function valoreNotte(R) {
-  const N = R.notte, A = N.aperta;
-  if (!A || A.stato !== 'in mano') return N.capitale;
-  return A.capitale * A.titoli.reduce((t, s, k) => t + prezzoOra(s, A.prezzi[k]) / A.prezzi[k], 0) / A.titoli.length;
+function valoreConto(R, k) {
+  const c = R.conti[k];
+  if (k === 'crypto') return c.cassa + Object.values(c.piani).filter(r => r.fase === 'dentro').reduce((t, r) => t + r.qty * prezzoOra(r.sym, r.prezzo_entrata) * (1 - ROBOT_COSTO_CRYPTO), 0);
+  if (k === 'giornata') return c.cassa + Object.values(c.posizioni).reduce((t, p) => t + p.quota * prezzoOra(p.sym, p.entrata) / p.entrata, 0);
+  const A = c.aperta;
+  if (!A || A.stato !== 'in mano') return c.capitale;
+  return A.capitale * A.titoli.reduce((t, s, j) => t + prezzoOra(s, A.prezzi[j]) / A.prezzi[j], 0) / A.titoli.length;
 }
-function valoreCrypto(R) {
-  const C = R.crypto;
-  return C.cassa + Object.values(C.piani).filter(r => r.fase === 'dentro').reduce((t, r) => t + r.qty * prezzoOra(r.sym, r.prezzo_entrata) * (1 - ROBOT_COSTO_CRYPTO), 0);
+function posizioniAperte(R) {
+  const out = [];
+  for (const k of ['usa_notte', 'ita_notte']) {
+    const A = R.conti[k].aperta, O = ORARI[STRATEGIE[k].mercato];
+    if (A && A.stato === 'in mano') A.titoli.forEach((s, j) => out.push({k, sym: s, entrata: A.prezzi[j], ora: prezzoOra(s, A.prezzi[j]), quando: oraRoma(A.data, O.chiude), esce: `all'asta di apertura (${O.apre})`, cur: STRATEGIE[k].mercato === 'usa' ? '$' : '€'}));
+  }
+  for (const p of Object.values(R.conti.giornata.posizioni)) out.push({k: 'giornata', sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `in chiusura (${ORARI[mercatoDi(p.sym)].chiude})`, cur: mercatoDi(p.sym) === 'usa' ? '$' : '€', costo: R.costo});
+  for (const r of Object.values(R.conti.crypto.piani)) if (r.fase === 'dentro') {
+    const fino = new Date(isoN(r.fino)).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'});
+    out.push({k: 'crypto', sym: r.sym, entrata: r.prezzo_entrata, ora: prezzoOra(r.sym, r.prezzo_entrata), quando: r.quando,
+      esce: `sotto ${nf(r.protezione, dec(r.protezione))} o sopra ${nf(r.obiettivo, dec(r.obiettivo))}, entro ${fino}`, cur: '€', costo: 2 * ROBOT_COSTO_CRYPTO});
+  }
+  return out.sort((a, b) => a.quando < b.quando ? 1 : -1);
 }
 function simboliRobot() {
   if (!ROBOT) return [];
-  const out = new Set();
-  for (const r of Object.values(ROBOT.crypto.piani || {})) if (ROBOT.crypto.attiva && (r.fase === 'attesa' || r.fase === 'dentro')) out.add(r.sym);
-  if (ROBOT.notte.attiva && ROBOT.notte.aperta) ROBOT.notte.aperta.titoli.forEach(s => out.add(s));
+  const out = new Set(), C = ROBOT.conti;
+  for (const r of Object.values(C.crypto.piani)) if ((C.crypto.attiva && r.fase === 'attesa') || r.fase === 'dentro') out.add(r.sym);
+  for (const k of ['usa_notte', 'ita_notte']) if (C[k].aperta) C[k].aperta.titoli.forEach(s => out.add(s));
+  if (C.giornata.attiva) Object.keys((D.giornata && D.giornata.candele) || {}).forEach(s => out.add(s));
+  Object.values(C.giornata.posizioni).forEach(p => out.add(p.sym));
   return [...out];
+}
+
+/* il giro: tutte le strategie, la fotografia del giorno, il salvataggio e gli avvisi */
+function robotPasso(R, adesso) {
+  let cambiato = robotNotte(R, 'usa_notte');
+  cambiato = robotNotte(R, 'ita_notte') || cambiato;
+  cambiato = robotGiornata(R, adesso) || cambiato;
+  cambiato = robotCrypto(R, adesso) || cambiato;
+  const oggi = adesso.toISOString().slice(0, 10), st = R.storico || (R.storico = []);
+  const v = {d: oggi}; for (const k of Object.keys(STRATEGIE)) v[k] = r4(valoreConto(R, k));
+  const ultimo = st[st.length - 1];
+  if (!ultimo || ultimo.d !== oggi) { st.push(v); R.storico = st.slice(-400); cambiato = true; }
+  else if (Object.keys(STRATEGIE).some(k => Math.abs((ultimo[k] || 0) - v[k]) > 0.5)) { st[st.length - 1] = v; cambiato = true; }
+  return cambiato;
 }
 function robotGiro() {
   if (!ROBOT) return;
-  const R = ROBOT, adesso = new Date();
-  let cambiato = robotNotte(R);
-  cambiato = robotCrypto(R, adesso) || cambiato;
-  const oggi = adesso.toISOString().slice(0, 10), st = R.storico || (R.storico = []);
-  const v = {d: oggi, notte: r4(valoreNotte(R)), crypto: r4(valoreCrypto(R))};
-  if (!st.length || st[st.length - 1].d !== oggi) { st.push(v); R.storico = st.slice(-400); cambiato = true; }
-  else if (Math.abs(st[st.length - 1].notte - v.notte) + Math.abs(st[st.length - 1].crypto - v.crypto) > 0.5) { st[st.length - 1] = v; cambiato = true; }
+  const R = ROBOT, prima = (R.registro || []).length, cambiato = robotPasso(R, new Date());
   robotUltimo = Date.now();
-  if (cambiato) { robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(R))); robotSalvo = false; }
+  const nuovi = (R.registro || []).slice(prima).filter(e => e.fonte === 'dal vivo');
+  if (nuovi.length && robotVisti !== null) { const e = nuovi[nuovi.length - 1]; avviso(`Robot: ${e.azione === 'compra' ? 'comprato' : 'venduto'} ${tk(e.sym)}${e.prezzo ? ' a ' + nf(e.prezzo, dec(e.prezzo)) : ''}${e.r != null ? ' · ' + pc(e.r, 2) : ''}`); }
+  robotVisti = (R.registro || []).length;
+  if (cambiato) robotSalva();
   aggiornaRobot();
 }
-async function robotAperture() {                                                   // live.py: le aste appena chiuse
-  if (!ROBOT || !ROBOT.notte.attiva || LIVE.fonte !== 'locale') return;
-  const A = ROBOT.notte.aperta, oggi = new Date().toISOString().slice(0, 10);
-  const lista = (A && A.titoli) || ((D.giornata && D.giornata.notte && D.giornata.notte.titoli) || []).map(t => t.symbol);
-  if (!lista.length) return;
-  try {
-    const r = await fetch('/aperture?s=' + encodeURIComponent(lista.join(',')), {cache: 'no-store'});
-    if (r.ok) { const j = await r.json(); LIVE.aperture = Object.assign(LIVE.aperture || {}, j.prezzi || {}); robotGiro(); }
-  } catch (e) {}
-}
-Store.on('robot', v => { ROBOT = v && !v.vuoto && v.notte ? v : null; if (!robotSalvo) { robotGiro(); if (view === 'giornata') aggiornaRobot(); if (view === 'demo') renderDemo(); } });
-
-function robotHTML() {
-  const L = D.libri && D.libri.momento_notte, c2 = L && L.livelli.find(x => Math.abs(x.costo - .0002) < 1e-9), c10 = L && L.livelli.find(x => Math.abs(x.costo - .001) < 1e-9);
-  const ver = D.intraday && D.intraday.verifica;
-  if (!ROBOT) {
-    const giorni = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
-    return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conto finto)</h2>
-      <p class="sub" style="margin-top:4px">Segue gli algoritmi dell'app senza che tu faccia niente, con due conti finti da ${eur(ROBOT_CAPITALE)}: <b>azioni USA di notte</b> (compra la lista in chiusura, vende all'apertura) e <b>crypto</b> (i piani di 24 ore: entra al livello, esce alla protezione, all'obiettivo o alla scadenza). Niente soldi veri.</p>
-      <div class="acct" style="margin-top:10px">
-        <label class="f" for="rb-da">Da quando<select id="rb-da"><option value="${giorni(0)}">da oggi</option><option value="${giorni(7)}">rigioca l'ultima settimana</option><option value="${giorni(14)}">rigioca le ultime 2 settimane (crypto: 7 giorni)</option></select></label>
-        <label class="f" for="rb-costo">Costi del tuo broker, azioni<select id="rb-costo"><option value="0.0002">0,02 %: aste e commissioni basse</option><option value="0.001">0,10 %: commissione fissa su cifre piccole</option></select></label></div>
-      <p style="margin-top:8px"><label><input type="checkbox" id="rb-notte" checked> Azioni USA, di notte</label> &nbsp; <label><input type="checkbox" id="rb-crypto" checked> Crypto, piani di 24 ore</label></p>
-      <p style="margin-top:10px"><button type="button" class="go" id="rb-accendi">Accendi il robot</button></p>
-      <p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: di notte ${c2 ? `${pc(c2.anno_dopo, 0)} l'anno dal 2016 con 0,02 % di costi, ${c10 ? pc(c10.anno_dopo, 0) : 'in perdita'} con 0,10 %` : 'guadagna solo con costi molto bassi'}; i piani crypto ${ver && ver.ribasso ? `in media ${pc(ver.ribasso.tutto.media, 2)} e ${pc(ver.rottura.tutto.media, 2)} a operazione` : 'in perdita dopo i costi'}. Il robot serve a vederlo succedere, giorno per giorno.</p></div>`;
+function daChiedere(R, adesso) {                                                  // cosa serve a live.py, e solo quando serve
+  const T = adessoRoma(adesso); if (!T.feriale) return [];
+  const festa = mer => ROBOT_FESTA[mer] === T.d;
+  const P = prezziNotte(), G = candeleGiornata(), C = R.conti, out = new Set();
+  const finestra = mer => T.hm > ORARI[mer].apre && T.hm < String(Number(ORARI[mer].chiude.slice(0, 2)) + 1) + ORARI[mer].chiude.slice(2);
+  const chiuso = mer => T.hm > ORARI[mer].chiude;
+  const manca = (s, j) => !(P[s] && P[s][T.d] && P[s][T.d][j]);
+  for (const k of ['usa_notte', 'ita_notte']) {
+    const N = C[k], mer = STRATEGIE[k].mercato, A = N.aperta; if (!finestra(mer) || festa(mer)) continue;
+    if (A && A.stato === 'in mano' && A.data < T.d) A.titoli.forEach(s => { if (manca(s, 0)) out.add(s); });        // si vende all'apertura
+    if (N.attiva && !(A && A.stato === 'in mano' && A.data === T.d)) Object.keys(P).forEach(s => { if (mercatoDi(s) === mer && manca(s, 0)) out.add(s); });   // la lista di oggi
+    if (A && A.data === T.d && chiuso(mer)) A.titoli.forEach(s => { if (manca(s, 1)) out.add(s); });              // si compra alla chiusura
   }
-  const R = ROBOT, N = R.notte, C = R.crypto, vN = valoreNotte(R), vCr = valoreCrypto(R);
-  const live = LIVE.fonte ? `<span class="lvd"></span>prezzi in tempo reale` : `<span class="lvd off"></span>prezzi dell'ultimo aggiornamento (${D.aggiornato ? D.aggiornato.slice(11, 16) : ''})`;
-  const box = (tit, v, extra) => `<div class="stat"><div class="k">${tit}</div><div class="v ${v >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${eur(v)}</div><div class="d">${pc(v / ROBOT_CAPITALE - 1, 2)} · ${extra}</div></div>`;
-  const A = N.aperta;
-  const statoNotte = !N.attiva ? '<p class="note">Spenta.</p>' : !A ? `<p class="note">In attesa dei prezzi della prossima seduta.</p>`
-    : A.stato === 'stasera' ? `<p class="note"><b>Stasera</b> compra alla chiusura (${dt(A.data)}): ${A.titoli.map(s => esc(tk(s))).join(', ')}.</p>`
-    : `<p class="note"><b>In mano</b> dalla chiusura di ${dt(A.data)}, si vendono all'apertura dopo:</p><div class="scroll"><table><thead><tr><th class="l">Titolo</th><th>Comprato</th><th>Adesso</th><th>Risultato</th></tr></thead><tbody>${A.titoli.map((s, k) => { const p = prezzoOra(s, A.prezzi[k]), r = p / A.prezzi[k] - 1; return `<tr><td class="l"><b>${esc(tk(s))}</b></td><td>${nf(A.prezzi[k], dec(A.prezzi[k]))} $</td><td>${nf(p, dec(p))} $</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div><p class="note" style="margin-top:4px">Di notte la borsa è chiusa: il risultato si vede all'apertura, quando il robot vende.</p>`;
-  const notti = N.ops.slice(-6).reverse().map(o => `<li>${dt(o.d)} → ${dt(o.d1)}: <b class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</b> <span class="note">(${o.titoli.slice(0, 4).map(tk).join(', ')}…) · ${eur(o.capitale)}</span></li>`).join('');
-  const dentro = Object.values(C.piani).filter(r => r.fase === 'dentro'), attesa = Object.values(C.piani).filter(r => r.fase === 'attesa');
-  const quando = t => new Date(t.replace(' UTC', 'Z').replace(' ', 'T')).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'});
-  const crypto = dentro.length ? `<div class="scroll"><table><thead><tr><th class="l">Crypto</th><th>Entrata</th><th>Adesso</th><th>Risultato</th></tr></thead><tbody>${dentro.map(r => { const p = prezzoOra(r.sym, r.prezzo_entrata), x = p * (1 - ROBOT_COSTO_CRYPTO) / r.prezzo_entrata * (1 - ROBOT_COSTO_CRYPTO) - 1; return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(r.sym))}</b> <span class="note">${r.regola === 'ribasso' ? 'ribasso' : 'rottura'}, piano di ${quando(r.ora)}</span><br><span class="note">esce sotto ${nf(r.protezione, dec(r.protezione))} o sopra ${nf(r.obiettivo, dec(r.obiettivo))}, entro ${quando(r.fino)}</span></td><td>${nf(r.prezzo_entrata, dec(r.prezzo_entrata))} €</td><td>${nf(p, dec(p))} €</td><td class="${x >= 0 ? 'pos' : 'neg'}">${pc(x, 2)}</td></tr>`; }).join('')}</tbody></table></div>` : '<p class="note">Nessuna posizione aperta adesso.</p>';
-  const chiuse = C.ops.slice(-8).reverse().map(o => `<li>${esc(tk(o.sym))} ${o.regola}: <b class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</b> <span class="note">(${o.fase}, ${o.fonte})</span></li>`).join('');
-  return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conto finto)</h2>
-    <p class="note" style="margin-top:4px">Acceso, operazioni dal ${dt(R.inizio, {year: 'numeric'})} · ${live} · ultimo controllo ${new Date(robotUltimo || Date.now()).toLocaleTimeString('it-IT')}. Niente soldi veri.</p>
-    <div class="tiles" style="margin-top:10px">
-      ${N.attiva ? box('Azioni USA, di notte', vN, `${N.n} notti, in guadagno ${N.n ? p100(N.vinte / N.n) : '–'} · costi ${pc(N.costo, 2, false)}`) : ''}
-      ${C.attiva ? box('Crypto, piani di 24 ore', vCr, `${C.n} operazioni chiuse, in guadagno ${C.n ? p100(C.vinte / C.n) : '–'} · ${dentro.length} aperte, ${attesa.length} in attesa`) : ''}
-    </div>
-    <div class="two" style="margin-top:12px">
-      ${N.attiva ? `<div><h3>Azioni USA, di notte</h3>${statoNotte}${notti ? `<ul class="note" style="margin:8px 0 0;padding-left:18px">${notti}</ul>` : ''}</div>` : ''}
-      ${C.attiva ? `<div><h3>Crypto</h3>${crypto}${chiuse ? `<ul class="note" style="margin:8px 0 0;padding-left:18px">${chiuse}</ul>` : ''}</div>` : ''}
-    </div>
-    <p class="note" style="margin-top:10px">A pagina chiusa il robot non si ferma: a ogni aggiornamento dell'app (18:10 e 22:10) rifà le operazioni che avrebbe fatto, con i prezzi ufficiali (azioni) e le candele orarie (crypto). Con i prezzi in tempo reale le vedi succedere dal vivo. Azioni: prezzi in dollari, risultato in percentuale sul conto in euro, senza cambio. <button type="button" class="linkb" id="rb-spegni">${N.attiva || C.attiva ? 'Spegni' : 'Riaccendi'}</button> · <button type="button" class="linkb" id="rb-reset">Ricomincia da capo</button></p></div>`;
+  if (C.giornata.attiva || Object.keys(C.giornata.posizioni).length) for (const s of Object.keys(G)) {
+    const mer = mercatoDi(s), x = G[s][T.d]; if (!finestra(mer) || festa(mer)) continue;
+    if (!x || !x.o || (chiuso(mer) && x.c == null && C.giornata.posizioni[s + '|' + T.d])) out.add(s);
+  }
+  return [...out].filter(s => !ROBOT_CHIESTI[s] || adesso - ROBOT_CHIESTI[s] > 4 * 60e3);
 }
+async function robotAperture() {                                                  // live.py: le aste e le sedute di oggi
+  if (!ROBOT || LIVE.fonte !== 'locale' || robotAperture.va) return;
+  const adesso = new Date(), L = daChiedere(ROBOT, adesso); if (!L.length) return;
+  robotAperture.va = true;
+  for (let i = 0; i < L.length; i += 20) {
+    const parte = L.slice(i, i + 20); parte.forEach(s => { ROBOT_CHIESTI[s] = adesso.getTime(); });
+    try {
+      const r = await fetch('/aperture?s=' + encodeURIComponent(parte.join(',')), {cache: 'no-store'});
+      if (r.ok) { const j = await r.json(); LIVE.aperture = Object.assign(LIVE.aperture || {}, j.prezzi || {}); }
+    } catch (e) {}
+  }
+  robotAperture.va = false;
+  const T = adessoRoma(adesso);                                                    // nessuna seduta oggi: giorno di festa
+  for (const mer of ['usa', 'italia']) {
+    const chiesti = L.filter(s => mercatoDi(s) === mer);
+    if (chiesti.length >= 5 && !chiesti.some(s => ((LIVE.aperture || {})[s] || []).some(r => r[0] === T.d)) && T.hm > ORARI[mer].apre.replace(/^(\d\d)/, h => String(Number(h) + 1).padStart(2, '0'))) ROBOT_FESTA[mer] = T.d;
+  }
+  robotGiro();
+}
+function fermaConto(R, k, adesso, nota) {                                       // vende quello che si può vendere adesso
+  const iso = adesso.toISOString(), c = R.conti[k];
+  if (k === 'crypto') for (const r of Object.values(c.piani)) {
+    if (r.fase === 'dentro') cryptoEsce(R, r, prezzoOra(r.sym, r.prezzo_entrata), iso, 'manuale', nota);
+    else if (r.fase === 'attesa') r.fase = 'annullato';
+  }
+  if (k === 'giornata') for (const [key, p] of Object.entries(c.posizioni)) {
+    const prezzo = prezzoOra(p.sym, p.entrata), r = prezzo / p.entrata - 1 - R.costo;
+    c.cassa += p.quota * (1 + r); c.n++; if (r > 0) c.vinte++; c.fatte[key] = 1; delete c.posizioni[key];
+    evento(R, {t: iso, s: 'giornata', sym: p.sym, azione: 'vende', prezzo: r6(prezzo), r: r6(r), nota, fonte: nota});
+  }
+  if (c.aperta && c.aperta.stato !== 'in mano') c.aperta = null;                 // quelle comprate per la notte: all'apertura
+  c.attiva = false;
+}
+function robotTermina(R, adesso) {
+  for (const k of Object.keys(STRATEGIE)) fermaConto(R, k, adesso, 'fine sessione');
+  R.sessione = Object.assign({}, R.sessione, {aperta: false, chiusa: adesso.toISOString()});
+}
+function robotSalva() { ROBOT.rev = (ROBOT.rev || 0) + 1; robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false; }
+Store.on('robot', v => {
+  if (robotSalvo) return;                                                         // il nostro salvataggio
+  const nuovo = v && !v.vuoto && (v.conti || v.notte) ? v : null;
+  if (nuovo && ROBOT && nuovo.id && nuovo.id === ROBOT.id && (nuovo.rev || 0) <= (ROBOT.rev || 0)) return;   // eco o versione più vecchia
+  ROBOT = nuovo ? robotMigra(JSON.parse(JSON.stringify(nuovo))) : null;
+  robotGiro(); if (!ROBOT) aggiornaRobot(); if (view === 'demo') renderDemo();
+});
+
+/* la pagina del robot */
+function robotModulo(primo) {
+  const giorni = n => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+  return `<div class="acct" style="margin-top:10px">
+      ${primo ? `<label class="f" for="rb-da">Da quando<select id="rb-da"><option value="${giorni(0)}">da oggi</option><option value="${giorni(7)}">rigioca l'ultima settimana</option><option value="${giorni(14)}">rigioca le ultime 2 settimane (crypto: 7 giorni)</option></select></label>` : ''}
+      <label class="f" for="rb-costo">Commissioni del tuo broker, azioni<select id="rb-costo"><option value="0.0002">0,02 %: aste e commissioni basse</option><option value="0.001"${ROBOT && ROBOT.costo >= 0.001 ? ' selected' : ''}>0,10 %: commissione fissa su cifre piccole</option></select></label></div>
+    <div style="margin-top:10px;display:grid;gap:6px">${Object.entries(STRATEGIE).map(([k, S]) => `<label><input type="checkbox" id="rb-${k}" ${(ROBOT ? ROBOT.conti[k].n || k !== 'giornata' : k !== 'giornata') ? 'checked' : ''}> ${S.nome} <span class="chip ${S.chip}">${S.stato}</span></label>`).join('')}</div>`;
+}
+function robotAttese() {
+  const L = D.libri && D.libri.momento_notte, c2 = L && L.livelli.find(x => Math.abs(x.costo - .0002) < 1e-9), c10 = L && L.livelli.find(x => Math.abs(x.costo - .001) < 1e-9);
+  const ver = D.intraday && D.intraday.verifica, oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops');
+  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>USA di notte</b> ${c2 ? `${pc(c2.anno_dopo, 0)} l'anno dal 2016 con 0,02 % di commissioni, ${c10 ? pc(c10.anno_dopo, 0) : 'in perdita'} con 0,10 %` : 'guadagna solo con costi molto bassi'}; <b>Italia di notte</b>, con la Tobin tax, regge solo dal 2014 e non nella prima metà dei dati; <b>in giornata</b> ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione in media negli ultimi anni' : 'in perdita dopo i costi'}; <b>crypto</b> ${ver && ver.ribasso ? `${pc(ver.ribasso.tutto.media, 2)} e ${pc(ver.rottura.tutto.media, 2)} a operazione` : 'in perdita dopo i costi'}. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
+}
+const quandoBreve = t => new Date(t).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+function robotHTML() {
+  if (!ROBOT) return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
+    <p class="sub" style="margin-top:4px">Segue gli algoritmi dell'app senza che tu faccia niente: azioni USA e italiane, di notte e in giornata, e crypto. Ogni strategia ha il suo conto finto da ${eur(ROBOT_CAPITALE)}, così vedi quale guadagna e quale perde. Niente soldi veri.</p>
+    ${robotModulo(true)}
+    <p style="margin-top:12px"><button type="button" class="go" id="rb-inizia">Inizia la sessione</button></p>${robotAttese()}</div>`;
+  const R = ROBOT, aperta = R.sessione && R.sessione.aperta;
+  const live = LIVE.fonte ? `<span class="lvd"></span>prezzi in tempo reale` : `<span class="lvd off"></span>prezzi dell'ultimo aggiornamento (${D.aggiornato ? D.aggiornato.slice(11, 16) : ''})`;
+  const usati = Object.keys(STRATEGIE).filter(k => aperta || R.conti[k].attiva || R.conti[k].n || Math.abs(valoreConto(R, k) - ROBOT_CAPITALE) > 0.005);
+  const tile = k => { const S = STRATEGIE[k], c = R.conti[k], v = valoreConto(R, k), cosa = k.endsWith('notte') ? 'notti' : 'operazioni';
+    const btn = !aperta ? '' : c.attiva ? `<button type="button" class="linkb rb-conto" data-k="${k}" data-fai="ferma">Ferma</button>` : `<button type="button" class="linkb rb-conto" data-k="${k}" data-fai="avvia">Avvia</button>`;
+    return `<div class="stat"${c.attiva || !aperta ? '' : ' style="opacity:.75"'}><div class="k">${S.nome} <span class="chip ${S.chip}">${S.stato}</span></div><div class="v ${v >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${eur(v)}</div><div class="d">${pc(v / ROBOT_CAPITALE - 1, 2)} · ${c.n} ${cosa}${c.n ? ', in guadagno ' + p100(c.vinte / c.n) : ''}</div><div class="d" style="margin-top:4px">${c.attiva ? '<span class="pos">attiva</span>' : 'ferma'}${btn ? ' · ' + btn : ''}</div></div>`; };
+  const pos = posizioniAperte(R);
+  const tabPos = pos.length ? `<div class="scroll"><table><thead><tr><th class="l">Posizione</th><th>Entrata</th><th>Adesso</th><th>Risultato</th></tr></thead><tbody>${pos.map(p => { const r = p.ora / p.entrata - 1 - (p.costo || 0);
+      return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(p.sym))}</b> <span class="note">${STRATEGIE[p.k].breve} · dalle ${new Date(p.quando).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'})}</span><br><span class="note">esce ${esc(p.esce)}</span></td><td>${nf(p.entrata, dec(p.entrata))} ${p.cur}</td><td>${nf(p.ora, dec(p.ora))} ${p.cur}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div>
+      ${pos.some(p => p.k.endsWith('notte')) ? '<p class="note" style="margin-top:4px">Di notte la borsa è chiusa: il risultato delle azioni comprate per la notte si vede all\'apertura, quando il robot le vende.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
+  const stasera = ['usa_notte', 'ita_notte'].filter(k => R.conti[k].aperta && R.conti[k].aperta.stato === 'stasera').map(k => `<p class="note" style="margin-top:6px"><b>${STRATEGIE[k].nome}</b>: all'asta di chiusura di ${dt(R.conti[k].aperta.data)} (${ORARI[STRATEGIE[k].mercato].chiude}) compra ${R.conti[k].aperta.titoli.map(s => esc(tk(s))).join(', ')}.</p>`).join('');
+  const tuttiReg = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1), reg = robotTutto ? tuttiReg : tuttiReg.slice(0, 50);
+  const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short'}) + ', in seduta' : quandoBreve(e.t);
+  const registro = reg.length ? `<ul class="reg">${reg.map(e => `<li><span class="note">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(e.fonte || '')})</span></li>`).join('')}</ul>` : '<p class="note">Ancora nessuna operazione: le prime arrivano alla prossima occasione delle strategie scelte.</p>';
+  return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
+    <p class="note" style="margin-top:4px">${aperta ? `<b class="pos">Sessione aperta</b> dal ${quandoBreve(R.sessione.da)}` : `<b>Sessione chiusa</b> ${R.sessione.chiusa ? 'il ' + quandoBreve(R.sessione.chiusa) : ''}`} · operazioni dal ${dt(R.inizio, {year: 'numeric'})} · ${live} · ultimo controllo ${new Date(robotUltimo || Date.now()).toLocaleTimeString('it-IT')}. Niente soldi veri.</p>
+    <div class="tiles" style="margin-top:10px">${usati.map(tile).join('')}</div>
+    <h3 style="margin-top:14px">Posizioni aperte adesso</h3>${tabPos}${stasera}
+    <h3 style="margin-top:14px">Registro: tutto quello che apre e chiude</h3>${registro}${tuttiReg.length > 50 ? `<p style="margin-top:6px"><button type="button" class="linkb" id="rb-tutto">${robotTutto ? 'Mostra solo le ultime 50' : `Mostra tutte le ${tuttiReg.length} operazioni`}</button></p>` : ''}
+    ${aperta ? `<p style="margin-top:12px"><button type="button" class="more" id="rb-termina">Termina la sessione</button></p>
+      <p class="note" style="margin-top:4px">Terminando: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano; le azioni comprate per la notte si vendono all'apertura (di notte la borsa è chiusa). Poi il robot si ferma.</p>`
+    : `<h3 style="margin-top:14px">Nuova sessione</h3>${robotModulo(false)}<p style="margin-top:12px"><button type="button" class="go" id="rb-riprendi">Inizia la sessione</button></p>`}
+    <p class="note" style="margin-top:12px">A pagina chiusa il robot non si ferma: a ogni aggiornamento dell'app (18:10 e 22:10) il cloud rifà le operazioni con i prezzi ufficiali (azioni) e le candele orarie (crypto) e, se c'è qualcosa di nuovo, ti manda una notifica. Con i prezzi in tempo reale le vedi succedere dal vivo, con un avviso. In giornata servono le aperture di oggi: dal vivo con <code>live.py</code>, altrimenti all'aggiornamento delle 18:10. Milano ha 15 minuti di ritardo. Azioni USA: risultato in percentuale sul conto in euro, senza cambio. <button type="button" class="linkb" id="rb-reset">Ricomincia da capo</button></p>${robotAttese()}</div>`;
+}
+function chiediConferma(b, testo) {                                             // primo tocco: chiede conferma per 6 secondi
+  if (b.dataset.ok === '1') { delete b.dataset.ok; return true; }                // secondo tocco: si fa
+  const prima = b.textContent; b.dataset.ok = '1'; b.textContent = testo;
+  setTimeout(() => { if (b.isConnected && b.dataset.ok === '1') { delete b.dataset.ok; b.textContent = prima; aggiornaRobot(); } }, 6000);
+  return false;
+}
+function scelteRobot() { const s = {}; for (const k of Object.keys(STRATEGIE)) s[k] = !!($('#rb-' + k) && $('#rb-' + k).checked); return s; }
 function robotEventi() {
-  $('#rb-accendi')?.addEventListener('click', () => {
-    const R = robotNuovo($('#rb-da').value, Number($('#rb-costo').value), $('#rb-notte').checked, $('#rb-crypto').checked);
-    if (!R.notte.attiva && !R.crypto.attiva) { avviso('Scegli almeno una strategia.'); return; }
-    ROBOT = R; robotGiro(); renderGiornata(); robotAperture(); avviso('Robot acceso: le operazioni partono dal ' + dt(R.inizio) + '.');
+  $('#rb-inizia')?.addEventListener('click', () => {
+    const scelte = scelteRobot(); if (!Object.values(scelte).some(Boolean)) { avviso('Scegli almeno una strategia.'); return; }
+    ROBOT = robotNuovo($('#rb-da').value, Number($('#rb-costo').value), scelte); robotVisti = null;
+    robotGiro(); robotSalva(); renderGiornata(); robotAperture(); avviso('Sessione iniziata: le operazioni partono dal ' + dt(ROBOT.inizio) + '.');
   });
-  $('#rb-spegni')?.addEventListener('click', () => {
-    const on = !(ROBOT.notte.attiva || ROBOT.crypto.attiva);
-    ROBOT.notte.attiva = on; ROBOT.crypto.attiva = on; robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false; renderGiornata();
+  $('#rb-riprendi')?.addEventListener('click', () => {
+    const scelte = scelteRobot(); if (!Object.values(scelte).some(Boolean)) { avviso('Scegli almeno una strategia.'); return; }
+    const R = ROBOT, ora = new Date().toISOString();
+    R.costo = Number($('#rb-costo').value); R.inizio = ora.slice(0, 10); R.dal = ora;
+    for (const k of Object.keys(STRATEGIE)) R.conti[k].attiva = scelte[k];
+    R.sessione = {aperta: true, da: ora, chiusa: null}; robotVisti = null;
+    robotGiro(); robotSalva(); renderGiornata(); robotAperture(); avviso('Nuova sessione iniziata.');
   });
+  $('#rb-termina')?.addEventListener('click', e => {
+    if (!chiediConferma(e.target, 'Sicuro? Tocca di nuovo: vende e ferma il robot')) return;
+    robotTermina(ROBOT, new Date()); robotGiro(); robotSalva(); renderGiornata(); avviso('Sessione terminata.');
+  });
+  $('#rb-tutto')?.addEventListener('click', () => { robotTutto = !robotTutto; aggiornaRobot(); });
+  document.querySelectorAll('#robot .rb-conto').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.k, c = ROBOT.conti[k], S = STRATEGIE[k];
+    if (b.dataset.fai === 'avvia') {
+      c.attiva = true; c.dal = new Date().toISOString();
+      robotGiro(); robotSalva(); aggiornaRobot(); robotAperture(); avviso(`${S.nome}: avviata da adesso.`);
+      return;
+    }
+    if (!chiediConferma(b, k === 'crypto' || k === 'giornata' ? 'Sicuro? Vende subito' : 'Sicuro? Tocca di nuovo')) return;
+    fermaConto(ROBOT, k, new Date(), 'strategia fermata'); robotGiro(); robotSalva(); aggiornaRobot(); avviso(`${S.nome}: fermata.`);
+  }));
   $('#rb-reset')?.addEventListener('click', e => {
-    const b = e.target; if (b.dataset.ok !== '1') { b.dataset.ok = '1'; b.textContent = 'Sicuro? Tocca di nuovo per cancellare il robot'; return; }
+    if (!chiediConferma(e.target, 'Sicuro? Tocca di nuovo per cancellare il robot e i suoi conti')) return;
     ROBOT = null; robotSalvo = true; Store.save('robot', {vuoto: true}); robotSalvo = false; renderGiornata();
   });
 }
 function aggiornaRobot() {
   const el = $('#robot'); if (!el || view !== 'giornata') return;
-  if (el.contains(document.activeElement) && document.activeElement.tagName === 'SELECT') return;    // non interrompere una scelta
+  if (el.contains(document.activeElement) && ['SELECT', 'INPUT'].includes(document.activeElement.tagName)) return;   // non interrompere una scelta
+  if (el.querySelector('[data-ok="1"]')) return;                                                                    // conferma in corso
   el.outerHTML = robotHTML(); robotEventi(); if (typeof mostraLive === 'function') mostraLive();
 }
-
 function robotDemoHTML() {
-  if (!ROBOT) return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b><span class="note" style="display:block;margin-top:4px">Un conto finto che compra e vende da solo seguendo gli algoritmi dell'app: azioni USA di notte e crypto. Lo accendi in In giornata.</span></a>`;
-  const vN = valoreNotte(ROBOT), vC = valoreCrypto(ROBOT), t = (ROBOT.notte.attiva ? vN : 0) + (ROBOT.crypto.attiva ? vC : 0), base = ROBOT_CAPITALE * ((ROBOT.notte.attiva ? 1 : 0) + (ROBOT.crypto.attiva ? 1 : 0));
-  return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b> <span class="note">· acceso dal ${dt(ROBOT.inizio)}</span>
-    <span class="note" style="display:block;margin-top:4px">${ROBOT.notte.attiva ? `Azioni di notte <b class="${vN >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${pc(vN / ROBOT_CAPITALE - 1, 2)}</b>` : ''}${ROBOT.notte.attiva && ROBOT.crypto.attiva ? ' · ' : ''}${ROBOT.crypto.attiva ? `Crypto <b class="${vC >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${pc(vC / ROBOT_CAPITALE - 1, 2)}</b>` : ''}${base ? ` · in tutto ${eur(t)}` : ''}. Tocca per vederlo.</span></a>`;
+  if (!ROBOT) return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b><span class="note" style="display:block;margin-top:4px">Conti finti che comprano e vendono da soli seguendo gli algoritmi dell'app: azioni USA e italiane, di notte e in giornata, e crypto. Lo avvii in In giornata.</span></a>`;
+  const usati = Object.keys(STRATEGIE).filter(k => ROBOT.conti[k].attiva || ROBOT.conti[k].n), tot = usati.reduce((t, k) => t + valoreConto(ROBOT, k), 0);
+  return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b> <span class="note">· ${ROBOT.sessione && ROBOT.sessione.aperta ? 'sessione aperta' : 'sessione chiusa'}</span>
+    <span class="note" style="display:block;margin-top:4px">${usati.map(k => { const v = valoreConto(ROBOT, k); return `${STRATEGIE[k].breve} <b class="${v >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${pc(v / ROBOT_CAPITALE - 1, 2)}</b>`; }).join(' · ')}${usati.length ? ` · in tutto ${eur(tot)}` : ''}. Tocca per vederlo.</span></a>`;
 }
 
 /* ---------------- quotazioni in tempo reale ---------------- */

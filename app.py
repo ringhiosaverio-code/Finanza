@@ -24,6 +24,7 @@ import json
 import os
 import sys
 
+import crypto_lungo
 import giornata
 import intraday
 import settimana
@@ -109,6 +110,15 @@ def simulazioni(mercati, log=print):
     return out
 
 
+def crypto_lungo_termine(log=print):
+    """Crypto a medio e lungo termine: compra e tieni, tendenza 200/50, durate, a rate (crypto_lungo.py)."""
+    try:
+        return crypto_lungo.analisi(log)
+    except Exception as e:                                   # rete o dati: l'app si genera lo stesso
+        log("[app] crypto a lungo termine saltate: %s" % e)
+        return None
+
+
 def piano_giornata(log=print):
     """Il piano per la prossima seduta in giornata (giornata.py)."""
     try:
@@ -183,6 +193,7 @@ def main(argv=None):
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "libri": load_json(os.path.join(ROOT, "libri.json")),
             "giornata": piano_giornata(),
+            "crypto_lungo": crypto_lungo_termine(),
             "aggiornato": settimana.now_in("Europe/Rome").strftime("%Y-%m-%d %H:%M")}
     out = build(data, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))

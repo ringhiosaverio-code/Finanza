@@ -148,9 +148,9 @@ def fetch_max(symbol, max_age_hours=12):
     """Fino a YEARS_MAX anni di candele giornaliere (cache di 12 ore). Con range=max Yahoo
     passa a candele mensili, quindi si chiedono date di inizio e fine esplicite."""
     path = os.path.join(CACHE_MAX, symbol.replace("/", "_") + ".v2.json")      # v2: con i dividendi
-    if os.path.exists(path) and time.time() - os.path.getmtime(path) < max_age_hours * 3600:
-        with open(path, encoding="utf-8") as fh:
-            return fh.read()
+    text = settimana.cache_valida(path, max_age_hours)           # si rinnova anche a seduta finita
+    if text is not None:
+        return text
     last = None
     for host in ("query2", "query1"):
         now = int(time.time())
