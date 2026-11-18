@@ -251,6 +251,30 @@ La sezione mostra il verdetto, il perché, il piano Oops! per la prossima seduta
 scambiati (livello, orari, storia della regola su ogni titolo) e un gioco: 240 giornate vere di
 azioni USA, ora per ora, in cui decidi entrata, protezione e obiettivo e vedi com'è andata.
 
+## Quotazioni in tempo reale nell'app
+
+L'app pubblicata si rigenera alle 18:10 e alle 22:10; i prezzi in tempo reale arrivano in due modi,
+mostrati accanto a ogni prezzo ("ora 128,18 € +0,79 % · 13:17") e nella spia in alto:
+
+1. **App desktop di Claude**: in alto compare il pulsante "Prezzi in tempo reale". La pagina usa il
+   browser integrato di Claude (capacità `mcp`, server `host:claude_browser`, strumenti
+   `preview_start`, `navigate`, `get_page_text`) in una scheda sua e legge le quotazioni di Yahoo
+   Finance ogni 30 secondi; la prima volta chiede il permesso. Funziona solo nell'app desktop e solo
+   per chi ha creato l'app (i server locali non sono aperti agli altri, per ora).
+2. **Sul tuo computer, con qualsiasi browser**: `python3 live.py` serve la stessa app su
+   http://127.0.0.1:8770 e le passa le quotazioni ogni 5 secondi (`--rete` per aprirla anche dal
+   telefono sulla rete di casa, senza password: solo in reti fidate).
+
+```bash
+python3 live.py
+```
+
+Fonte Yahoo Finance (`v7/finance/spark`, 20 titoli per richiesta, cache di 5 secondi per titolo):
+azioni USA in tempo reale durante la seduta, Borsa Italiana con 15 minuti di ritardo (le quotazioni
+gratuite di Milano sono così), crypto e cambio euro/dollaro in tempo reale. Nella sezione In
+giornata il piano mostra anche se il prezzo adesso è sotto il livello. Probabilità e giudizi restano
+quelli dell'ultimo aggiornamento.
+
 ## `crypto_live.py`: crypto in tempo reale, ogni secondo
 
 ```bash
@@ -278,7 +302,7 @@ intraday ha guadagnato in media: è uno strumento per seguire i piani, non un mo
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri e giornata, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata e live, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

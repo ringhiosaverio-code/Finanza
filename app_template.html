@@ -50,6 +50,9 @@ button{font:inherit;color:inherit}
 .brand{display:flex;align-items:baseline;gap:10px;flex:1 1 auto;min-width:0}
 .brand b{font-family:var(--f-head);font-size:21px;letter-spacing:-.02em}
 .brand span{color:var(--muted);font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.brand{flex-wrap:wrap;row-gap:2px}
+.brand #live{overflow:visible;margin-left:0;flex:0 0 auto}
+.brand #live span{overflow:visible}
 nav.tabs{display:flex;gap:2px;width:100%;overflow-x:auto;scrollbar-width:none}
 nav.tabs a{padding:9px 12px 10px;color:var(--ink2);text-decoration:none;font-weight:500;border-bottom:2px solid transparent;white-space:nowrap}
 nav.tabs a[aria-current="page"]{color:var(--ink);border-bottom-color:var(--accent)}
@@ -200,6 +203,17 @@ footer{color:var(--muted);font-size:12.5px}
 .hz{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(150px,100%),1fr));gap:10px}
 .hzc{background:var(--surface2);border-radius:12px;padding:12px 14px;display:grid;gap:6px;align-content:start;min-width:0}
 .hzc.cons{background:var(--accent-soft);box-shadow:inset 0 0 0 2px var(--accent)}
+.lvq{display:block;margin-top:2px;font-size:12.5px;color:var(--ink2);font-weight:400;white-space:normal}
+.lvq:empty{display:none}
+.lvq b{color:var(--ink)}
+.lvd{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--good);margin-right:5px;vertical-align:1px;animation:lvp 2s ease-in-out infinite}
+.lvd.off{background:var(--muted);animation:none}
+.lvd.err{background:var(--crit);animation:none}
+@keyframes lvp{50%{opacity:.35}}
+@media (prefers-reduced-motion:reduce){.lvd{animation:none}}
+#live{font-size:12.5px;color:var(--ink2);white-space:nowrap}
+.lvbtn{font:inherit;font-size:12.5px;border:1px solid var(--accent);color:var(--accent);background:var(--surface);border-radius:999px;padding:2px 10px;cursor:pointer}
+#live-info{margin-top:12px}
 .hzc .k{font-size:12px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;color:var(--muted)}
 .hzc .pr{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
 .hzc .pv{font-family:var(--f-head);font-weight:700;font-size:30px;line-height:1;white-space:nowrap}
@@ -264,7 +278,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><b>Finanza</b><span id="meta"></span></div>
+    <div class="brand"><b>Finanza</b><span id="meta"></span><span id="live"></span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
       <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
@@ -278,6 +292,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 </header>
 
 <main class="wrap">
+  <div id="live-info" class="card" hidden></div>
   <section class="view" id="v-oggi"></section>
   <section class="view" id="v-portafoglio" hidden></section>
   <section class="view" id="v-demo" hidden></section>
@@ -353,6 +368,7 @@ function route() {
   else if (sec === 'libri') renderLibri();
   else if (sec === 'giornata') renderGiornata();
   else renderMetodo();
+  if (typeof mostraLive === 'function') { mostraLive(); if (LIVE.fonte === 'locale') setTimeout(giroLive, 50); }
   $('#meta').textContent = !['consigli', 'verifica'].includes(sec) ? (D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))}, ${D.aggiornato.slice(11, 16)}` : '') : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
 function redraw() { const sec = view === 'italia' ? 'consigli' : view; draw[sec] && draw[sec](); }
@@ -927,7 +943,7 @@ function renderSimResult(s) {
   const one = s.orizzonti[0].scenari[sc];
   out.innerHTML = `<div class="card simres">
     <div class="simhd"><div><h2>${esc(s.name)}</h2><p class="note">${esc(tk(s.symbol))}${s.exchange ? ' · ' + esc(s.exchange) : ''}${s.isin ? ' · ISIN ' + esc(s.isin) : ''}${c ? ' · prezzi in ' + esc(c) : ''}</p></div>
-      <div class="last"><span class="k">Ultima chiusura</span><b>${cmoney(s.prezzo, c)}</b><small>${dt(s.a, {year: 'numeric'})}</small></div></div>
+      <div class="last"><span class="k">Ultima chiusura</span><b>${cmoney(s.prezzo, c)}</b><small>${dt(s.a, {year: 'numeric'})}</small>${liveSpan(s.symbol)}</div></div>
     ${verdettoHTML(giudizio(s), false)}
     <p class="sub">Calcolato su <b>${anni} anni</b> di prezzi (dal ${dtl(s.da)}). Il prezzo oscilla in media del ${pc(s.volatilita, 0, false)} in un anno.</p>
     <div><span class="lab">Quanto crescerà, in media?</span><div class="seg" id="sim-scen">${SCEN.map(([k, l]) => `<button type="button" data-v="${k}" aria-pressed="${k === sc}">${l}</button>`).join('')}</div>
@@ -1061,7 +1077,7 @@ function renderOggi() {
         <div class="id"><span class="cat" style="--cc:var(${x.col})">${x.one}</span><br><span class="tk">${esc(tk(c.symbol))}</span><span class="nm">${esc(c.name)}</span></div>
         <div class="pr" title="Probabilità di guadagno"><span class="meter"><i style="width:${x.p * 100}%"></i></span><span class="pv">${p100(x.p)}</span><span class="pl">probabilità<br>di guadagno</span></div></div>
       <div class="trio">
-        <div><span class="k">Compra</span><span class="big">fino a ${fmtc(lim, cur)}</span><small>${today ? 'oggi, ' : ''}${dt(entryDay)} · ultima chiusura ${fmtc(c.price, cur)}${x.s && momento(x.s) ? ' · <b class="pos">buon momento</b>: piccolo ribasso' : ''}</small></div>
+        <div><span class="k">Compra</span><span class="big">fino a ${fmtc(lim, cur)}</span><small>${today ? 'oggi, ' : ''}${dt(entryDay)} · ultima chiusura ${fmtc(c.price, cur)}${x.s && momento(x.s) ? ' · <b class="pos">buon momento</b>: piccolo ribasso' : ''}${liveSpan(c.symbol)}</small></div>
         <div><span class="k">Tieni e vendi</span><span class="big">${DURATA_NOME[x.hold] || holdName(x.hold)}</span><small>${x.s && x.s.durata ? `${esc(perche(x.s).breve)} · ` : ''}vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
         <div><span class="k">Cedole o dividendi</span><span class="big">${yv}</span><small>${ys}</small></div>
       </div>
@@ -1183,7 +1199,7 @@ function renderPortafoglio() {
       <div class="hd"><span class="act">${a.cosa}</span><div class="id"><span class="tk">${esc(tk(s.symbol))}</span><span class="nm">${esc(s.name)}</span></div>
         <div class="pr"><span class="pv ${val >= spesa ? 'pos' : 'neg'}" style="font-size:22px">${pc(spesa ? val / spesa - 1 : 0)}</span><span class="pl">${eur(val - spesa)}<br>dal ${dt(p.data, {weekday: undefined})}</span></div></div>
       <p class="why">${a.perche}</p>
-      <p class="note">${nf(p.qty, p.qty % 1 ? 4 : 0)} × ${cmoney(s.prezzo, s.currency)} = ${eur(val)} · comprato a ${cmoney(p.prezzo, s.currency)} · giudizio di oggi: ${a.g.titolo.toLowerCase()} · <button type="button" class="linkb" data-del="${p.id}">Togli dal portafoglio</button></p>
+      <p class="note">${liveSpan(s.symbol)}${nf(p.qty, p.qty % 1 ? 4 : 0)} × ${cmoney(s.prezzo, s.currency)} = ${eur(val)} · comprato a ${cmoney(p.prezzo, s.currency)} · giudizio di oggi: ${a.g.titolo.toLowerCase()} · <button type="button" class="linkb" data-del="${p.id}">Togli dal portafoglio</button></p>
     </article>`; }).join('')}</div>
   ${comprare.length ? `<div class="card"><h2>Puoi comprare</h2><p class="sub" style="margin-top:4px">I primi consigli di oggi con giudizio "Sì" che non hai già.</p>
     <div class="picks" style="margin-top:10px">${comprare.map(x => `<div class="row-buy"><span class="act act-mini">COMPRA</span><b>${esc(tk(x.c.symbol))}</b> <span class="note">${esc(x.c.name)}</span><span class="pv-mini">${p100(x.p)}</span><span class="note">tieni ${holdTxt(x.s)}</span></div>`).join('')}</div>
@@ -1247,7 +1263,7 @@ function pacchettoHTML() {
       <button type="button" class="go" id="pac-demo">Prova il pacchetto nel conto demo</button></div>
     <div class="scroll"><table><thead><tr><th class="l">Strumento</th><th>Prezzo</th><th>Quante</th></tr></thead>
       <tbody>${righe.map(({m, s, px, q, i}) => { const k = catOf(m);
-        return `<tr><td class="l" style="white-space:normal"><b>${i + 1}. ${esc(tk(s.symbol))}</b> <span class="note nm2">${esc(s.name.slice(0, 30))}</span><br><span class="cat" style="--cc:var(${k[3]})">${k[1]}</span></td><td>${cmoney(s.prezzo, s.currency)}</td><td>${q > 0 ? `<b>${nf(q, 0)}</b><br><span class="note">${eur(q * px * (1 + COSTI(s).acq))}</span>` : '<span class="note">costa più<br>della quota</span>'}</td></tr>`; }).join('')}</tbody></table></div>
+        return `<tr><td class="l" style="white-space:normal"><b>${i + 1}. ${esc(tk(s.symbol))}</b> <span class="note nm2">${esc(s.name.slice(0, 30))}</span><br><span class="cat" style="--cc:var(${k[3]})">${k[1]}</span></td><td>${cmoney(s.prezzo, s.currency)}${liveSpan(s.symbol)}</td><td>${q > 0 ? `<b>${nf(q, 0)}</b><br><span class="note">${eur(q * px * (1 + COSTI(s).acq))}</span>` : '<span class="note">costa più<br>della quota</span>'}</td></tr>`; }).join('')}</tbody></table></div>
     ${righe.some(r => r.q < 1) ? `<p class="note">Con ${eur(PAC_CAP)} la quota è ${eur(quota)}: per comprarli tutti servono almeno ${eur(Math.ceil(minimo / 100) * 100)}.</p>` : `<p class="note">${eur(quota)} per strumento, costi inclusi; i titoli in dollari convertiti al cambio di oggi.</p>`}
     <details><summary>Perché un pacchetto, e i limiti</summary><div class="prose" style="margin-top:6px">
       <p><b>Dividere conta più che scegliere.</b> Dieci strumenti presi a caso tra i candidati sono andati quasi come il pacchetto (${p100(K.caso.prima.p_gain)} e ${p100(K.caso.dopo.p_gain)} in guadagno): quello che fa la differenza è non puntare su uno solo e dare tempo. Lo stesso pacchetto tenuto 3 mesi era in guadagno ${p100(K.tutte['3 mesi'].prima.p_gain)} e ${p100(K.tutte['3 mesi'].dopo.p_gain)} delle volte.</p>
@@ -1264,6 +1280,8 @@ function pacchettoEventi() {
 function demoPacchetto() {
   const K = pacchetto(); if (!K) return;
   if (DEMO === null) { avviso('Il conto demo si sta ancora caricando: riprova tra un momento.'); return; }
+  const gia = K.L.filter(({s}) => (DEMO.posizioni || {})[s.symbol] && DEMO.posizioni[s.symbol].hold).length;
+  if (gia * 2 >= K.L.length) { avviso(`Il pacchetto è già nel conto demo (${gia} strumenti su ${K.L.length}): non lo ricompro. Per rifarlo, vendi le posizioni o ricomincia il conto in Esercitati.`); return; }
   const quota = Math.min(PAC_CAP, DEMO.cassa) / K.L.length;
   let cassa = DEMO.cassa, n = 0, tot = 0;
   const pos = Object.assign({}, DEMO.posizioni), mov = (DEMO.movimenti || []).slice();
@@ -1386,7 +1404,7 @@ function renderCrypto() {
   <div class="scroll card"><table>
     <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno a 3 mesi</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
-      return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
+      return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
   ${intradayHTML()}
   <p class="note">Tocca una riga della prima tabella per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
   v.querySelectorAll('tr.clk').forEach(r => { const go = () => { simSt.q = r.dataset.q; location.hash = 'simula'; };
@@ -1625,7 +1643,7 @@ function renderGiornata(soloGioco) {
   const tile = (m, nome) => { const x = N[m] && N[m].dopo; return x ? `<div class="stat"><div class="k">${nome}, dal ${tagl}</div><div class="v"><span class="pos">${pc(x.notte, 0)}</span> <span class="note">di notte</span></div><div class="d">e <b class="${x.giorno >= 0 ? 'pos' : 'neg'}">${pc(x.giorno, 0)}</b> di giorno, in un anno (in salita il ${p100(x.notte_su)} delle notti, il ${p100(x.giorno_su)} dei giorni)</div></div>` : ''; };
   const P = (G && G.piani) || [];
   const riga = p => { const s = p.storia || {}, cur = p.valuta;
-    return `<tr><td class="l"><b>${esc(tk(p.symbol))}</b> <span class="note">${esc(((SIM[p.symbol] || {}).name || '').slice(0, 24))}</span></td><td>${nf(p.chiusura, dec(p.chiusura))} ${cur}</td><td><b>${nf(p.minimo, dec(p.minimo))} ${cur}</b><br><span class="note">${pc(p.distanza, 1)}</span></td><td class="l" style="white-space:normal;min-width:150px">${s.n ? `${nf(s.n, 0)} volte dal ${new Date(s.da).getFullYear()} (${p100(s.frequenza)} delle sedute)<br>in guadagno ${p100(s.p_gain)} · media <b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b>` : 'n/d'}</td></tr>`; };
+    return `<tr><td class="l"><b>${esc(tk(p.symbol))}</b> <span class="note">${esc(((SIM[p.symbol] || {}).name || '').slice(0, 24))}</span></td><td>${nf(p.chiusura, dec(p.chiusura))} ${cur}${liveSpan(p.symbol)}</td><td><b>${nf(p.minimo, dec(p.minimo))} ${cur}</b><br><span class="note">${pc(p.distanza, 1)}</span><span class="lvq" data-livello="${esc(p.symbol)}" data-liv="${p.minimo}" data-dal="${p.data}"></span></td><td class="l" style="white-space:normal;min-width:150px">${s.n ? `${nf(s.n, 0)} volte dal ${new Date(s.da).getFullYear()} (${p100(s.frequenza)} delle sedute)<br>in guadagno ${p100(s.p_gain)} · media <b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b>` : 'n/d'}</td></tr>`; };
   const blocco = m => { const L = P.filter(p => p.mercato === m); if (!L.length) return '';
     return `<h3 style="margin-top:12px">${m === 'usa' ? 'Azioni USA' : 'Azioni italiane'} <span class="note">· apre alle ${esc(L[0].apertura)}, vendi entro le ${esc(L[0].vendi_entro)} · livelli dalla seduta del ${dt(L[0].data, {year: 'numeric'})}</span></h3>
       <div class="scroll"><table><thead><tr><th class="l">Titolo</th><th>Ultima chiusura</th><th>Livello (minimo)</th><th class="l">Su questo titolo, dopo i costi</th></tr></thead><tbody>${L.map(riga).join('')}</tbody></table></div>`; };
@@ -1669,6 +1687,8 @@ function renderMetodo() {
     <p>Stesso metodo su cinque categorie: <b>ETF azionari</b> e <b>ETF obbligazionari</b> (UCITS quotati su Borsa Italiana, acquistabili da chi investe dall'Italia; gli ETF americani di solito no, per la regola europea sui documenti KID), <b>oro e materie prime</b> (ETC), <b>azioni USA</b> e <b>azioni italiane</b>. Un solo ETF per indice, per non contare due volte la stessa cosa. Le singole obbligazioni (BTP, bond societari) non hanno prezzi giornalieri gratuiti affidabili: sono coperte dagli ETF obbligazionari. Per ogni categoria la regola consigliata è quella con <b>più operazioni in guadagno dal 2017</b>, tra quelle in cui <b>nel 10 % dei casi peggiori non si è perso più del 10 %</b>. Le cedole e i dividendi sono quelli pagati negli ultimi 12 mesi, sul prezzo di oggi; gli ETF ad accumulo non ne pagano perché li reinvestono. Sugli ETF non c'è la Tobin tax: costo 0,1 % per operazione.</p>
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
+    <h3>Prezzi in tempo reale</h3>
+    <p>L'app si rigenera alle 18:10 e alle 22:10 con le chiusure del giorno: probabilità, giudizi e piani nascono da lì. I prezzi in tempo reale, quando ci sono, compaiono accanto a ogni prezzo ("ora …") e servono per decidere il momento: nell'<b>app desktop di Claude</b> con il pulsante "Prezzi in tempo reale" in alto (usa il browser integrato di Claude, ogni 30 secondi), oppure sul tuo computer con <b>python3 live.py</b> (ogni 5 secondi, in qualsiasi browser). Fonte Yahoo Finance: azioni USA in tempo reale, Borsa Italiana con 15 minuti di ritardo, crypto e cambio in tempo reale.</p>
     <h3>Quanto tenere</h3>
     <p>Per ogni strumento la Macchina del Tempo calcola la probabilità di guadagno e il caso peggiore (1 volta su 10) a 1 mese, 3 mesi, 6 mesi e 1 anno. L'app sceglie <b>il periodo con la probabilità più alta tra quelli in cui 1 volta su 10 non si perde più del 10 %</b>, la stessa soglia del giudizio "Sì". Così uno strumento tranquillo (un obbligazionario, un ETF poco volatile) si tiene più a lungo, perché il tempo fa salire la probabilità senza far crescere troppo il rischio; uno che oscilla molto si tiene meno. Se nessun periodo resta entro il rischio vale quello della categoria. Rifatta ogni mese dal 2004 con i soli prezzi di quel giorno, questa scelta è andata in guadagno più spesso della durata unica per categoria, sia fino al 2016 sia dopo (vedi "Funziona?").</p>
     <h3>Il pacchetto</h3>
@@ -1703,8 +1723,166 @@ const draw = {
   demo: () => { const b = $('#dm-line'); if (b && DEMO && (DEMO.storico || []).length > 1) lineChart(b, DEMO.storico.map(x => x.d), DEMO.storico.map(x => x.v), 'EUR'); },
 };
 $('#all-list').innerHTML = SIM_LIST.map(s => `<option value="${esc((s.isin ? s.isin + ' — ' : '') + s.name + ' (' + tk(s.symbol) + ')')}"></option>`).join('');
+/* ---------------- quotazioni in tempo reale ---------------- */
+// Le fonti, nell'ordine: live.py sul tuo computer (la pagina è servita da lì, quotazioni ogni 5 s);
+// il browser integrato dell'app desktop di Claude (capacità mcp, server host:claude_browser: una
+// scheda sua, ogni 30 s, il permesso si chiede la prima volta); altrimenti i prezzi dell'ultimo
+// aggiornamento. Dati di Yahoo Finance: USA in tempo reale, Milano con 15 minuti di ritardo.
+const LIVE = {fonte: null, disponibile: false, q: {}, agg: null, errore: null, occupato: false, tab: null, mcp: null, ultimo: 0};
+const BROWSER = 'host:claude_browser';
+const SPARK = L => 'https://query1.finance.yahoo.com/v7/finance/spark?symbols=' + L.map(encodeURIComponent).join(',') + '&range=1d&interval=1d';
+const RITARDO = {MIL: 15};
+function liveSpan(sym) { return `<span class="lvq" data-live="${esc(sym)}"></span>`; }
+function simboliLive() {
+  return [...new Set([...document.querySelectorAll('[data-live],[data-livello]')]
+    .filter(e => { const v = e.closest('.view'); return v && !v.hidden; }).map(e => e.dataset.live || e.dataset.livello))];
+}
+function daSpark(j) {
+  const out = {};
+  for (const r of ((j && j.spark && j.spark.result) || [])) {
+    const m = r && r.response && r.response[0] && r.response[0].meta; if (!m || !m.regularMarketPrice) continue;
+    out[r.symbol || m.symbol] = {p: m.regularMarketPrice, prev: m.chartPreviousClose || m.previousClose, t: m.regularMarketTime,
+      hi: m.regularMarketDayHigh, lo: m.regularMarketDayLow, cur: m.currency, ex: m.exchangeName, ritardo: RITARDO[m.exchangeName] || 0};
+  }
+  return out;
+}
+function stringhe(x, out = []) {
+  if (typeof x === 'string') out.push(x);
+  else if (Array.isArray(x)) x.forEach(y => stringhe(y, out));
+  else if (x && typeof x === 'object') Object.values(x).forEach(y => stringhe(y, out));
+  return out;
+}
+function estraiOggetto(t, inizio) {
+  const i = t.indexOf(inizio); if (i < 0) return null;
+  let d = 0, str = false, sc = false;
+  for (let k = i; k < t.length; k++) {
+    const c = t[k];
+    if (str) { if (sc) sc = false; else if (c === '\\') sc = true; else if (c === '"') str = false; continue; }
+    if (c === '"') str = true; else if (c === '{') d++; else if (c === '}' && --d === 0) { try { return JSON.parse(t.slice(i, k + 1)); } catch (e) { return null; } }
+  }
+  return null;
+}
+function leggiJSON(r) {
+  const p = r && r.payload;
+  if (p && typeof p === 'object' && p.spark) return p;
+  for (const t of stringhe([p, r && r.structuredContent, r && r.content])) { const j = estraiOggetto(t, '{"spark"'); if (j) return j; }
+  throw {code: 'lettura', message: 'la pagina letta dal browser non contiene le quotazioni'};
+}
+function trovaTab(r) {
+  for (const o of [r && r.payload, r && r.structuredContent]) if (o && typeof o === 'object')
+    for (const k of ['tabId', 'tab_id', 'tab']) if (o[k] != null && /^\d+$/.test(String(o[k]))) return Number(o[k]);
+  const t = stringhe([r && r.payload, r && r.content]).join('\n'), m = t.match(/tab[\s_-]*id\W{0,4}(\d+)/i);
+  return m ? Number(m[1]) : null;
+}
+async function prendiLocale(syms) {
+  const r = await fetch('/quotazioni?s=' + encodeURIComponent(syms.slice(0, 120).join(',')), {cache: 'no-store'});
+  if (!r.ok) throw {code: 'http', message: 'live.py ha risposto ' + r.status};
+  const j = await r.json(); if (j.errori && j.errori.length && !Object.keys(j.quote || {}).length) throw {code: 'yahoo', message: j.errori[0]};
+  return j.quote || {};
+}
+async function prendiBrowser(syms) {
+  const out = {}, arg = {tabId: LIVE.tab};
+  for (let i = 0; i < Math.min(syms.length, 60); i += 20) {
+    await LIVE.mcp.callTool(BROWSER, 'navigate', Object.assign({url: SPARK(syms.slice(i, i + 20))}, arg), {cache: false});
+    Object.assign(out, daSpark(leggiJSON(await LIVE.mcp.callTool(BROWSER, 'get_page_text', arg, {cache: false}))));
+  }
+  return out;
+}
+const FERMA = ['not_in_manifest', 'server_not_connected', 'cancelled', 'approval_required', 'needs_reauth', 'blocked_by_policy',
+  'not_granted', 'capability_disabled', 'capability_removed', 'bad_request', 'transform_error', 'tool_error', 'lettura', 'scheda'];
+function erroreLive(e) {
+  const c = (e && e.code) || 'errore';
+  return {codice: c, testo: {server_not_connected: 'il browser integrato non risponde: serve l’app desktop di Claude',
+    not_in_manifest: 'permesso non dato', cancelled: 'permesso non dato', approval_required: 'serve il tuo permesso',
+    blocked_by_policy: 'bloccato dalle regole della tua organizzazione', tool_error: 'il browser non ha aperto la pagina delle quotazioni',
+    lettura: 'la pagina letta dal browser non contiene le quotazioni', scheda: 'il browser non ha aperto una scheda sua'}[c] || ((e && e.message) || 'non disponibile ora').slice(0, 90)};
+}
+async function giroLive() {
+  if (!LIVE.fonte || LIVE.occupato) return;
+  const syms = simboliLive(); if (!syms.length) return;
+  LIVE.occupato = true; LIVE.ultimo = Date.now();
+  try {
+    Object.assign(LIVE.q, LIVE.fonte === 'locale' ? await prendiLocale(syms) : await prendiBrowser(syms));
+    LIVE.agg = new Date(); LIVE.errore = null;
+  } catch (e) {
+    LIVE.errore = erroreLive(e);
+    if (LIVE.fonte === 'browser' && FERMA.includes(LIVE.errore.codice)) LIVE.fonte = null;     // riparte solo con un tuo tocco
+  }
+  LIVE.occupato = false; mostraLive();
+}
+async function attivaBrowser() {
+  if (!LIVE.mcp || LIVE.occupato) return;
+  LIVE.occupato = true; LIVE.errore = null; mostraLive();
+  try {
+    const syms = simboliLive().slice(0, 20), r = await LIVE.mcp.callTool(BROWSER, 'preview_start', {url: SPARK(syms.length ? syms : ['EURUSD=X'])}, {cache: false});
+    LIVE.tab = trovaTab(r);
+    if (LIVE.tab == null) throw {code: 'scheda'};                       // senza una scheda sua non si tocca la tua
+    Object.assign(LIVE.q, daSpark(leggiJSON(await LIVE.mcp.callTool(BROWSER, 'get_page_text', {tabId: LIVE.tab}, {cache: false}))));
+    LIVE.fonte = 'browser'; LIVE.agg = new Date(); LIVE.ultimo = Date.now();
+  } catch (e) { LIVE.errore = erroreLive(e); LIVE.fonte = null; }
+  LIVE.occupato = false; mostraLive();
+}
+function quotaHTML(sym) {
+  const q = LIVE.q[sym]; if (!q || !q.p) return '';
+  const s = SIM[sym] || {}, cur = q.cur || s.currency, ch = q.prev ? q.p / q.prev - 1 : null;
+  const t = q.t ? new Date(q.t * 1000) : null, vecchio = !t || Date.now() - t > 3 * 3600e3;
+  const quando = t ? t.toLocaleString('it-IT', vecchio ? {weekday: 'short', hour: '2-digit', minute: '2-digit'} : {hour: '2-digit', minute: '2-digit'}) : '';
+  return `<span class="lvd${vecchio ? ' off' : ''}" aria-hidden="true"></span>${vecchio ? 'ultimo prezzo' : 'ora'} <b>${cmoney(q.p, cur)}</b>${ch != null ? ` <span class="${ch >= 0 ? 'pos' : 'neg'}">${pc(ch, 2)}</span>` : ''}${quando ? ' · ' + quando : ''}${q.ritardo && !vecchio ? ` <span class="note">(${q.ritardo} min di ritardo)</span>` : ''}`;
+}
+function livelloHTML(el) {
+  const q = LIVE.q[el.dataset.livello], liv = Number(el.dataset.liv); if (!q || !q.p || !q.t) return '';
+  const giorno = new Date(q.t * 1000).toISOString().slice(0, 10); if (giorno <= el.dataset.dal) return '';   // seduta non ancora iniziata
+  const sotto = q.p < liv, toccato = q.lo != null && q.lo <= liv;
+  return sotto ? '<span class="neg">adesso sotto il livello</span>' : toccato ? '<span class="pos">oggi è sceso al livello ed è risalito</span>' : '<span class="note">oggi sempre sopra il livello</span>';
+}
+function mostraLive() {
+  document.querySelectorAll('[data-live]').forEach(e => { const h = quotaHTML(e.dataset.live); if (e.innerHTML !== h) e.innerHTML = h; });
+  document.querySelectorAll('[data-livello]').forEach(e => { const h = livelloHTML(e); if (e.innerHTML !== h) e.innerHTML = h; });
+  const el = $('#live'); if (!el) return;
+  const ora = LIVE.agg ? LIVE.agg.toLocaleTimeString('it-IT') : '';
+  let h;
+  if (LIVE.fonte) h = LIVE.errore ? `<span class="lvd err"></span>tempo reale: ${esc(LIVE.errore.testo)}` : `<span class="lvd"></span>in tempo reale${ora ? ' · ' + ora : ''}`;
+  else if (LIVE.disponibile) h = `<button type="button" class="lvbtn" id="live-on">${LIVE.occupato ? 'Collego…' : 'Prezzi in tempo reale'}</button>${LIVE.errore ? ` <span class="neg">${esc(LIVE.errore.testo)}</span>` : ''}`;
+  else h = `<button type="button" class="linkb" id="live-come">tempo reale?</button>`;
+  if (el.dataset.h !== h) {
+    el.innerHTML = h; el.dataset.h = h;
+    $('#live-on')?.addEventListener('click', attivaBrowser);
+    $('#live-come')?.addEventListener('click', () => { const b = $('#live-info'); b.hidden = !b.hidden; });
+  }
+}
+function liveInfoHTML() {
+  return `<h2>Quotazioni in tempo reale</h2>
+    <p class="sub" style="margin-top:4px">Qui vedi i prezzi dell'ultimo aggiornamento dell'app (alle 18:10 e alle 22:10, ora italiana). Per vederli in tempo reale ci sono due modi:</p>
+    <ol class="steps" style="margin-top:8px">
+      <li><span><b>Nell'app desktop di Claude</b>, sul computer: in alto compare il pulsante <b>Prezzi in tempo reale</b>. Usa il browser integrato di Claude, in una scheda sua, e aggiorna i prezzi ogni 30 secondi; la prima volta chiede il permesso. Funziona per chi ha creato l'app.</span></li>
+      <li><span><b>Sul tuo computer, con qualsiasi browser</b>: nella cartella del progetto avvia <code>python3 live.py</code>. Si apre questa stessa app con i prezzi ogni 5 secondi. Con <code>python3 live.py --rete</code> la apri anche dal telefono, sulla rete di casa.</span></li>
+    </ol>
+    <p class="note" style="margin-top:8px">Fonte Yahoo Finance: azioni USA in tempo reale durante la seduta, Borsa Italiana (azioni ed ETF) con 15 minuti di ritardo, crypto e cambio in tempo reale. Le probabilità e i giudizi restano quelli dell'ultimo aggiornamento: il prezzo in tempo reale serve per decidere quando comprare o vendere.</p>
+    <p style="margin-top:8px"><button type="button" class="more" id="live-chiudi">Chiudi</button></p>`;
+}
+async function avviaLive() {
+  const info = $('#live-info'); if (info) { info.innerHTML = liveInfoHTML(); $('#live-chiudi').addEventListener('click', () => { info.hidden = true; }); }
+  if (!window.claude && /^https?:$/.test(location.protocol)) {                    // servita da live.py
+    try { const r = await fetch('/quotazioni?s=EURUSD%3DX', {cache: 'no-store'}); if (r.ok && (await r.json()).quote) LIVE.fonte = 'locale'; } catch (e) {}
+  }
+  if (!LIVE.fonte && window.claude && claude.use) {                               // app desktop di Claude
+    try {
+      const mcp = await claude.use('mcp');
+      if (mcp) { const L = await mcp.listTools(BROWSER).catch(() => null); if (L && (L.servers || []).some(x => x.server === BROWSER)) { LIVE.mcp = mcp; LIVE.disponibile = true; } }
+    } catch (e) {}
+  }
+  mostraLive();
+  if (LIVE.fonte) giroLive();
+  setInterval(() => {
+    mostraLive();
+    if (!LIVE.fonte || document.hidden) return;
+    if (Date.now() - LIVE.ultimo >= (LIVE.fonte === 'locale' ? 5000 : 30000)) giroLive();
+  }, 1000);
+}
+
 Store.init();
 route();
+avviaLive();
 let rt, lastW = window.innerWidth; window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(() => { if (window.innerWidth !== lastW) { lastW = window.innerWidth; redraw(); } }, 150); });
 window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', redraw);
 </script>
