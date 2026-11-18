@@ -99,6 +99,38 @@ class Quotazioni:
             return {s: self.cache[s][1] for s in simboli if s in self.cache}, errori
 
 
+GRAFICO = "https://query2.finance.yahoo.com/v8/finance/chart/%s?range=1mo&interval=1d&includeAdjustedClose=true"
+
+
+class Aperture:
+    """Aperture e chiusure ufficiali delle ultime sedute (per il robot "di notte"): un grafico per titolo,
+    al massimo uno al minuto per titolo."""
+
+    def __init__(self, fresco=60.0):
+        self.fresco, self.lock, self.cache = fresco, threading.Lock(), {}
+
+    def prendi(self, simboli, adesso=None):
+        import giornata                                          # solo qui: live.py resta leggero
+        adesso = time.time() if adesso is None else adesso
+        out, errori = {}, []
+        for s in simboli[:PER_RICHIESTA]:
+            with self.lock:
+                c = self.cache.get(s)
+            if not c or adesso - c[0] >= self.fresco:
+                try:
+                    req = urllib.request.Request(GRAFICO % urllib.parse.quote(s), headers={"User-Agent": UA, "Accept": "application/json"})
+                    with urllib.request.urlopen(req, timeout=10) as r:
+                        righe = giornata.serie_notte_testo(r.read().decode("utf-8", "replace"))
+                    c = (adesso, [[d, round(o, 4), round(cc, 4) if cc else None] for d, o, cc in righe[-10:]])
+                    with self.lock:
+                        self.cache[s] = c
+                except (urllib.error.URLError, OSError, ValueError, KeyError) as e:
+                    errori.append("%s: %s" % (s, str(e)[:60]))
+            if c:
+                out[s] = c[1]
+        return out, errori
+
+
 def simboli_da(query):
     s = (urllib.parse.parse_qs(query).get("s") or [""])[0]
     out = []
@@ -109,7 +141,7 @@ def simboli_da(query):
     return out[:MAX_SIMBOLI]
 
 
-def server(quot, porta, host="127.0.0.1"):
+def server(quot, porta, host="127.0.0.1", aper=None):
     class Gestore(BaseHTTPRequestHandler):
         def invia(self, codice, tipo, corpo):
             self.send_response(codice)
@@ -126,6 +158,9 @@ def server(quot, porta, host="127.0.0.1"):
                 corpo = json.dumps({"ora": datetime.datetime.now().isoformat(timespec="seconds"), "quote": q,
                                     "errori": err, "fonte": "Yahoo Finance"}).encode()
                 self.invia(200, "application/json", corpo)
+            elif u.path == "/aperture" and aper:
+                q, err = aper.prendi(simboli_da(u.query))
+                self.invia(200, "application/json", json.dumps({"prezzi": q, "errori": err}).encode())
             elif u.path in ("/", "/index.html"):
                 try:
                     with open(APP, "rb") as fh:                    # sempre l'ultima app generata da app.py
@@ -165,7 +200,7 @@ def main(argv=None):
     if not os.path.exists(APP):
         print("[live] manca trader/app.html: genera prima l'app con python3 app.py")
         return 1
-    srv = server(Quotazioni(), a.porta, "0.0.0.0" if a.rete else "127.0.0.1")
+    srv = server(Quotazioni(), a.porta, "0.0.0.0" if a.rete else "127.0.0.1", Aperture())
     url = "http://127.0.0.1:%d" % a.porta
     print("[live] l'app con le quotazioni in tempo reale: %s · Ctrl+C per fermare" % url)
     if a.rete:

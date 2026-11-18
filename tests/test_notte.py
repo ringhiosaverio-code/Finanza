@@ -40,13 +40,13 @@ class Notti(unittest.TestCase):
 
         universo = ["S%d" % k for k in range(30)]
         lunedi_mattina = datetime.datetime(2026, 11, 16, 9, 0)              # New York, prima dell'apertura
-        with mock.patch.object(G, "notti", side_effect=finte), \
+        with mock.patch.object(G, "notti", side_effect=finte), mock.patch.object(G, "prezzi_notte", return_value={}), \
                 mock.patch.dict(G.settimana.MERCATI["usa"], {"universo": universo}):
             p = G.piano_notte(log=lambda m: None, adesso=lunedi_mattina)
         self.assertEqual([t["symbol"] for t in p["titoli"]], ["S%d" % k for k in range(29, 19, -1)])
         self.assertEqual((p["compra"], p["vendi"]), ("2026-11-16", "2026-11-17"))
         sera = datetime.datetime(2026, 11, 16, 17, 0)                       # dopo la chiusura: domani
-        with mock.patch.object(G, "notti", side_effect=finte), \
+        with mock.patch.object(G, "notti", side_effect=finte), mock.patch.object(G, "prezzi_notte", return_value={}), \
                 mock.patch.dict(G.settimana.MERCATI["usa"], {"universo": universo}):
             p = G.piano_notte(log=lambda m: None, adesso=sera)
         self.assertEqual((p["compra"], p["vendi"]), ("2026-11-17", "2026-11-18"))

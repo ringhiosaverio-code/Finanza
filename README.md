@@ -275,6 +275,27 @@ notti cambia poco. Funziona solo con costi da aste e commissioni dello 0,01 % pe
 cifre piccole perde. Titoli di oggi (numeri un po' ottimisti), tasse escluse, rischio delle notizie
 notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la mostra in In giornata.
 
+### Il robot: compra e vende da solo, in un conto finto
+
+Nella sezione In giornata (e riassunto in Esercitati) il robot segue gli algoritmi dell'app senza
+interventi, con due conti finti da 10.000 € e niente soldi veri:
+
+- **azioni USA, di notte**: per ogni giorno dall'accensione rifà la lista del momento notturno (le 21
+  notti fino all'apertura) e compra in chiusura, vende all'apertura dopo, ai prezzi ufficiali
+  (`giornata.prezzi_notte`: aperture e chiusure delle ultime 45 sedute; servita da `live.py`, le aste
+  arrivano dopo un minuto da `/aperture`). I costi li scegli tu: 0,02 % o 0,10 %;
+- **crypto, piani di 24 ore**: ogni piano "compra il ribasso" e "compra la rottura" nato dopo
+  l'accensione ha una quota di 1/24 del capitale; entra al livello ed esce alla protezione,
+  all'obiettivo o alla scadenza. Dal vivo con le quotazioni in tempo reale; a pagina chiusa usa i
+  piani rigiocati sulle candele orarie degli ultimi 7 giorni (`intraday.py`, `storia_piani`).
+
+A pagina chiusa il robot non si ferma: a ogni aggiornamento dell'app (18:10 e 22:10) rifà le
+operazioni che avrebbe fatto; quello che ha già registrato non cambia. Si può farlo partire da oggi o
+rigiocare l'ultima settimana o le ultime due. Verifica: le 4 notti dall'11 al 17 novembre 2026
+coincidono con il calcolo in Python (stesse liste, stesso capitale, 9.929,77 €); le 133 operazioni
+crypto della settimana hanno la stessa media delle candele orarie (-0,98 %, una settimana in cui
+Bitcoin ha perso l'11 %). Lo stato del robot sta nell'archivio privato dell'app (o nel browser).
+
 ## Quotazioni in tempo reale nell'app
 
 L'app pubblicata si rigenera alle 18:10 e alle 22:10; i prezzi in tempo reale arrivano in due modi,
@@ -326,7 +347,7 @@ intraday ha guadagnato in media: è uno strumento per seguire i piani, non un mo
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte e live, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot e live, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

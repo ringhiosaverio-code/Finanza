@@ -32,6 +32,7 @@ CACHE = os.path.join(ROOT, "trader", "cache", "intraday")
 UA = "Mozilla/5.0 (compatible; finanza/1.0)"
 COSTO = 0.002                      # per lato
 ORE = 24
+STORIA_ORE = 7 * 24                # i piani degli ultimi 7 giorni, con com'è andata: il robot dell'app li usa
 REGOLE = [
     {"id": "ribasso", "nome": "Compra il ribasso",
      "desc": "Ordine limite 3 escursioni orarie sotto il prezzo; protezione 3 escursioni sotto l'entrata; obiettivo il prezzo di partenza."},
@@ -231,7 +232,10 @@ def analizza(log=print, max_age=3600):
         precedenti = [dict(piano(B, j, r), regola=r, ora=utc(ora_piano(B, j)),     # ancora nelle 24 ore:
                            fino=utc(ora_piano(B, j) + datetime.timedelta(hours=ORE)))  # se sei dentro, vale ancora
                       for j in rec[1:] for r in ("ribasso", "rottura")]
-        per[sym] = {"prezzo": round(B[-1][4], 6), "prezzo_ora": utc(ora_piano(B, len(B) - 1)),
+        piani_7g = [dict(piano(B, j, r), regola=r, ora=utc(ora_piano(B, j)), fino=utc(ora_piano(B, j) + datetime.timedelta(hours=ORE)))
+                  for j in range(max(25, len(B) - 1 - STORIA_ORE), len(B)) if ora_piano(B, j).hour in (17, 21)
+                  for r in ("ribasso", "rottura")]
+        per[sym] = {"prezzo": round(B[-1][4], 6), "prezzo_ora": utc(ora_piano(B, len(B) - 1)), "storia_piani": piani_7g,
                     "ora": utc(ora), "fino": utc(ora + datetime.timedelta(hours=ORE)),
                     "piani": {r["id"]: piano(B, i, r["id"]) for r in REGOLE}, "precedenti": precedenti,
                     "storia": {k: stat(v) for k, v in storia.items()}}

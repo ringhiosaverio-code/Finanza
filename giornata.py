@@ -166,31 +166,49 @@ TOP_NOTTE = 10        # quanti titoli si comprano
 SOGLIA_COSTI = 0.0002 # regge (in entrambe le metà, t >= 2) con costi fino a 0,02 % tra entrata e uscita (libri.py)
 
 
-def notti(sym):
-    """I rendimenti notturni (logaritmo di apertura / chiusura del giorno prima) di un titolo, compresa
-    l'apertura di oggi se la seduta è già iniziata. -> (date, rendimenti, ultima chiusura, data della chiusura)."""
-    import math
-    text = simula.fetch_max(sym)
+def serie_notte_testo(text):
+    """Dalla risposta del grafico di Yahoo: [(data, apertura, chiusura o None se la seduta è in corso)],
+    corrette per dividendi e split come le chiusure."""
     res = json.loads(text)["chart"]["result"][0]
     meta, q = res.get("meta", {}), res["indicators"]["quote"][0]
     off = meta.get("gmtoffset", 0)
     adj = (res["indicators"].get("adjclose") or [{}])[0].get("adjclose") or q["close"]
     righe = {}
-    for t, o, c, a in zip(res["timestamp"], q["open"], q["close"], adj):
+    for t, o, c, a in zip(res.get("timestamp") or [], q["open"], q["close"], adj):
         if o is None or o <= 0:
             continue
         d = datetime.datetime.fromtimestamp(t + off, datetime.timezone.utc).strftime("%Y-%m-%d")
         f = (a / c) if (a and c) else 1.0
         righe[d] = (o * f, a if (a and c) else None)                    # apertura corretta, chiusura (None se in corso)
-    giorni = sorted(righe)
+    return [(d, righe[d][0], righe[d][1]) for d in sorted(righe)]
+
+
+def notti(sym):
+    """I rendimenti notturni (logaritmo di apertura / chiusura del giorno prima) di un titolo, compresa
+    l'apertura di oggi se la seduta è già iniziata. -> (date, rendimenti, ultima chiusura, data della chiusura)."""
+    import math
+    S = serie_notte_testo(simula.fetch_max(sym))
     date, rend = [], []
-    for g0, g1 in zip(giorni, giorni[1:]):
-        c0, o1 = righe[g0][1], righe[g1][0]
+    for (g0, _, c0), (g1, o1, _) in zip(S, S[1:]):
         if c0 and o1:
             date.append(g1)
             rend.append(math.log(o1 / c0))
-    chiuse = [g for g in giorni if righe[g][1]]
-    return date, rend, (righe[chiuse[-1]][1] if chiuse else None), (chiuse[-1] if chiuse else None)
+    chiuse = [(g, c) for g, _, c in S if c]
+    return date, rend, (chiuse[-1][1] if chiuse else None), (chiuse[-1][0] if chiuse else None)
+
+
+def prezzi_notte(log=print, quante=45):
+    """Aperture e chiusure ufficiali delle ultime `quante` sedute dei titoli USA: il robot dell'app ci
+    rifà la lista di ogni giorno e chiude ogni notte con i prezzi veri. {simbolo: [[data, apertura, chiusura]]}"""
+    out = {}
+    for sym in settimana.MERCATI["usa"]["universo"]:
+        try:
+            S = serie_notte_testo(simula.fetch_max(sym))
+        except (simula.SimError, ValueError, KeyError, OSError) as e:
+            log("[giornata] %s saltato: %s" % (sym, e))
+            continue
+        out[sym] = [[d, round(o, 4), round(c, 4) if c else None] for d, o, c in S[-quante:]]
+    return out
 
 
 def piano_notte(log=print, adesso=None):
@@ -214,6 +232,7 @@ def piano_notte(log=print, adesso=None):
     compra = oggi if aperta_oggi and (ny.hour, ny.minute) < (15, 50) else settimana.trading_days_after(oggi, 1, "usa")[0]
     vendi = settimana.trading_days_after(compra, 1, "usa")[0]
     return {"titoli": righe[:TOP_NOTTE], "notti": NOTTI, "compra": compra, "vendi": vendi, "candidati": len(righe),
+            "prezzi": prezzi_notte(log),
             "ordini": {"compra": "al prezzo di chiusura (MOC), entro le 21:50 ora italiana",
                        "vendi": "al prezzo di apertura (MOO), entro le 15:28 ora italiana"},
             "soglia_costi": SOGLIA_COSTI}
