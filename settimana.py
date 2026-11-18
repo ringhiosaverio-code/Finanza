@@ -295,9 +295,12 @@ def chiusura_mancante(meta, ultima, adesso=None):
     if ultima and d <= ultima:
         return None
     adesso = time.time() if adesso is None else adesso
-    end = ((meta.get("currentTradingPeriod") or {}).get("regular") or {}).get("end")
-    if d == giorno(adesso) and (not end or adesso < end):
-        return None                                  # seduta di oggi non ancora finita: è un prezzo in corso
+    reg = (meta.get("currentTradingPeriod") or {}).get("regular") or {}
+    start, end = reg.get("start"), reg.get("end")
+    # seduta di oggi non ancora finita: è un prezzo in corso. Dopo la chiusura Yahoo a volte descrive
+    # già la seduta di domani: allora quella di oggi è finita.
+    if d == giorno(adesso) and (not start or not end or (giorno(start) == d and adesso < end)):
+        return None
     h, lo = meta.get("regularMarketDayHigh") or p, meta.get("regularMarketDayLow") or p
     return d, float(p), float(max(h, p)), float(min(lo, p))
 

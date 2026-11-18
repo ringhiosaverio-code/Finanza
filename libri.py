@@ -11,7 +11,9 @@ nostri dati) e fissata prima di guardare i risultati. Tre prove:
   2. Il momento di entrata per gli strumenti che l'app consiglia (sopra la media a 200 giorni):
      comprare subito o aspettare il segnale del libro? Stessa data di vendita, quindi conta solo il
      prezzo pagato. E, lo stesso giorno, quelli in un piccolo ribasso contro gli altri.
-  3. Candele orarie (2 anni): crypto, azioni USA ed ETF. Primo anno contro secondo.
+  3. Candele orarie: crypto (2 anni) e azioni USA (730 sedute, quasi 3 anni). Il primo anno contro il resto.
+  4. In giornata: le regole di giornata.py (comprare e vendere nella stessa seduta) sulle candele
+     giornaliere, quanto si guadagna di notte e di giorno, e giornate vere per esercitarsi.
 
 Una regola "regge" se, dopo i costi, fa meglio del semplice tenere lo strumento per gli stessi giorni
 (che i costi non li paga) sia nel primo periodo sia nel secondo, con t >= 2 (raggruppando per mese,
@@ -44,6 +46,7 @@ import urllib.request
 
 import numpy as np
 
+import giornata
 import intraday
 import settimana
 import simula
@@ -61,27 +64,12 @@ INDICI_USA = ["SPY", "QQQ", "IWM", "DIA"]
 
 def giornaliere(sym):
     """Candele giornaliere corrette per dividendi e split: date, O, H, L, C (numpy)."""
-    text = simula.fetch_max(sym)
-    _, dts, _ = simula.series(text)
-    ok = set(dts)
-    res = json.loads(text)["chart"]["result"][0]
-    q, off = res["indicators"]["quote"][0], res.get("meta", {}).get("gmtoffset", 0)
-    adj = (res["indicators"].get("adjclose") or [{}])[0].get("adjclose") or q["close"]
-    rows = {}
-    for t, o, h, l, c, a in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"], adj):
-        if None in (o, h, l, c, a) or min(o, h, l, c, a) <= 0:
-            continue
-        d = datetime.datetime.fromtimestamp(t + off, datetime.timezone.utc).strftime("%Y-%m-%d")
-        if d in ok:
-            f = a / c
-            rows[d] = (o * f, max(h, o, c) * f, min(l, o, c) * f, a)
-    d = sorted(rows)
-    x = np.array([rows[k] for k in d])
-    return d, x[:, 0], x[:, 1], x[:, 2], x[:, 3]
+    d, O, H, L, C, _ = giornata.giornaliere(sym)
+    return d, np.array(O), np.array(H), np.array(L), np.array(C)
 
 
 def orarie(sym, max_age=12 * 3600):
-    """2 anni di candele orarie da Yahoo (solo quelle già chiuse)."""
+    """Le candele orarie di Yahoo (range=730d: 730 sedute, quasi 3 anni per le azioni), solo quelle già chiuse."""
     os.makedirs(CACHE_H, exist_ok=True)
     path = os.path.join(CACHE_H, sym + ".json")
     if not os.path.exists(path) or time.time() - os.path.getmtime(path) > max_age:
@@ -401,6 +389,67 @@ def prova_momento(dati, log, top=10):
     return out
 
 
+# ---------------------------------------------------------------- prova 2c: comprare e vendere nella stessa seduta
+
+def prova_giornata(dati, log):
+    """Le regole di giornata.py sulle candele giornaliere (fino a 25 anni): si compra e si vende nella
+    stessa seduta. Media dopo i costi, prima e dopo il taglio, t raggruppato per mese. E dove si
+    guadagna davvero: di notte (dalla chiusura all'apertura) o di giorno (dall'apertura alla chiusura)."""
+    out = []
+    for reg in giornata.REGOLE:
+        parti = {"prima": [], "dopo": []}
+        for sym, (m, d, O, H, L, C) in dati.items():
+            if m not in ("usa", "italia", "etf"):
+                continue
+            costo = settimana.MERCATI[m]["costo"] / 100
+            for data, lordo in giornata.operazioni(d, O.tolist(), H.tolist(), L.tolist(), C.tolist(), reg["id"]):
+                parti["prima" if data < TAGLIO else "dopo"].append((data, 0, lordo - costo, 0.0))
+        a, b = riassunto(parti["prima"], 0.0), riassunto(parti["dopo"], 0.0)
+        out.append(dict(reg, prima=a, dopo=b, regge=regge(a, b)))
+        log("[libri] giornata %-44s prima: %s | dopo: %s" % (reg["nome"], fmt(a), fmt(b)))
+    notte = {}
+    for m in ("usa", "italia", "etf"):
+        for p in ("prima", "dopo"):
+            n_, g_ = [], []
+            for sym, (mm, d, O, H, L, C) in dati.items():
+                if mm != m:
+                    continue
+                ok = (H > L) & (O >= L) & (O <= H)
+                dd = np.array(d)
+                sel = ok[1:] & ok[:-1] & ((dd[1:] < TAGLIO) == (p == "prima"))
+                n_.append(np.log(O[1:] / C[:-1])[sel])
+                g_.append(np.log(C[1:] / O[1:])[sel])
+            n_, g_ = np.concatenate(n_), np.concatenate(g_)
+            if len(n_) > 250:
+                notte.setdefault(m, {})[p] = {"giorni": int(len(n_)), "notte": round(float(np.expm1(252 * n_.mean())), 4),
+                                              "giorno": round(float(np.expm1(252 * g_.mean())), 4),
+                                              "notte_su": round(float(np.mean(n_ > 0)), 4), "giorno_su": round(float(np.mean(g_ > 0)), 4)}
+    return out, notte
+
+
+def rigioca(log, quanti=240, seme=7):
+    """Giornate vere di azioni USA per esercitarsi: la seduta prima e quella del giorno, 7 candele orarie
+    ciascuna, in rapporto alla chiusura della seduta prima. La data si scopre dopo aver giocato."""
+    import random
+    rnd = random.Random(seme)
+    coppie = []
+    for s in settimana.MERCATI["usa"]["universo"]:
+        try:
+            G = giornate(orarie(s), False)
+        except Exception as e:                                       # rete, dati mancanti
+            log("[libri] %s saltato: %s" % (s, e))
+            continue
+        G = [(g, v) for g, v in G if len(v) == 7]
+        coppie += [(s, G[i - 1], G[i]) for i in range(1, len(G)) if G[i - 1][0] < G[i][0]]
+    out = []
+    for s, (g0, ieri), (g, oggi) in rnd.sample(coppie, min(quanti, len(coppie))):
+        c0 = ieri[-1][4]
+        rel = lambda b: [round(b[k] / c0, 5) for k in (1, 2, 3, 4)]
+        out.append({"s": s, "d": g, "ieri": [rel(b) for b in ieri], "oggi": [rel(b) for b in oggi]})
+    out.sort(key=lambda x: x["d"])
+    return out
+
+
 # ---------------------------------------------------------------- prova 3: candele orarie
 
 REGOLE_ORA = [
@@ -503,7 +552,9 @@ def prova_ora(log):
                 for g, lordo in operazioni_ora(B, crypto, reg["id"]):
                     parti["prima" if g < meta else "dopo"].append((g, 0, lordo - costo, 0.0))
             a, b = riassunto(parti["prima"], 0.0), riassunto(parti["dopo"], 0.0)
-            out.append(dict(reg, gruppo=nome_g, strumenti=len(dati), prima=a, dopo=b, regge=regge(a, b)))
+            dal = datetime.datetime.fromtimestamp(primo, datetime.timezone.utc).strftime("%Y-%m-%d")
+            al = datetime.datetime.fromtimestamp(max(B[-1][0] for B in dati.values()), datetime.timezone.utc).strftime("%Y-%m-%d")
+            out.append(dict(reg, gruppo=nome_g, strumenti=len(dati), prima=a, dopo=b, regge=regge(a, b), da=dal, taglio=meta, a=al))
             log("[libri] %-6s %-30s anno 1: %s | anno 2: %s" % (nome_g, reg["nome"], fmt(a), fmt(b)))
     return out
 
@@ -527,16 +578,18 @@ def analizza(log=print):
             if len(C) > 400:
                 dati[s] = (m, d, O, H, L, C)
     log("[libri] %d strumenti con candele giornaliere" % len(dati))
+    stessa, notte = prova_giornata(dati, log)
     return {"generato": datetime.date.today().isoformat(), "taglio": TAGLIO,
             "giorno": prova_giorno(dati, log), "entrata": prova_entrata(dati, log),
-            "momento": prova_momento(dati, log), "ora": prova_ora(log)}
+            "momento": prova_momento(dati, log), "ora": prova_ora(log),
+            "giornata": stessa, "notte": notte, "rigioca": rigioca(log)}
 
 
 def main():
     r = analizza()
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(r, fh, indent=1)
-    reggono = [x["nome"] for k in ("giorno", "entrata", "momento", "ora") for x in r[k] if x.get("regge")]
+    reggono = [x["nome"] for k in ("giorno", "entrata", "momento", "ora", "giornata") for x in r[k] if x.get("regge")]
     print("[libri] reggono: %s · scritto libri.json" % (", ".join(reggono) or "nessuna"))
     return 0
 

@@ -24,6 +24,7 @@ import json
 import os
 import sys
 
+import giornata
 import intraday
 import settimana
 import simula
@@ -108,6 +109,15 @@ def simulazioni(mercati, log=print):
     return out
 
 
+def piano_giornata(log=print):
+    """Il piano per la prossima seduta in giornata (giornata.py)."""
+    try:
+        return giornata.piani(log)
+    except Exception as e:                                   # rete o dati: l'app si genera lo stesso
+        log("[app] giornata saltata: %s" % e)
+        return None
+
+
 def crypto_intraday(log=print):
     """Piani crypto per le prossime 24 ore, verifica di 2 anni e varianti provate (intraday.py)."""
     try:
@@ -172,6 +182,7 @@ def main(argv=None):
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "libri": load_json(os.path.join(ROOT, "libri.json")),
+            "giornata": piano_giornata(),
             "aggiornato": settimana.now_in("Europe/Rome").strftime("%Y-%m-%d %H:%M")}
     out = build(data, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))

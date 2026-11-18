@@ -233,6 +233,24 @@ con t >= 2 (raggruppando per mese). Risultato (novembre 2026): reggono 2 su 29.
   forti, quelle in piccolo ribasso hanno fatto +0,5 % nel mese dopo, prima e dopo il 2016. Per le
   azioni italiane e gli ETF no. L'app lo segna come "buon momento" solo lì.
 
+## `giornata.py`: comprare e vendere nella stessa seduta (sezione "In giornata")
+
+```bash
+python3 giornata.py   # il piano per la prossima seduta; app.py lo mette nella sezione In giornata
+```
+
+Sette regole per la stessa seduta, fissate prima di guardare i dati (ogni giorno dall'apertura alla
+chiusura, Oops! di Williams, gap giù, gap giù su titolo in salita, gap su, giorno dopo un forte
+ribasso, primo del mese), verificate da `libri.py` su fino a 25 anni di candele giornaliere di azioni
+USA, italiane ed ETF, costi inclusi: nessuna resta in guadagno in entrambi i periodi. Comprare
+all'apertura e vendere in chiusura ha reso -0,11 % e -0,12 % a operazione; il gap giù rendeva
++0,33 % fino al 2015 e -0,08 % dopo. Il motivo: le azioni guadagnano di notte (USA +10 % l'anno
+dalla chiusura all'apertura, +3 % di giorno; Milano +24 % e -11 %).
+
+La sezione mostra il verdetto, il perché, il piano Oops! per la prossima seduta sui 14 titoli più
+scambiati (livello, orari, storia della regola su ogni titolo) e un gioco: 240 giornate vere di
+azioni USA, ora per ora, in cui decidi entrata, protezione e obiettivo e vedi com'è andata.
+
 ## `crypto_live.py`: crypto in tempo reale, ogni secondo
 
 ```bash
@@ -260,7 +278,7 @@ intraday ha guadagnato in media: è uno strumento per seguire i piani, non un mo
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live e libri, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri e giornata, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 
