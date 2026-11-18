@@ -174,6 +174,28 @@ i soli prezzi di quel giorno e la confronta con com'è andata (39.125 previsioni
   andate come le più basse (69 % contro 70 %). Gli ETF obbligazionari sono l'unico gruppo con stime
   ottimiste. 10 anni non si possono verificare (solo due periodi separati in 25 anni di prezzi).
 
+## `libri.py`: le regole dei libri di trading, provate sui prezzi veri
+
+```bash
+python3 libri.py      # richiede numpy; scrive libri.json, che l'app mostra in Altro → Dai libri
+```
+
+Le regole più citate su candele, grafici e momenti di entrata, con i parametri scritti nei libri
+(non ottimizzati) e fissate prima di guardare i risultati: figure giapponesi di Nison e Bulkowski,
+RSI a 2 giorni di Connors, IBS, rottura di volatilità di Williams, NR7 e primo intervallo di Crabel,
+massimo a 20 giorni dei Turtles, giro di fine mese, momento della giornata (Gao e altri 2018).
+Si giudica fino al 2015 e si controlla dal 2016 (per le candele orarie: primo anno contro secondo).
+Una regola regge se, dopo i costi, fa meglio del semplice tenere lo strumento in entrambi i periodi
+con t >= 2 (raggruppando per mese). Risultato (novembre 2026): reggono 2 su 29.
+
+- le figure giapponesi non aggiungono niente: lo stesso ribasso senza figura va uguale o meglio;
+- l'RSI a 2 giorni funzionava prima del libro (2008) e ha smesso dopo;
+- rotture, NR7, Turtles, fine mese e tutte le regole sulle candele orarie (crypto e USA) no;
+- aspettare un segnale per entrare costa più che comprare subito;
+- regge "dopo un piccolo ribasso" (chiusura sotto la media a 10 giorni): tra le 10 azioni USA più
+  forti, quelle in piccolo ribasso hanno fatto +0,5 % nel mese dopo, prima e dopo il 2016. Per le
+  azioni italiane e gli ETF no. L'app lo segna come "buon momento" solo lì.
+
 ## `crypto_live.py`: crypto in tempo reale, ogni secondo
 
 ```bash
@@ -201,7 +223,7 @@ intraday ha guadagnato in media: è uno strumento per seguire i piani, non un mo
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday e crypto_live, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live e libri, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

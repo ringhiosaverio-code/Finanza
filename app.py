@@ -169,6 +169,7 @@ def main(argv=None):
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
+            "libri": load_json(os.path.join(ROOT, "libri.json")),
             "aggiornato": settimana.now_in("Europe/Rome").strftime("%Y-%m-%d %H:%M")}
     out = build(data, a.out)
     print("[app] scritta %s (%d KB)" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))

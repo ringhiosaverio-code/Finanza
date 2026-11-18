@@ -1,0 +1,717 @@
+{
+ "generato": "2026-11-18",
+ "taglio": "2016-01-01",
+ "giorno": [
+  {
+   "id": "candele",
+   "nome": "Figure giapponesi (Nison)",
+   "fonte": "Nison 1991; Bulkowski 2008",
+   "desc": "Dopo un ribasso, una delle sei figure rialziste: compra all'apertura del giorno dopo, vendi dopo 10 giorni.",
+   "controllo": "ribasso",
+   "prima": {
+    "n": 23732,
+    "p_gain": 0.5361,
+    "media": 0.00396,
+    "extra": 0.00052,
+    "t": 1.41,
+    "mesi": 170
+   },
+   "dopo": {
+    "n": 21834,
+    "p_gain": 0.5544,
+    "media": 0.00515,
+    "extra": 0.00072,
+    "t": 1.4,
+    "mesi": 131
+   },
+   "regge": false
+  },
+  {
+   "id": "ribasso",
+   "nome": "Controllo: dopo un ribasso, senza figura",
+   "fonte": "Jegadeesh 1990; Lehmann 1990",
+   "desc": "Lo stesso, in ogni giorno chiuso sotto la media a 10 giorni, che ci sia una figura o no: dice se conta la figura o il ribasso.",
+   "prima": {
+    "n": 202157,
+    "p_gain": 0.5456,
+    "media": 0.00526,
+    "extra": 0.00195,
+    "t": 2.79,
+    "mesi": 170
+   },
+   "dopo": {
+    "n": 184110,
+    "p_gain": 0.5525,
+    "media": 0.00539,
+    "extra": 0.00098,
+    "t": 2.1,
+    "mesi": 131
+   },
+   "regge": true
+  },
+  {
+   "id": "rsi2",
+   "nome": "RSI a 2 giorni sotto 10",
+   "fonte": "Connors, Alvarez 2008",
+   "desc": "Sopra la media a 200 giorni, RSI(2) sotto 10: compra in chiusura, vendi alla prima chiusura sopra la media a 5 (al massimo 10 giorni).",
+   "prima": {
+    "n": 12068,
+    "p_gain": 0.6821,
+    "media": 0.00416,
+    "extra": 0.00276,
+    "t": 4.9,
+    "mesi": 161
+   },
+   "dopo": {
+    "n": 11460,
+    "p_gain": 0.6592,
+    "media": 0.00145,
+    "extra": -0.00043,
+    "t": 0.04,
+    "mesi": 131
+   },
+   "regge": false
+  },
+  {
+   "id": "ibs",
+   "nome": "Chiusura vicino al minimo (IBS)",
+   "fonte": "Pagonidis 2014",
+   "desc": "Chiusura nel 20 % pi\u00f9 basso della giornata: compra in chiusura, vendi alla chiusura del giorno dopo.",
+   "prima": {
+    "n": 94702,
+    "p_gain": 0.5053,
+    "media": 0.00044,
+    "extra": 0.0001,
+    "t": 1.45,
+    "mesi": 171
+   },
+   "dopo": {
+    "n": 90050,
+    "p_gain": 0.5007,
+    "media": -3e-05,
+    "extra": -0.00047,
+    "t": -1.06,
+    "mesi": 131
+   },
+   "regge": false
+  },
+  {
+   "id": "williams",
+   "nome": "Rottura di volatilit\u00e0",
+   "fonte": "Williams 1999",
+   "desc": "Compra se il prezzo supera l'apertura di 0,6 volte l'escursione di ieri; vendi in chiusura.",
+   "prima": {
+    "n": 154737,
+    "p_gain": 0.4413,
+    "media": -0.00083,
+    "extra": -0.00119,
+    "t": -9.48,
+    "mesi": 171
+   },
+   "dopo": {
+    "n": 148483,
+    "p_gain": 0.428,
+    "media": -0.00118,
+    "extra": -0.00164,
+    "t": -13.79,
+    "mesi": 131
+   },
+   "regge": false
+  },
+  {
+   "id": "nr7",
+   "nome": "Giornata pi\u00f9 stretta di 7 (NR7)",
+   "fonte": "Crabel 1990",
+   "desc": "Dopo la giornata con l'escursione pi\u00f9 piccola degli ultimi 7, compra sopra il suo massimo; vendi in chiusura.",
+   "prima": {
+    "n": 40945,
+    "p_gain": 0.4445,
+    "media": -0.00092,
+    "extra": -0.00127,
+    "t": -7.99,
+    "mesi": 170
+   },
+   "dopo": {
+    "n": 40914,
+    "p_gain": 0.4391,
+    "media": -0.00099,
+    "extra": -0.00144,
+    "t": -10.18,
+    "mesi": 131
+   },
+   "regge": false
+  },
+  {
+   "id": "donchian",
+   "nome": "Massimo a 20 giorni (Turtles)",
+   "fonte": "Faith 2007",
+   "desc": "Chiusura sopra il massimo di 20 giorni: compra all'apertura dopo, vendi alla chiusura sotto il minimo di 10 giorni (al massimo 60).",
+   "prima": {
+    "n": 7699,
+    "p_gain": 0.4228,
+    "media": 0.00902,
+    "extra": -0.0007,
+    "t": -2.24,
+    "mesi": 170
+   },
+   "dopo": {
+    "n": 7506,
+    "p_gain": 0.4387,
+    "media": 0.01196,
+    "extra": -0.00012,
+    "t": -1.62,
+    "mesi": 131
+   },
+   "regge": false
+  },
+  {
+   "id": "mese",
+   "nome": "Giro di fine mese",
+   "fonte": "Lakonishok, Smidt 1988; Ariel 1987",
+   "desc": "Compra alla chiusura del penultimo giorno del mese, vendi alla chiusura del terzo giorno del mese dopo.",
+   "prima": {
+    "n": 21385,
+    "p_gain": 0.5207,
+    "media": 0.0023,
+    "extra": 0.0009,
+    "t": 0.53,
+    "mesi": 170
+   },
+   "dopo": {
+    "n": 20003,
+    "p_gain": 0.5317,
+    "media": 0.00173,
+    "extra": -8e-05,
+    "t": -0.05,
+    "mesi": 130
+   },
+   "regge": false
+  }
+ ],
+ "entrata": [
+  {
+   "id": "subito",
+   "nome": "Compra subito",
+   "desc": "All'apertura del giorno dopo (come fa l'app).",
+   "prima": {
+    "n": 58436
+   },
+   "dopo": {
+    "n": 61583
+   },
+   "regge": false
+  },
+  {
+   "id": "rsi2",
+   "nome": "Aspetta un RSI(2) sotto 10",
+   "fonte": "Connors, Alvarez 2008",
+   "desc": "Fino a 10 giorni; compra in chiusura il giorno del segnale, altrimenti al decimo giorno.",
+   "prima": {
+    "n": 58436,
+    "p_gain": 0.5538,
+    "media": -0.00063,
+    "extra": -0.00063,
+    "t": 0.93,
+    "mesi": 161,
+    "segnale": 0.5101,
+    "meglio": 0.5538
+   },
+   "dopo": {
+    "n": 61583,
+    "p_gain": 0.5432,
+    "media": -0.0017,
+    "extra": -0.0017,
+    "t": -1.05,
+    "mesi": 130,
+    "segnale": 0.4947,
+    "meglio": 0.5432
+   },
+   "regge": false
+  },
+  {
+   "id": "ibs",
+   "nome": "Aspetta una chiusura vicino al minimo",
+   "fonte": "Pagonidis 2014",
+   "desc": "Fino a 5 giorni; compra in chiusura il giorno del segnale, altrimenti al quinto.",
+   "prima": {
+    "n": 58436,
+    "p_gain": 0.5641,
+    "media": 9e-05,
+    "extra": 9e-05,
+    "t": 1.93,
+    "mesi": 161,
+    "segnale": 0.6711,
+    "meglio": 0.5641
+   },
+   "dopo": {
+    "n": 61583,
+    "p_gain": 0.5607,
+    "media": 0.00012,
+    "extra": 0.00012,
+    "t": 1.25,
+    "mesi": 130,
+    "segnale": 0.6879,
+    "meglio": 0.5607
+   },
+   "regge": false
+  },
+  {
+   "id": "candele",
+   "nome": "Aspetta una figura rialzista",
+   "fonte": "Nison 1991",
+   "desc": "Fino a 10 giorni; compra all'apertura dopo la figura, altrimenti all'undicesimo giorno.",
+   "prima": {
+    "n": 58436,
+    "p_gain": 0.4618,
+    "media": -0.00252,
+    "extra": -0.00252,
+    "t": -0.57,
+    "mesi": 161,
+    "segnale": 0.3932,
+    "meglio": 0.4618
+   },
+   "dopo": {
+    "n": 61583,
+    "p_gain": 0.4595,
+    "media": -0.00219,
+    "extra": -0.00219,
+    "t": -0.85,
+    "mesi": 130,
+    "segnale": 0.3917,
+    "meglio": 0.4595
+   },
+   "regge": false
+  },
+  {
+   "id": "limite05",
+   "nome": "Ordine limite mezza escursione sotto",
+   "fonte": "",
+   "desc": "Chiusura meno mezza escursione media (ATR 14), valido 5 giorni; altrimenti compra al sesto.",
+   "prima": {
+    "n": 58436,
+    "p_gain": 0.6693,
+    "media": -7e-05,
+    "extra": -7e-05,
+    "t": 1.43,
+    "mesi": 161,
+    "segnale": 0.6896,
+    "meglio": 0.6693
+   },
+   "dopo": {
+    "n": 61583,
+    "p_gain": 0.6522,
+    "media": -0.00041,
+    "extra": -0.00041,
+    "t": -0.24,
+    "mesi": 130,
+    "segnale": 0.6814,
+    "meglio": 0.6522
+   },
+   "regge": false
+  },
+  {
+   "id": "limite1",
+   "nome": "Ordine limite un'escursione sotto",
+   "fonte": "",
+   "desc": "Chiusura meno un'escursione media, valido 10 giorni; altrimenti compra all'undicesimo.",
+   "prima": {
+    "n": 58436,
+    "p_gain": 0.6266,
+    "media": -0.00051,
+    "extra": -0.00051,
+    "t": 0.95,
+    "mesi": 161,
+    "segnale": 0.5861,
+    "meglio": 0.6266
+   },
+   "dopo": {
+    "n": 61583,
+    "p_gain": 0.6181,
+    "media": -0.00174,
+    "extra": -0.00174,
+    "t": -1.94,
+    "mesi": 130,
+    "segnale": 0.5832,
+    "meglio": 0.6181
+   },
+   "regge": false
+  },
+  {
+   "id": "williams",
+   "nome": "Aspetta la rottura di volatilit\u00e0",
+   "fonte": "Williams 1999",
+   "desc": "Fino a 5 giorni compra se il prezzo supera l'apertura di 0,6 escursioni di ieri; altrimenti al sesto.",
+   "prima": {
+    "n": 58436,
+    "p_gain": 0.325,
+    "media": -0.00023,
+    "extra": -0.00023,
+    "t": 0.91,
+    "mesi": 161,
+    "segnale": 0.9025,
+    "meglio": 0.325
+   },
+   "dopo": {
+    "n": 61583,
+    "p_gain": 0.3172,
+    "media": -0.00036,
+    "extra": -0.00036,
+    "t": 0.22,
+    "mesi": 130,
+    "segnale": 0.9022,
+    "meglio": 0.3172
+   },
+   "regge": false
+  }
+ ],
+ "momento": [
+  {
+   "categoria": "usa",
+   "nome": "Azioni USA",
+   "hold": 21,
+   "prima": {
+    "n": 28836,
+    "ribasso": 12393,
+    "differenza": 0.00514,
+    "t": 2.41,
+    "mesi": 158
+   },
+   "dopo": {
+    "n": 23630,
+    "ribasso": 10179,
+    "differenza": 0.00532,
+    "t": 2.08,
+    "mesi": 130
+   },
+   "regge": true
+  },
+  {
+   "categoria": "italia",
+   "nome": "Azioni italiane",
+   "hold": 21,
+   "prima": {
+    "n": 25518,
+    "ribasso": 10474,
+    "differenza": 0.00287,
+    "t": 1.23,
+    "mesi": 156
+   },
+   "dopo": {
+    "n": 23105,
+    "ribasso": 9689,
+    "differenza": -0.00095,
+    "t": -0.41,
+    "mesi": 130
+   },
+   "regge": false
+  },
+  {
+   "categoria": "etf",
+   "nome": "ETF azionari",
+   "hold": 63,
+   "prima": {
+    "n": 3468,
+    "ribasso": 1566,
+    "differenza": -0.00275,
+    "t": -0.58,
+    "mesi": 64
+   },
+   "dopo": {
+    "n": 11951,
+    "ribasso": 4878,
+    "differenza": 0.0033,
+    "t": 0.89,
+    "mesi": 119
+   },
+   "regge": false
+  },
+  {
+   "categoria": "bond",
+   "nome": "ETF obbligazionari",
+   "hold": 63,
+   "prima": {
+    "n": 8593,
+    "ribasso": 3438,
+    "differenza": -0.00149,
+    "t": -0.88,
+    "mesi": 79
+   },
+   "dopo": {
+    "n": 18156,
+    "ribasso": 7863,
+    "differenza": 0.00203,
+    "t": 1.22,
+    "mesi": 127
+   },
+   "regge": false
+  },
+  {
+   "categoria": "oro",
+   "nome": "Oro e materie prime",
+   "hold": 63,
+   "prima": {
+    "n": 0
+   },
+   "dopo": {
+    "n": 1606,
+    "ribasso": 816,
+    "differenza": 1e-05,
+    "t": 0.0,
+    "mesi": 100
+   },
+   "regge": false
+  }
+ ],
+ "ora": [
+  {
+   "id": "orb",
+   "nome": "Rottura del primo intervallo",
+   "fonte": "Crabel 1990; Zarattini, Aziz 2023",
+   "desc": "Se la prima ora chiude in rialzo, compra alla sua chiusura; protezione al minimo della prima ora; vendi in chiusura.",
+   "gruppo": "crypto",
+   "strumenti": 12,
+   "prima": {
+    "n": 2126,
+    "p_gain": 0.1707,
+    "media": -0.00369,
+    "extra": -0.00369,
+    "t": -4.8,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 2115,
+    "p_gain": 0.1452,
+    "media": -0.00344,
+    "extra": -0.00344,
+    "t": -4.05,
+    "mesi": 13
+   },
+   "regge": false
+  },
+  {
+   "id": "momentum",
+   "nome": "Momento della giornata",
+   "fonte": "Gao, Han, Li, Zhou 2018",
+   "desc": "Se dalla chiusura di ieri alla fine della prima ora il prezzo \u00e8 salito, compra nell'ultima mezz'ora (ultima ora per le crypto) e vendi in chiusura.",
+   "gruppo": "crypto",
+   "strumenti": 12,
+   "prima": {
+    "n": 2129,
+    "p_gain": 0.1771,
+    "media": -0.00416,
+    "extra": -0.00416,
+    "t": -10.77,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 2116,
+    "p_gain": 0.155,
+    "media": -0.00413,
+    "extra": -0.00413,
+    "t": -12.91,
+    "mesi": 13
+   },
+   "regge": false
+  },
+  {
+   "id": "williams",
+   "nome": "Rottura di volatilit\u00e0",
+   "fonte": "Williams 1999",
+   "desc": "Compra se il prezzo supera l'apertura di 0,5 volte l'escursione di ieri; vendi in chiusura.",
+   "gruppo": "crypto",
+   "strumenti": 12,
+   "prima": {
+    "n": 1840,
+    "p_gain": 0.4234,
+    "media": -0.00141,
+    "extra": -0.00141,
+    "t": -0.68,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 1711,
+    "p_gain": 0.3735,
+    "media": -0.00257,
+    "extra": -0.00257,
+    "t": -1.35,
+    "mesi": 13
+   },
+   "regge": false
+  },
+  {
+   "id": "candele",
+   "nome": "Figure giapponesi sull'ora",
+   "fonte": "Nison 1991",
+   "desc": "Una delle sei figure rialziste su una candela oraria: compra all'apertura dell'ora dopo, vendi dopo 24 ore (crypto) o in chiusura.",
+   "gruppo": "crypto",
+   "strumenti": 12,
+   "prima": {
+    "n": 9144,
+    "p_gain": 0.4509,
+    "media": -0.00359,
+    "extra": -0.00359,
+    "t": -1.68,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 8928,
+    "p_gain": 0.3933,
+    "media": -0.00601,
+    "extra": -0.00601,
+    "t": -4.06,
+    "mesi": 13
+   },
+   "regge": false
+  },
+  {
+   "id": "rsi2",
+   "nome": "RSI(2) orario sotto 10",
+   "fonte": "Connors, Alvarez 2008",
+   "desc": "Sopra la media di 200 ore, RSI(2) sotto 10: compra, vendi alla prima chiusura sopra la media di 5 ore (al massimo 24).",
+   "gruppo": "crypto",
+   "strumenti": 12,
+   "prima": {
+    "n": 1951,
+    "p_gain": 0.4203,
+    "media": -0.00382,
+    "extra": -0.00382,
+    "t": -4.85,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 1853,
+    "p_gain": 0.3443,
+    "media": -0.00437,
+    "extra": -0.00437,
+    "t": -5.17,
+    "mesi": 13
+   },
+   "regge": false
+  },
+  {
+   "id": "orb",
+   "nome": "Rottura del primo intervallo",
+   "fonte": "Crabel 1990; Zarattini, Aziz 2023",
+   "desc": "Se la prima ora chiude in rialzo, compra alla sua chiusura; protezione al minimo della prima ora; vendi in chiusura.",
+   "gruppo": "usa",
+   "strumenti": 107,
+   "prima": {
+    "n": 13409,
+    "p_gain": 0.4005,
+    "media": -0.00108,
+    "extra": -0.00108,
+    "t": -5.8,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 25541,
+    "p_gain": 0.4178,
+    "media": -0.00097,
+    "extra": -0.00097,
+    "t": -3.38,
+    "mesi": 24
+   },
+   "regge": false
+  },
+  {
+   "id": "momentum",
+   "nome": "Momento della giornata",
+   "fonte": "Gao, Han, Li, Zhou 2018",
+   "desc": "Se dalla chiusura di ieri alla fine della prima ora il prezzo \u00e8 salito, compra nell'ultima mezz'ora (ultima ora per le crypto) e vendi in chiusura.",
+   "gruppo": "usa",
+   "strumenti": 107,
+   "prima": {
+    "n": 14149,
+    "p_gain": 0.3636,
+    "media": -0.00095,
+    "extra": -0.00095,
+    "t": -7.02,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 26183,
+    "p_gain": 0.3668,
+    "media": -0.00105,
+    "extra": -0.00105,
+    "t": -10.06,
+    "mesi": 24
+   },
+   "regge": false
+  },
+  {
+   "id": "williams",
+   "nome": "Rottura di volatilit\u00e0",
+   "fonte": "Williams 1999",
+   "desc": "Compra se il prezzo supera l'apertura di 0,5 volte l'escursione di ieri; vendi in chiusura.",
+   "gruppo": "usa",
+   "strumenti": 107,
+   "prima": {
+    "n": 11436,
+    "p_gain": 0.4381,
+    "media": -0.00122,
+    "extra": -0.00122,
+    "t": -3.62,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 21841,
+    "p_gain": 0.4442,
+    "media": -0.00083,
+    "extra": -0.00083,
+    "t": -3.18,
+    "mesi": 24
+   },
+   "regge": false
+  },
+  {
+   "id": "candele",
+   "nome": "Figure giapponesi sull'ora",
+   "fonte": "Nison 1991",
+   "desc": "Una delle sei figure rialziste su una candela oraria: compra all'apertura dell'ora dopo, vendi dopo 24 ore (crypto) o in chiusura.",
+   "gruppo": "usa",
+   "strumenti": 107,
+   "prima": {
+    "n": 9809,
+    "p_gain": 0.4148,
+    "media": -0.00097,
+    "extra": -0.00097,
+    "t": -4.27,
+    "mesi": 13
+   },
+   "dopo": {
+    "n": 18946,
+    "p_gain": 0.4277,
+    "media": -0.00081,
+    "extra": -0.00081,
+    "t": -2.34,
+    "mesi": 24
+   },
+   "regge": false
+  },
+  {
+   "id": "rsi2",
+   "nome": "RSI(2) orario sotto 10",
+   "fonte": "Connors, Alvarez 2008",
+   "desc": "Sopra la media di 200 ore, RSI(2) sotto 10: compra, vendi alla prima chiusura sopra la media di 5 ore (al massimo 24).",
+   "gruppo": "usa",
+   "strumenti": 107,
+   "prima": {
+    "n": 4622,
+    "p_gain": 0.4983,
+    "media": -0.001,
+    "extra": -0.001,
+    "t": -4.12,
+    "mesi": 11
+   },
+   "dopo": {
+    "n": 8846,
+    "p_gain": 0.5007,
+    "media": -0.00098,
+    "extra": -0.00098,
+    "t": -2.83,
+    "mesi": 24
+   },
+   "regge": false
+  }
+ ]
+}

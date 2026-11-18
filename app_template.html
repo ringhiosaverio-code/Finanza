@@ -285,6 +285,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
   <section class="view" id="v-simula" hidden></section>
   <section class="view" id="v-daytrade" hidden></section>
   <section class="view" id="v-metodo" hidden></section>
+  <section class="view" id="v-libri" hidden></section>
 </main>
 <datalist id="all-list"></datalist>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -325,7 +326,7 @@ if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
 if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
 /* ---------------- sezioni ---------------- */
-const VIEWS = ['oggi', 'portafoglio', 'demo', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo'];
+const VIEWS = ['oggi', 'portafoglio', 'demo', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'];
 let view = null;
 function route() {
   let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'oggi';
@@ -333,8 +334,8 @@ function route() {
   if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
-  ['oggi', 'portafoglio', 'demo', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
-  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo'].includes(v) ? 'altro' : v;
+  ['oggi', 'portafoglio', 'demo', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo', 'libri'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
+  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'].includes(v) ? 'altro' : v;
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === navv ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
@@ -345,6 +346,7 @@ function route() {
   else if (sec === 'altro') renderAltro();
   else if (sec === 'simula') renderSimula();
   else if (sec === 'daytrade') renderDay();
+  else if (sec === 'libri') renderLibri();
   else renderMetodo();
   $('#meta').textContent = !['consigli', 'verifica'].includes(sec) ? (D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))}, ${D.aggiornato.slice(11, 16)}` : '') : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
 }
@@ -733,6 +735,15 @@ function renderDay() {
 /* ---------------- giudizio: perché sì, perché no (stesse regole ovunque) ---------------- */
 // "del 18 %" ma "dell'8 %", "dell'11 %", "dell'1 %", "dell'80 %"
 const delp = (x, d = 0) => { const s = pc(x, d, false); return (/^(8|11[ ,]|1[ ,])/.test(s) ? 'dell\u2019' : 'del ') + s; };
+/* un piccolo ribasso (sotto la media di 10 giorni) è un buon momento solo dove libri.py lo ha verificato */
+function momento(s) {
+  const mo = D.libri && D.libri.momento && D.libri.momento.find(x => x.categoria === s.categoria);
+  if (!mo || !mo.regge || s.media10 == null || s.media10 >= 0) return null;
+  const M = D.mercati[s.categoria];                       // per le azioni: verificato sui primi 10 per forza
+  if (['usa', 'italia'].includes(s.categoria) && !(M && M.candidates.slice().sort((a, b) => b.forza - a.forza)
+    .slice(0, M.top || 10).some(c => c.symbol === s.symbol))) return null;
+  return mo;
+}
 const CAT_NOME = {usa: 'le azioni USA', italia: 'le azioni italiane', etf: 'gli ETF azionari', bond: 'gli ETF obbligazionari', oro: 'oro e materie prime'};
 function giudizio(s) {
   const m = s.categoria, M = m && D.mercati[m];
@@ -766,6 +777,9 @@ function giudizio(s) {
     if (st.sopra_media200) (diff >= .05 ? pro : fatti).push(`<b>È in salita</b> (${pc(st.vs_media200, 0)} rispetto alla media a 200 giorni)${diff >= .05 ? ', e per questa categoria conta' : '. Per questa categoria non ha cambiato molto le cose'}: ${ver}.`);
     else (diff >= .05 ? contro : fatti).push(`<b>È in discesa</b> (${pc(st.vs_media200, 0)} rispetto alla media a 200 giorni)${diff >= .05 ? ', e per questa categoria conta' : diff <= -.05 ? '. Per questa categoria, comprare in discesa è andato perfino meglio' : '. Per questa categoria non ha fatto molta differenza, quindi non è un motivo per evitarlo'}: ${ver}.`);
   }
+  // il momento di entrata: un piccolo ribasso, solo dove la verifica dei libri dice che conta
+  const mo = momento(s);
+  if (mo) pro.push(`<b>Buon momento per entrare</b>: è in un piccolo ribasso (${pc(s.media10, 1)} rispetto alla media degli ultimi 10 giorni). Tra ${['usa', 'italia'].includes(m) ? `le 10 ${CAT_NOME[m].replace('le ', '')} più forti della classifica` : `${CAT_NOME[m]} consigliate`}, quelle in questa situazione sono andate in media ${pc(mo.prima.differenza, 1)} e ${pc(mo.dopo.differenza, 1)} meglio delle altre nel mese dopo, prima e dopo il 2016. <a href="#libri" style="color:var(--accent)">Dai libri</a>`);
   // un titolo singolo contro un ETF sul mondo intero, a parità di tempo
   const w = D.simula && D.simula['SWDA.MI'];
   if (w && s.symbol !== 'SWDA.MI' && !isFund) {
@@ -1022,7 +1036,7 @@ function renderOggi() {
         <div class="id"><span class="cat" style="--cc:var(${x.col})">${x.one}</span><br><span class="tk">${esc(tk(c.symbol))}</span><span class="nm">${esc(c.name)}</span></div>
         <div class="pr" title="Probabilità di guadagno"><span class="meter"><i style="width:${x.p * 100}%"></i></span><span class="pv">${p100(x.p)}</span><span class="pl">probabilità<br>di guadagno</span></div></div>
       <div class="trio">
-        <div><span class="k">Compra</span><span class="big">fino a ${fmtc(lim, cur)}</span><small>${today ? 'oggi, ' : ''}${dt(entryDay)} · ultima chiusura ${fmtc(c.price, cur)}</small></div>
+        <div><span class="k">Compra</span><span class="big">fino a ${fmtc(lim, cur)}</span><small>${today ? 'oggi, ' : ''}${dt(entryDay)} · ultima chiusura ${fmtc(c.price, cur)}${x.s && momento(x.s) ? ' · <b class="pos">buon momento</b>: piccolo ribasso' : ''}</small></div>
         <div><span class="k">Tieni e vendi</span><span class="big">${holdName(x.ci.hold)}</span><small>vendi alla chiusura di ${dt(exitDay, {year: 'numeric'})}${stop != null ? ` · o prima, a ${fmtc(stop, cur)} (protezione)` : ''}${tgt != null ? ` o a ${fmtc(tgt, cur)} (obiettivo)` : ''}</small></div>
         <div><span class="k">Cedole o dividendi</span><span class="big">${yv}</span><small>${ys}</small></div>
       </div>
@@ -1348,9 +1362,53 @@ function renderAltro() {
   <div class="links">
     <a class="card lk" href="#consigli"><b>Azioni: scegli tu la regola</b><span>Le azioni USA e italiane, con durata e protezione a tua scelta, quante azioni comprare, grafici e simulazione.</span></a>
     <a class="card lk" href="#verifica"><b>Funziona?</b><span>La verifica su anni che l'algoritmo non aveva visto: le probabilità dette sono quelle vere?</span></a>
+    <a class="card lk" href="#libri"><b>Dai libri di trading</b><span>Candele giapponesi, rotture, RSI, momenti di entrata: le regole dei libri più famosi provate sui prezzi veri. Quali reggono.</span></a>
     <a class="card lk" href="#metodo"><b>Come funziona</b><span>Il metodo, cosa è stato provato e scartato, i limiti.</span></a>
     <a class="card lk" href="#daytrade"><b>Esempio di day trade</b><span>La Macchina del Tempo su un'operazione in giornata (dati di prova).</span></a>
   </div>`;
+}
+
+/* ---------------- dai libri di trading ---------------- */
+function renderLibri() {
+  const B = D.libri, v = $('#v-libri');
+  if (!B) { v.innerHTML = '<div class="card empty">Verifica non ancora fatta: <code>python3 libri.py</code></div>'; return; }
+  const chip = r => `<span class="chip ${r.regge ? 'alta' : 'bassa'}">${r.regge ? 'regge' : 'non regge'}</span>`;
+  const nomeR = r => `${chip(r)} <b>${esc(r.nome)}</b>${r.fonte ? ` <span class="note">· ${esc(r.fonte)}</span>` : ''}<br><span class="note">${esc(r.desc)}</span>`;
+  const cG = s => s && s.n >= 30 ? `<b class="${s.extra >= 0 ? 'pos' : 'neg'}">${pc(s.extra, 2)}</b> <span class="note">(t ${nf(s.t, 1)})</span><br><span class="note">${p100(s.p_gain)} in guadagno · media ${pc(s.media, 2)} · ${nf(s.n, 0)} op.</span>` : '<span class="note">pochi dati</span>';
+  const cE = s => s && s.n >= 30 ? `${s.extra >= 0 ? 'paghi meno' : 'paghi di più'}: <b class="${s.extra >= 0 ? 'pos' : 'neg'}">${pc(Math.abs(s.extra), 2, false)}</b> <span class="note">(t ${nf(s.t, 1)})</span><br><span class="note">segnale arrivato ${p100(s.segnale)} delle volte · ${nf(s.n, 0)} prove</span>` : '<span class="note">pochi dati</span>';
+  const cM = s => s && s.n ? `<b class="${s.differenza >= 0 ? 'pos' : 'neg'}">${pc(s.differenza, 2)}</b> <span class="note">(t ${nf(s.t, 1)})</span><br><span class="note">${nf(s.mesi, 0)} mesi · in ribasso ${p100(s.ribasso / s.n)} delle volte</span>` : '<span class="note">pochi dati</span>';
+  const cO = s => s && s.n >= 30 ? `<b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b> <span class="note">(t ${nf(s.t, 1)})</span><br><span class="note">${p100(s.p_gain)} in guadagno · ${nf(s.n, 0)} op.</span>` : '<span class="note">pochi dati</span>';
+  const tutte = [...B.giorno, ...B.entrata.slice(1), ...B.momento, ...B.ora], ok = tutte.filter(r => r.regge);
+  const usa = B.momento.find(x => x.categoria === 'usa'), rsi = B.giorno.find(r => r.id === 'rsi2'), fig = B.giorno.find(r => r.id === 'candele'), ctl = B.giorno.find(r => r.id === 'ribasso');
+  const anno = y => new Date(y).getFullYear();
+  v.innerHTML = `<div><h1>Dai libri di trading</h1><p class="sub" style="margin-top:4px">Le regole più famose su candele, grafici e momenti di entrata, con i parametri scritti nei libri e decisi prima di guardare i risultati, provate sui prezzi veri: fino a 25 anni di candele giornaliere di azioni ed ETF e 2 anni di candele orarie di crypto e azioni USA. Si giudica sul periodo fino al ${anno(B.taglio) - 1} e si controlla dal ${anno(B.taglio)}, che la regola "non ha visto".</p></div>
+  <div class="verdetto v-${ok.length ? 'cautela' : 'no'}"><div class="vh"><span class="vi" aria-hidden="true">${ok.length ? '!' : '✕'}</span><div><b>Ne reggono ${ok.length} su ${tutte.length}</b>
+    <p>Le figure giapponesi, le rotture, l'RSI e le regole sulle candele orarie non battono il semplice tenere lo strumento, una volta pagati i costi. Quello che regge è più semplice: <b>un piccolo ribasso è un momento migliore di un rialzo</b>${ctl && ctl.regge ? ` (dopo una chiusura sotto la media di 10 giorni, ${pc(ctl.dopo.extra, 2)} in più del tenere in 10 giorni dal ${anno(B.taglio)}, costi inclusi)` : ''}${fig && ctl ? `, e le figure non aggiungono niente: con o senza figura è lo stesso` : ''}. Aspettare un segnale invece è andato peggio che comprare subito.</p></div></div>
+    <p class="note"><b>Cosa cambia nell'app:</b> ${usa && usa.regge ? `per le 10 azioni USA più forti della classifica, un piccolo ribasso è segnato come <b>buon momento per entrare</b>: quelle in questa situazione sono andate ${pc(usa.prima.differenza, 1)} e ${pc(usa.dopo.differenza, 1)} meglio delle altre nel mese dopo, prima e dopo il ${anno(B.taglio)}. Per azioni italiane ed ETF non si è visto, quindi lì non compare.` : 'niente: nessuna regola ha retto anche sul periodo di controllo.'} Il resto dell'algoritmo resta com'era. Le regole intraday restano "Per ora no".</p></div>
+
+  <div class="card"><h2>1. Candele e regole giornaliere</h2>
+    <p class="sub" style="margin-top:4px">Azioni USA, azioni italiane, ETF azionari. Il numero grande è quanto ha reso in più (o in meno) del semplice tenere lo stesso strumento per gli stessi giorni, dopo i costi della regola (${pc(.001, 1, false)} a operazione, ${pc(.002, 1, false)} sulle azioni italiane). t: quanto è solido (almeno 2 per contare).</p>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Regola</th><th>Fino al ${anno(B.taglio) - 1}</th><th>Dal ${anno(B.taglio)}</th></tr></thead>
+      <tbody>${B.giorno.map(r => `<tr><td class="l" style="white-space:normal;min-width:240px">${nomeR(r)}</td><td>${cG(r.prima)}</td><td>${cG(r.dopo)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:8px">${rsi ? `L'RSI a 2 giorni di Connors funzionava prima del libro (${pc(rsi.prima.extra, 2)}, t ${nf(rsi.prima.t, 1)}) e ha smesso dopo (${pc(rsi.dopo.extra, 2)}): succede spesso alle regole pubblicate. ` : ''}Le figure giapponesi vanno un po' meglio del tenere solo perché arrivano dopo un ribasso: il controllo, cioè ogni giorno dopo un ribasso con o senza figura, va uguale o meglio.</p></div>
+
+  <div class="card"><h2>2. Il momento di entrata</h2>
+    <p class="sub" style="margin-top:4px">Per gli strumenti che l'app può consigliare (sopra la media a 200 giorni): comprare subito o aspettare il segnale del libro? Stessa data di vendita, quindi conta solo il prezzo pagato.</p>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Invece di comprare subito</th><th>Fino al ${anno(B.taglio) - 1}</th><th>Dal ${anno(B.taglio)}</th></tr></thead>
+      <tbody>${B.entrata.slice(1).map(r => `<tr><td class="l" style="white-space:normal;min-width:240px">${nomeR(r)}</td><td>${cE(r.prima)}</td><td>${cE(r.dopo)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:8px">Aspettare quasi sempre costa: spesso il segnale non arriva e si compra più tardi, a un prezzo più alto. Per questo l'app continua a dire di comprare subito.</p>
+    <h3 style="margin-top:14px">Lo stesso giorno: in piccolo ribasso o no?</h3>
+    <p class="note">Tra gli strumenti consigliabili dello stesso giorno (per le azioni i primi 10 per forza, come nella classifica), quanto sono andati meglio quelli chiusi sotto la media degli ultimi 10 giorni, nel periodo dell'app (1 mese per le azioni, 3 mesi per gli altri).</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Categoria</th><th>Fino al ${anno(B.taglio) - 1}</th><th>Dal ${anno(B.taglio)}</th></tr></thead>
+      <tbody>${B.momento.map(r => `<tr><td class="l">${chip(r)} <b>${esc(r.nome)}</b><br><span class="note">${holdName(r.hold)}</span></td><td>${cM(r.prima)}</td><td>${cM(r.dopo)}</td></tr>`).join('')}</tbody></table></div></div>
+
+  <div class="card"><h2>3. Candele orarie: intraday</h2>
+    <p class="sub" style="margin-top:4px">Crypto (giornata UTC, costi ${pc(2 * ((D.intraday && D.intraday.costo_per_lato) || .002), 1, false)} tra entrata e uscita) e azioni ed ETF USA (seduta di New York, costi ${pc(.001, 1, false)}). Media per operazione dopo i costi; primo anno contro secondo.</p>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Regola</th><th>Primo anno</th><th>Secondo anno</th></tr></thead>
+      <tbody>${B.ora.map(r => `<tr><td class="l" style="white-space:normal;min-width:240px">${nomeR(r)}<br><span class="note">${r.gruppo === 'crypto' ? 'Crypto' : 'Azioni ed ETF USA'}</span></td><td>${cO(r.prima)}</td><td>${cO(r.dopo)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="note" style="margin-top:8px">In giornata il movimento atteso è piccolissimo e i costi si pagano a ogni operazione: nessuna regola resta in guadagno. È il motivo per cui l'app dice "Per ora no" sull'intraday.</p></div>
+
+  <p class="note">Fonti: Nison, <i>Japanese Candlestick Charting Techniques</i> (1991); Bulkowski, <i>Encyclopedia of Candlestick Charts</i> (2008); Connors e Alvarez, <i>Short Term Trading Strategies That Work</i> (2008); Williams, <i>Long-Term Secrets to Short-Term Trading</i> (1999); Crabel, <i>Day Trading with Short Term Price Patterns and Opening Range Breakout</i> (1990); Faith, <i>Way of the Turtle</i> (2007); Pagonidis, <i>The IBS Effect</i> (2014); Lakonishok e Smidt (1988); Jegadeesh (1990); Gao, Han, Li e Zhou (2018); Zarattini e Aziz (2023). Le regole sono state scritte dai libri, non ottimizzate su questi dati. Elenco dei titoli di oggi (chi è uscito dagli indici non c'è), esecuzione ideale, senza tasse. Verifica del ${dt(B.generato, {year: 'numeric'})}. Non è consulenza finanziaria.</p>`;
 }
 
 /* ---------------- come funziona ---------------- */
@@ -1372,7 +1430,7 @@ function renderMetodo() {
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
     <h3>Crypto intraday</h3>
-    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Lo stesso per 9 varianti provate allo stesso modo (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni): scelta la migliore sul primo anno, sul secondo ha perso ancora. Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
+    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Lo stesso per 9 varianti provate allo stesso modo (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni): scelta la migliore sul primo anno, sul secondo ha perso ancora. Anche le regole dei libri più famosi (candele giapponesi, rotture, RSI, primo intervallo) sono state provate sulle candele orarie di crypto e azioni USA: nessuna resta in guadagno dopo i costi (vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>). Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
     <h3>La verifica di 25 anni</h3>
     <p>Ogni mese dal 2004, per tutti gli strumenti, la probabilità di guadagno è stata rifatta con i soli prezzi di quel giorno e confrontata con com'è andata (<code>python3 verifica.py</code>). In media è prudente di un paio di punti; i "Sì" sono andati in guadagno più spesso dei "Con cautela" e dei "Per ora no", con perdite più piccole. Tre modi per migliorarla (miscela con la frequenza del gruppo, ricalibratura per tutti e per gruppo) sono stati provati su anni mai visti e nessuno prevede meglio: la stima resta quella prudente, con un avviso sopra il 70 %, dove in passato è stata troppo ottimista.</p>
     <h3>Perché sì e perché no</h3>

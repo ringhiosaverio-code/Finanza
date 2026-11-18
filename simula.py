@@ -338,6 +338,7 @@ def simulate(dates, closes, n=N_SIM, seed=19, cal="borsa"):
                                                     "passato": round(math.exp(mu_a) - 1, 4)},
         "drift": {k: round(v, 8) for k, v in drift.items()},
         "orizzonti": out, "ventaglio": fan,
+        "media10": round(closes[-1] / (sum(closes[-10:]) / len(closes[-10:])) - 1, 5),   # piccolo ribasso se < 0
         "grafico": {"dates": dates[c0::step] + ([dates[-1]] if tail else []),
                     "close": [round(x, 6) for x in closes[c0::step]] + ([round(closes[-1], 6)] if tail else [])},
     }
