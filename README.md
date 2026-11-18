@@ -62,7 +62,9 @@ alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York.
   candele orarie degli ultimi 2 anni (12 crypto, piani alle 18 e alle 22, costi 0,2 % per lato):
   in guadagno il 29-44 % delle volte, media da -0,4 % a -0,5 % per operazione, in entrambi gli
   anni. In 24 ore il movimento è quasi testa o croce e i costi lo rendono una perdita: l'app dice
-  "Per ora no" e suggerisce di provare nel conto demo.
+  "Per ora no" e suggerisce di provare nel conto demo. Provate anche 9 varianti fissate prima di
+  guardare i dati (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni,
+  `python3 intraday.py --varianti`): la migliore sul primo anno ha perso anche sul secondo.
 - **Crypto**: le 12 principali in euro (Bitcoin, Ethereum, Solana…) con le stesse regole: probabilità
   a 3 mesi di calendario, oscillazione, calo massimo storico (Bitcoin fino a -83 %) e giudizio.
 
@@ -165,7 +167,12 @@ i soli prezzi di quel giorno e la confronta con com'è andata (39.125 previsioni
   "Con cautela" il 57 % (1 su 10 sotto -8 %), "Per ora no" il 53 % (1 su 10 sotto -26 %);
 - sopra il 70 % le stime sono state troppo ottimiste (vero 62 %): l'app lo segnala;
 - tre miglioramenti provati su anni mai visti (miscela con la frequenza del gruppo, ricalibratura
-  unica e per gruppo) non prevedono meglio: la stima resta quella prudente.
+  unica e per gruppo) non prevedono meglio: la stima resta quella prudente;
+- a ogni durata della ricerca per titolo (1 giorno, 1 settimana, 1 mese, 3 mesi, 1 anno) la
+  probabilità detta è in media un po' più bassa di quella vera (a 1 anno 66 % contro 69 %), ma tra
+  strumenti dello stesso tipo le differenze contano poco: a 1 anno le stime più alte (75 %) sono
+  andate come le più basse (69 % contro 70 %). Gli ETF obbligazionari sono l'unico gruppo con stime
+  ottimiste. 10 anni non si possono verificare (solo due periodi separati in 25 anni di prezzi).
 
 ## `crypto_live.py`: crypto in tempo reale, ogni secondo
 

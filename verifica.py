@@ -46,7 +46,9 @@ def prudente(mu, sd, n, A):
     return (prior + w * (mu_a - prior)) / A
 
 
-def previsioni(log=print):
+def previsioni(log=print, orizzonti=False):
+    """Una previsione al mese per strumento. Con orizzonti=False sul periodo consigliato della sua
+    categoria; con orizzonti=True su tutte le durate della Macchina del Tempo (campo "h": 0..4)."""
     cat = {}
     for m in ("usa", "italia", "etf", "bond", "oro"):
         for s in settimana.MERCATI[m]["universo"]:
@@ -64,17 +66,39 @@ def previsioni(log=print):
         c = np.array(closes[-(simula.YEARS_MAX * A + 1):])
         dts = dates[-len(c):]
         lr = np.diff(np.log(c))
-        N, h = len(lr), HOLD[m]
+        N = len(lr)
         S = np.concatenate([[0.0], np.cumsum(lr)])
         S2 = np.concatenate([[0.0], np.cumsum(lr * lr)])
-        W = S[h:] - S[:-h]                                   # rendimento (log) di h giorni che parte da k
-        for t in range(3 * A, N - h, 21 if A == 252 else 30):
-            mu = S[t] / t
-            sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
-            shifted = W[:t - h + 1] - mu * h + prudente(mu, sd, t, A) * h   # solo finestre concluse al giorno t
-            rows.append({"g": GRUPPO[m], "d": dts[t], "fine": dts[t + h], "p": float(np.mean(shifted > 0)),
-                         "p10": float(np.percentile(shifted, 10)), "y": float(W[t] > 0), "r": float(math.expm1(W[t]))})
+        durate = [h for _, h in simula.CALENDARI["sempre" if m == "crypto" else "borsa"]["orizzonti"]] if orizzonti else [HOLD[m]]
+        for k, h in enumerate(durate):
+            W = S[h:] - S[:-h]                               # rendimento (log) di h giorni che parte da k
+            for t in range(3 * A, N - h, 21 if A == 252 else 30):
+                mu = S[t] / t
+                sd = math.sqrt(max(1e-12, (S2[t] - t * mu * mu) / (t - 1)))
+                shifted = W[:t - h + 1] - mu * h + prudente(mu, sd, t, A) * h   # solo finestre concluse al giorno t
+                rows.append({"g": GRUPPO[m], "h": k, "d": dts[t], "fine": dts[t + h], "p": float(np.mean(shifted > 0)),
+                             "p10": float(np.percentile(shifted, 10)), "y": float(W[t] > 0), "r": float(math.expm1(W[t]))})
     return rows
+
+
+def per_durata(rows):
+    """Per ogni durata: probabilità detta e vera, e se le stime più alte sono andate meglio delle più basse."""
+    out = []
+    for k, (nome, _) in enumerate(simula.HORIZONS):
+        R = [r for r in rows if r["h"] == k]
+        if not R:
+            continue
+        p, y = np.array([r["p"] for r in R]), np.array([r["y"] for r in R])
+        q1, q2 = np.quantile(p, [1 / 3, 2 / 3])
+        lo, hi = p < q1, p >= q2
+        out.append({"durata": nome, "n": len(R), "da": min(r["d"] for r in R), "a": max(r["d"] for r in R),
+                    "stimata": round(float(p.mean()), 4), "vera": round(float(y.mean()), 4),
+                    "basse": {"stimata": round(float(p[lo].mean()), 4), "vera": round(float(y[lo].mean()), 4)},
+                    "alte": {"stimata": round(float(p[hi].mean()), 4), "vera": round(float(y[hi].mean()), 4)},
+                    "gruppi": [{"gruppo": g, "stimata": round(float(p[m].mean()), 4), "vera": round(float(y[m].mean()), 4),
+                                "n": int(m.sum())}
+                               for g in sorted({r["g"] for r in R}) for m in [np.array([r["g"] == g for r in R])]]})
+    return out
 
 
 def pav(x, y):
@@ -156,7 +180,8 @@ def main():
     out = {"generato": datetime.date.today().isoformat(), "tutto": riassunto(rows),
            "prima_2017": riassunto([r for r in rows if r["d"] < "2017"]),
            "dal_2017": riassunto([r for r in rows if r["d"] >= "2017"]),
-           "alternative": alternative(rows)}
+           "alternative": alternative(rows),
+           "durate": per_durata(previsioni(log=lambda m: None, orizzonti=True))}
     with open(OUT, "w", encoding="utf-8") as fh:
         json.dump(out, fh, indent=1)
     t = out["tutto"]
@@ -167,6 +192,10 @@ def main():
             g["giudizio"], g["n"], 100 * g["in_guadagno"], 100 * g["rendimento_medio"], 100 * g["p10"]))
     for a in out["alternative"]:
         print("  alternativa %-22s precisione rispetto alla media: %+.2f%%" % (a["nome"], 100 * a["skill"]))
+    for d in out["durate"]:
+        print("  a %-12s detta %.1f%%, vera %.1f%% · stime più basse %.0f%% -> %.0f%%, più alte %.0f%% -> %.0f%%" % (
+            d["durata"], 100 * d["stimata"], 100 * d["vera"], 100 * d["basse"]["stimata"], 100 * d["basse"]["vera"],
+            100 * d["alte"]["stimata"], 100 * d["alte"]["vera"]))
     print("[verifica] scritto verifica.json")
     return 0
 

@@ -1,51 +1,51 @@
 {
- "generato": "2026-11-17",
+ "generato": "2026-11-18",
  "tutto": {
-  "n": 39125,
-  "da": "2004-11-02",
-  "a": "2026-10-14",
-  "stimata": 0.5609,
-  "vera": 0.5778,
+  "n": 39127,
+  "da": "2004-11-03",
+  "a": "2026-10-16",
+  "stimata": 0.5612,
+  "vera": 0.5806,
   "calibrazione": [
    {
     "da": 0,
     "a": 0.5,
-    "stimata": 0.4424,
-    "vera": 0.52,
-    "n": 1527
+    "stimata": 0.4419,
+    "vera": 0.5252,
+    "n": 1506
    },
    {
     "da": 0.5,
     "a": 0.55,
-    "stimata": 0.5334,
-    "vera": 0.5609,
-    "n": 12260
+    "stimata": 0.5335,
+    "vera": 0.5652,
+    "n": 12007
    },
    {
     "da": 0.55,
     "a": 0.6,
-    "stimata": 0.5695,
-    "vera": 0.5807,
-    "n": 21045
+    "stimata": 0.5696,
+    "vera": 0.5825,
+    "n": 21273
    },
    {
     "da": 0.6,
     "a": 0.65,
-    "stimata": 0.6185,
-    "vera": 0.6266,
-    "n": 2906
+    "stimata": 0.6184,
+    "vera": 0.6268,
+    "n": 2953
    },
    {
     "da": 0.65,
     "a": 0.7,
-    "stimata": 0.6695,
-    "vera": 0.6546,
-    "n": 1077
+    "stimata": 0.6694,
+    "vera": 0.6558,
+    "n": 1078
    },
    {
     "da": 0.7,
     "a": 1,
-    "stimata": 0.7244,
+    "stimata": 0.7243,
     "vera": 0.6161,
     "n": 310
    }
@@ -53,27 +53,27 @@
   "giudizio": [
    {
     "giudizio": "S\u00ec",
-    "n": 4091,
-    "in_guadagno": 0.6311,
-    "rendimento_medio": 0.0153,
-    "rendimento_tipico": 0.0104,
-    "p10": -0.0468
+    "n": 4152,
+    "in_guadagno": 0.6354,
+    "rendimento_medio": 0.0156,
+    "rendimento_tipico": 0.011,
+    "p10": -0.0461
    },
    {
     "giudizio": "Con cautela",
-    "n": 33051,
-    "in_guadagno": 0.5742,
+    "n": 33015,
+    "in_guadagno": 0.5766,
     "rendimento_medio": 0.0122,
-    "rendimento_tipico": 0.0124,
-    "p10": -0.0816
+    "rendimento_tipico": 0.0127,
+    "p10": -0.0823
    },
    {
     "giudizio": "Per ora no",
-    "n": 1983,
-    "in_guadagno": 0.5285,
-    "rendimento_medio": 0.1185,
-    "rendimento_tipico": 0.0123,
-    "p10": -0.2634
+    "n": 1960,
+    "in_guadagno": 0.5332,
+    "rendimento_medio": 0.1197,
+    "rendimento_tipico": 0.0138,
+    "p10": -0.267
    }
   ],
   "gruppi": [
@@ -91,9 +91,9 @@
    },
    {
     "gruppo": "azioni",
-    "n": 34052,
-    "stimata": 0.5573,
-    "vera": 0.573
+    "n": 34054,
+    "stimata": 0.5577,
+    "vera": 0.5762
    },
    {
     "gruppo": "crypto",
@@ -111,50 +111,50 @@
  },
  "prima_2017": {
   "n": 18716,
-  "da": "2004-11-02",
+  "da": "2004-11-03",
   "a": "2016-12-29",
-  "stimata": 0.5586,
-  "vera": 0.5766,
+  "stimata": 0.5592,
+  "vera": 0.5791,
   "calibrazione": [
    {
     "da": 0,
     "a": 0.5,
-    "stimata": 0.4741,
-    "vera": 0.5262,
-    "n": 553
+    "stimata": 0.4739,
+    "vera": 0.5414,
+    "n": 532
    },
    {
     "da": 0.5,
     "a": 0.55,
-    "stimata": 0.533,
-    "vera": 0.5615,
-    "n": 7090
+    "stimata": 0.5331,
+    "vera": 0.5634,
+    "n": 6897
    },
    {
     "da": 0.55,
     "a": 0.6,
     "stimata": 0.5695,
-    "vera": 0.5825,
-    "n": 9440
+    "vera": 0.5851,
+    "n": 9619
    },
    {
     "da": 0.6,
     "a": 0.65,
-    "stimata": 0.6176,
-    "vera": 0.6183,
-    "n": 1234
+    "stimata": 0.6174,
+    "vera": 0.6136,
+    "n": 1268
    },
    {
     "da": 0.65,
     "a": 0.7,
-    "stimata": 0.6726,
-    "vera": 0.6716,
-    "n": 268
+    "stimata": 0.6725,
+    "vera": 0.6766,
+    "n": 269
    },
    {
     "da": 0.7,
     "a": 1,
-    "stimata": 0.7319,
+    "stimata": 0.7318,
     "vera": 0.5878,
     "n": 131
    }
@@ -162,27 +162,27 @@
   "giudizio": [
    {
     "giudizio": "S\u00ec",
-    "n": 1471,
-    "in_guadagno": 0.6322,
-    "rendimento_medio": 0.0186,
-    "rendimento_tipico": 0.0129,
-    "p10": -0.0492
+    "n": 1522,
+    "in_guadagno": 0.6373,
+    "rendimento_medio": 0.0188,
+    "rendimento_tipico": 0.0131,
+    "p10": -0.0466
    },
    {
     "giudizio": "Con cautela",
-    "n": 16325,
-    "in_guadagno": 0.5732,
-    "rendimento_medio": 0.0107,
-    "rendimento_tipico": 0.012,
-    "p10": -0.0822
+    "n": 16297,
+    "in_guadagno": 0.575,
+    "rendimento_medio": 0.0105,
+    "rendimento_tipico": 0.0117,
+    "p10": -0.0821
    },
    {
     "giudizio": "Per ora no",
-    "n": 920,
-    "in_guadagno": 0.5478,
+    "n": 897,
+    "in_guadagno": 0.5552,
     "rendimento_medio": 0.0208,
-    "rendimento_tipico": 0.0143,
-    "p10": -0.1318
+    "rendimento_tipico": 0.0164,
+    "p10": -0.1294
    }
   ],
   "gruppi": [
@@ -201,8 +201,8 @@
    {
     "gruppo": "azioni",
     "n": 17529,
-    "stimata": 0.5548,
-    "vera": 0.5722
+    "stimata": 0.5555,
+    "vera": 0.5749
    },
    {
     "gruppo": "oro e materie prime",
@@ -213,11 +213,11 @@
   ]
  },
  "dal_2017": {
-  "n": 20409,
+  "n": 20411,
   "da": "2017-01-02",
-  "a": "2026-10-14",
-  "stimata": 0.5629,
-  "vera": 0.579,
+  "a": "2026-10-16",
+  "stimata": 0.5631,
+  "vera": 0.582,
   "calibrazione": [
    {
     "da": 0,
@@ -229,23 +229,23 @@
    {
     "da": 0.5,
     "a": 0.55,
-    "stimata": 0.5341,
-    "vera": 0.5602,
-    "n": 5170
+    "stimata": 0.534,
+    "vera": 0.5675,
+    "n": 5110
    },
    {
     "da": 0.55,
     "a": 0.6,
-    "stimata": 0.5695,
-    "vera": 0.5791,
-    "n": 11605
+    "stimata": 0.5696,
+    "vera": 0.5804,
+    "n": 11654
    },
    {
     "da": 0.6,
     "a": 0.65,
     "stimata": 0.6192,
-    "vera": 0.6328,
-    "n": 1672
+    "vera": 0.6368,
+    "n": 1685
    },
    {
     "da": 0.65,
@@ -265,26 +265,26 @@
   "giudizio": [
    {
     "giudizio": "S\u00ec",
-    "n": 2620,
-    "in_guadagno": 0.6305,
-    "rendimento_medio": 0.0134,
-    "rendimento_tipico": 0.0094,
-    "p10": -0.0451
+    "n": 2630,
+    "in_guadagno": 0.6342,
+    "rendimento_medio": 0.0137,
+    "rendimento_tipico": 0.0101,
+    "p10": -0.0442
    },
    {
     "giudizio": "Con cautela",
-    "n": 16726,
-    "in_guadagno": 0.5752,
-    "rendimento_medio": 0.0137,
-    "rendimento_tipico": 0.0126,
-    "p10": -0.0811
+    "n": 16718,
+    "in_guadagno": 0.5781,
+    "rendimento_medio": 0.0139,
+    "rendimento_tipico": 0.0138,
+    "p10": -0.0823
    },
    {
     "giudizio": "Per ora no",
     "n": 1063,
-    "in_guadagno": 0.5118,
-    "rendimento_medio": 0.2031,
-    "rendimento_tipico": 0.0072,
+    "in_guadagno": 0.5146,
+    "rendimento_medio": 0.2032,
+    "rendimento_tipico": 0.008,
     "p10": -0.3582
    }
   ],
@@ -303,9 +303,9 @@
    },
    {
     "gruppo": "azioni",
-    "n": 16523,
-    "stimata": 0.5599,
-    "vera": 0.5739
+    "n": 16525,
+    "stimata": 0.5602,
+    "vera": 0.5775
    },
    {
     "gruppo": "crypto",
@@ -324,18 +324,260 @@
  "alternative": [
   {
    "nome": "attuale",
-   "skill": 0.0003,
-   "n": 36318
+   "skill": -0.0002,
+   "n": 36320
   },
   {
    "nome": "miscela con il gruppo",
-   "skill": 0.0006,
-   "n": 36318
+   "skill": 0.0005,
+   "n": 36320
   },
   {
    "nome": "ricalibratura",
-   "skill": -0.0025,
-   "n": 36318
+   "skill": -0.0023,
+   "n": 36320
+  }
+ ],
+ "durate": [
+  {
+   "durata": "1 giorno",
+   "n": 39392,
+   "da": "2004-11-03",
+   "a": "2026-11-13",
+   "stimata": 0.5079,
+   "vera": 0.5283,
+   "basse": {
+    "stimata": 0.4881,
+    "vera": 0.5189
+   },
+   "alte": {
+    "stimata": 0.5272,
+    "vera": 0.5346
+   },
+   "gruppi": [
+    {
+     "gruppo": "ETF azionari",
+     "stimata": 0.5019,
+     "vera": 0.5176,
+     "n": 1590
+    },
+    {
+     "gruppo": "ETF obbligazionari",
+     "stimata": 0.5413,
+     "vera": 0.5062,
+     "n": 2355
+    },
+    {
+     "gruppo": "azioni",
+     "stimata": 0.5062,
+     "vera": 0.5313,
+     "n": 34198
+    },
+    {
+     "gruppo": "crypto",
+     "stimata": 0.486,
+     "vera": 0.4936,
+     "n": 865
+    },
+    {
+     "gruppo": "oro e materie prime",
+     "stimata": 0.5304,
+     "vera": 0.5182,
+     "n": 384
+    }
+   ]
+  },
+  {
+   "durata": "1 settimana",
+   "n": 39369,
+   "da": "2004-11-03",
+   "a": "2026-11-09",
+   "stimata": 0.5304,
+   "vera": 0.5449,
+   "basse": {
+    "stimata": 0.5085,
+    "vera": 0.5327
+   },
+   "alte": {
+    "stimata": 0.5523,
+    "vera": 0.5527
+   },
+   "gruppi": [
+    {
+     "gruppo": "ETF azionari",
+     "stimata": 0.5568,
+     "vera": 0.5844,
+     "n": 1588
+    },
+    {
+     "gruppo": "ETF obbligazionari",
+     "stimata": 0.5636,
+     "vera": 0.5173,
+     "n": 2345
+    },
+    {
+     "gruppo": "azioni",
+     "stimata": 0.5285,
+     "vera": 0.546,
+     "n": 34189
+    },
+    {
+     "gruppo": "crypto",
+     "stimata": 0.4658,
+     "vera": 0.5029,
+     "n": 865
+    },
+    {
+     "gruppo": "oro e materie prime",
+     "stimata": 0.5331,
+     "vera": 0.5524,
+     "n": 382
+    }
+   ]
+  },
+  {
+   "durata": "1 mese",
+   "n": 39209,
+   "da": "2004-11-03",
+   "a": "2026-10-16",
+   "stimata": 0.5583,
+   "vera": 0.5755,
+   "basse": {
+    "stimata": 0.5239,
+    "vera": 0.5582
+   },
+   "alte": {
+    "stimata": 0.5912,
+    "vera": 0.5868
+   },
+   "gruppi": [
+    {
+     "gruppo": "ETF azionari",
+     "stimata": 0.5877,
+     "vera": 0.6192,
+     "n": 1581
+    },
+    {
+     "gruppo": "ETF obbligazionari",
+     "stimata": 0.5925,
+     "vera": 0.5722,
+     "n": 2340
+    },
+    {
+     "gruppo": "azioni",
+     "stimata": 0.5577,
+     "vera": 0.5762,
+     "n": 34054
+    },
+    {
+     "gruppo": "crypto",
+     "stimata": 0.4437,
+     "vera": 0.4947,
+     "n": 853
+    },
+    {
+     "gruppo": "oro e materie prime",
+     "stimata": 0.5282,
+     "vera": 0.5354,
+     "n": 381
+    }
+   ]
+  },
+  {
+   "durata": "3 mesi",
+   "n": 38835,
+   "da": "2004-11-03",
+   "a": "2026-08-19",
+   "stimata": 0.5854,
+   "vera": 0.6182,
+   "basse": {
+    "stimata": 0.5326,
+    "vera": 0.5949
+   },
+   "alte": {
+    "stimata": 0.6353,
+    "vera": 0.6348
+   },
+   "gruppi": [
+    {
+     "gruppo": "ETF azionari",
+     "stimata": 0.6357,
+     "vera": 0.6921,
+     "n": 1559
+    },
+    {
+     "gruppo": "ETF obbligazionari",
+     "stimata": 0.618,
+     "vera": 0.5987,
+     "n": 2310
+    },
+    {
+     "gruppo": "azioni",
+     "stimata": 0.5855,
+     "vera": 0.6194,
+     "n": 33762
+    },
+    {
+     "gruppo": "crypto",
+     "stimata": 0.4145,
+     "vera": 0.497,
+     "n": 829
+    },
+    {
+     "gruppo": "oro e materie prime",
+     "stimata": 0.5442,
+     "vera": 0.592,
+     "n": 375
+    }
+   ]
+  },
+  {
+   "durata": "1 anno",
+   "n": 37157,
+   "da": "2004-11-03",
+   "a": "2025-11-14",
+   "stimata": 0.6556,
+   "vera": 0.6933,
+   "basse": {
+    "stimata": 0.5609,
+    "vera": 0.7027
+   },
+   "alte": {
+    "stimata": 0.7479,
+    "vera": 0.6931
+   },
+   "gruppi": [
+    {
+     "gruppo": "ETF azionari",
+     "stimata": 0.7107,
+     "vera": 0.7822,
+     "n": 1460
+    },
+    {
+     "gruppo": "ETF obbligazionari",
+     "stimata": 0.7193,
+     "vera": 0.6621,
+     "n": 2175
+    },
+    {
+     "gruppo": "azioni",
+     "stimata": 0.6551,
+     "vera": 0.6959,
+     "n": 32453
+    },
+    {
+     "gruppo": "crypto",
+     "stimata": 0.417,
+     "vera": 0.5049,
+     "n": 721
+    },
+    {
+     "gruppo": "oro e materie prime",
+     "stimata": 0.5693,
+     "vera": 0.6667,
+     "n": 348
+    }
+   ]
   }
  ]
 }

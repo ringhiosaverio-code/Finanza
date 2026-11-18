@@ -107,9 +107,11 @@ def simulazioni(mercati, log=print):
 
 
 def crypto_intraday(log=print):
-    """Piani crypto per le prossime 24 ore e verifica di 2 anni (intraday.py)."""
+    """Piani crypto per le prossime 24 ore, verifica di 2 anni e varianti provate (intraday.py)."""
     try:
-        return intraday.analizza(log)
+        r = intraday.analizza(log)
+        r["varianti"] = intraday.varianti(log)
+        return r
     except Exception as e:                                   # rete o dati: l'app si genera lo stesso
         log("[app] intraday saltato: %s" % e)
         return None

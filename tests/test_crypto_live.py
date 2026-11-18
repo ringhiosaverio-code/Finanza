@@ -84,6 +84,21 @@ class Fase(unittest.TestCase):
         self.assertEqual(rec, sorted(rec, reverse=True))
 
 
+class Varianti(unittest.TestCase):
+    def test_le_regole_dell_app_sono_le_prime_tre_varianti(self):
+        B = [list(b) for b in candele(n=80)]
+        B[42][3] = 96.5
+        for (nome, v), r in zip(I.VARIANTI[:3], ("ribasso", "rottura", "tempo")):
+            self.assertEqual(I.esito(B, 40, r), I.esito(B, 40, v["tipo"], v), nome)
+
+    def test_filtro_di_tendenza(self):
+        giu = [[T0 - (600 - k) * 3600, 200 - k / 10, 0, 0, 200 - k / 10] for k in range(700)]
+        su = [[b[0], 0, 0, 0, 100 + k / 10] for k, b in enumerate(giu)]
+        self.assertFalse(I.filtro(giu, 600, "tendenza"))
+        self.assertTrue(I.filtro(su, 600, "tendenza"))
+        self.assertEqual(I.esito(giu, 600, "tempo", dict(I.PARAMETRI["tempo"], filtro="tendenza")), "no")
+
+
 class Candele(unittest.TestCase):
     def test_tiene_solo_le_candele_chiuse(self):
         ora = T0 + 3 * 3600 + 1200                             # scaricate 20 minuti dopo l'inizio della candela

@@ -2,7 +2,8 @@
 """Crypto intraday: entrate e uscite per le prossime 24 ore, con la verifica delle stesse regole
 sugli ultimi 2 anni di candele orarie (Yahoo Finance).
 
-    python3 intraday.py        # stampa i piani di oggi e la verifica; app.py li mette nella sezione Crypto
+    python3 intraday.py              # stampa i piani di oggi e la verifica; app.py li mette nella sezione Crypto
+    python3 intraday.py --varianti   # prova 9 varianti delle regole, primo anno contro secondo
 
 Due regole, fissate prima di guardare i risultati, più il confronto "compra e vendi dopo 24 ore":
   Ribasso  ordine limite sotto il prezzo attuale (ultima chiusura oraria - 3 ATR orari);
@@ -68,32 +69,66 @@ def atr(B, i, n=24):
                for k in range(i - n + 1, i + 1)) / n
 
 
-def livelli(B, i, regola):
+PARAMETRI = {"ribasso": {"tipo": "ribasso", "e": 3, "s": 3, "ore": ORE},
+             "rottura": {"tipo": "rottura", "s": 1.5, "t": 2, "ore": ORE},
+             "tempo": {"tipo": "tempo", "ore": ORE}}
+# le regole dell'app e 9 varianti, fissate prima di guardare i risultati: python3 intraday.py --varianti
+VARIANTI = [
+    ("Compra il ribasso", PARAMETRI["ribasso"]),
+    ("Compra la rottura", PARAMETRI["rottura"]),
+    ("Compra ora, vendi tra 24 ore", PARAMETRI["tempo"]),
+    ("Ribasso, solo con la tendenza a favore", dict(PARAMETRI["ribasso"], filtro="tendenza")),
+    ("Rottura, solo con la tendenza a favore", dict(PARAMETRI["rottura"], filtro="tendenza")),
+    ("24 ore, solo con la tendenza a favore", dict(PARAMETRI["tempo"], filtro="tendenza")),
+    ("Ribasso più profondo (5 escursioni)", dict(PARAMETRI["ribasso"], e=5)),
+    ("Ribasso, piano valido 72 ore", dict(PARAMETRI["ribasso"], ore=72)),
+    ("Rottura, piano valido 72 ore", dict(PARAMETRI["rottura"], ore=72)),
+    ("Compra ora, vendi tra 7 giorni", dict(PARAMETRI["tempo"], ore=168)),
+    ("7 giorni, solo con la tendenza a favore", dict(PARAMETRI["tempo"], ore=168, filtro="tendenza")),
+    ("7 giorni, solo se è salita nell'ultima settimana", dict(PARAMETRI["tempo"], ore=168, filtro="settimana")),
+]
+
+
+def livelli(B, i, regola, v=None):
     """Entrata, protezione e obiettivo del piano fatto alla chiusura della candela i."""
+    v = v or PARAMETRI[regola]
     c, a = B[i][4], atr(B, i)
-    if regola == "ribasso":
-        e = c - 3 * a
-        return {"entrata": e, "tipo": "limite", "protezione": e - 3 * a, "obiettivo": c}
-    if regola == "rottura":
+    if v["tipo"] == "ribasso":
+        e = c - v["e"] * a
+        return {"entrata": e, "tipo": "limite", "protezione": e - v["s"] * a, "obiettivo": c}
+    if v["tipo"] == "rottura":
         e = max(b[2] for b in B[i - 23:i + 1])
-        return {"entrata": e, "tipo": "sopra", "protezione": e - 1.5 * a, "obiettivo": e + 3 * a}
+        return {"entrata": e, "tipo": "sopra", "protezione": e - v["s"] * a, "obiettivo": e + v["t"] * v["s"] * a}
     return {"entrata": c, "tipo": "subito", "protezione": None, "obiettivo": None}
 
 
-def esito(B, i, regola):
-    """Rendimento netto del piano fatto alla candela i, 'no' se l'ordine non scatta, None senza dati."""
-    win = B[i + 1:i + 1 + ORE]
-    if len(win) < ORE:
+def filtro(B, i, f):
+    """tendenza: prezzo sopra la media delle ultime 20 giornate (480 ore); settimana: sopra di 7 giorni fa."""
+    if not f:
+        return True
+    if f == "tendenza":
+        return B[i][4] > sum(b[4] for b in B[i - 479:i + 1]) / 480
+    return B[i][4] > B[i - 168][4]
+
+
+def esito(B, i, regola, v=None):
+    """Rendimento netto del piano fatto alla candela i, 'no' se l'ordine non scatta (o il filtro dice
+    di non entrare), None senza dati."""
+    v = v or PARAMETRI[regola]
+    win = B[i + 1:i + 1 + v["ore"]]
+    if len(win) < v["ore"]:
         return None
-    lv = livelli(B, i, regola)
-    if regola == "tempo":
+    if not filtro(B, i, v.get("filtro")):
+        return "no"
+    if v["tipo"] == "tempo":
         return win[-1][4] / B[i][4] - 1 - 2 * COSTO
+    lv = livelli(B, i, regola, v)
     e, stop, tgt = lv["entrata"], lv["protezione"], lv["obiettivo"]
     trig = None
     for k, b in enumerate(win):
-        if (regola == "ribasso" and b[3] <= e) or (regola == "rottura" and b[2] >= e):
+        if (v["tipo"] == "ribasso" and b[3] <= e) or (v["tipo"] == "rottura" and b[2] >= e):
             trig = k
-            fill = min(e, b[1]) if regola == "ribasso" else max(e, b[1])
+            fill = min(e, b[1]) if v["tipo"] == "ribasso" else max(e, b[1])
             break
     if trig is None:
         return "no"
@@ -205,7 +240,39 @@ def analizza(log=print, max_age=3600):
     return {"regole": REGOLE, "costo_per_lato": COSTO, "ore": ORE, "crypto": per, "verifica": verifica}
 
 
+def varianti(log=print):
+    """Tutte le VARIANTI sugli stessi piani della verifica (17 e 21 UTC, 2 anni, 12 crypto), primo anno
+    e secondo anno separati: si sceglie sul primo, si controlla sul secondo."""
+    res = [{"anno1": [], "anno2": []} for _ in VARIANTI]
+    for sym in simula.CRYPTO:
+        try:
+            B = candele(sym)
+        except Exception as e:                               # rete, dati mancanti
+            log("[intraday] %s saltato: %s" % (sym, e))
+            continue
+        for i in range(500, len(B) - 1):
+            if ora_piano(B, i).hour not in (17, 21):
+                continue
+            meta = "anno1" if B[i][0] < B[0][0] + 365 * 86400 else "anno2"
+            for (nome, v), r in zip(VARIANTI, res):
+                x = esito(B, i, v["tipo"], v)
+                if x is not None:
+                    r[meta].append(x)
+    out = [{"nome": nome, "ore": v["ore"], "anno1": stat(r["anno1"]), "anno2": stat(r["anno2"])}
+           for (nome, v), r in zip(VARIANTI, res)]
+    migliore = max(out, key=lambda x: x["anno1"].get("media", -1))
+    return {"generato": datetime.date.today().isoformat(), "costo_per_lato": COSTO, "varianti": out,
+            "scelta_sul_primo_anno": migliore["nome"]}
+
+
 def main():
+    if "--varianti" in sys.argv:
+        v = varianti()
+        for x in v["varianti"]:
+            print("  %-50s anno 1: media %+.2f%%, in guadagno %2.0f%% · anno 2: media %+.2f%%, in guadagno %2.0f%%" % (
+                x["nome"], 100 * x["anno1"]["media"], 100 * x["anno1"]["p_gain"], 100 * x["anno2"]["media"], 100 * x["anno2"]["p_gain"]))
+        print("[intraday] la migliore sul primo anno: %s (app.py le mette nella sezione Crypto)" % v["scelta_sul_primo_anno"])
+        return 0
     r = analizza()
     f = lambda s: ("%3.0f%% eseguite, %3.0f%% in guadagno, media %+.2f%%, 1 su 10 sotto %+.1f%%" % (
         100 * s["eseguite"], 100 * s["p_gain"], 100 * s["media"], 100 * s["p10"])) if s.get("n") else "nessuna"

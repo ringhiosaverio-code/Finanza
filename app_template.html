@@ -874,6 +874,12 @@ function showSim() {
   simSt.cur = r;
   renderSimResult(r);
 }
+function durataNota(s) {
+  const Dd = D.verifica25 && D.verifica25.durate, anno = Dd && Dd.find(d => d.durata === '1 anno'); if (!anno) return '';
+  const g = anno.gruppi.find(x => x.gruppo === GRUPPO[s.categoria]);
+  return `<p class="note">Verificato su ${new Date(anno.a).getFullYear() - new Date(anno.da).getFullYear()} anni: a ogni durata queste probabilità sono state in media un po' prudenti${g ? `; a 1 anno, per ${esc(g.gruppo)}, l'app diceva in media ${p100(g.stimata)} ed è successo il ${p100(g.vera)}` : ''}. Tra strumenti dello stesso tipo, differenze di pochi punti non contano. <a href="#verifica" style="color:var(--accent)">Funziona?</a></p>`;
+}
+
 function renderSimResult(s) {
   const out = $('#sim-out'), g = s.crescita, sc = simSt.scen, c = s.currency;
   const anni = nf(s.anni, s.anni % 1 ? 1 : 0);
@@ -897,6 +903,7 @@ function renderSimResult(s) {
         <small>di solito ${pc(m.median)} · 9 volte su 10 tra ${pc(m.p5, 0)} e ${pc(m.p95, 0)}</small>
         <span class="chip ${a.livello}">affidabilità ${a.livello}</span>
         <small class="note">${esc(capf(a.motivo))}.</small></div>`; }).join('')}</div>
+    ${durataNota(s)}
     ${Math.abs(one.p_gain - .5) < .03 ? '<p class="outcome">A 1 giorno è <b>quasi testa o croce</b>: il prezzo di domani dipende soprattutto dal caso. Le probabilità crescono con il tempo solo se il titolo cresce davvero in media.</p>' : ''}
     <div><h3>Il prossimo anno, 10.000 volte</h3><p class="note">Ogni futuro è fatto di 12 mesi veri di ${esc(tk(s.symbol))} presi a caso dalla sua storia, con la crescita dello scenario scelto.</p>
       <div class="chart" id="sim-fan"><div class="tip"></div></div>
@@ -1252,6 +1259,18 @@ function renderCrypto() {
     r.addEventListener('click', go); r.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); });
 }
 
+/* ---------------- crypto intraday: le varianti provate ---------------- */
+function variantiHTML(Va) {
+  if (!Va || !Va.varianti) return '';
+  const L = Va.varianti, sc = L.find(v => v.nome === Va.scelta_sul_primo_anno), pos = L.filter(v => v.anno1.media > 0 && v.anno2.media > 0);
+  const t = s => s && s.n ? `<span class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</span> · ${p100(s.p_gain)}` : 'n/d';
+  return `<details style="margin-top:12px"><summary><b>Si può migliorare?</b> ${L.length - 3} varianti provate</summary>
+    <p class="note">Fissate prima di guardare i risultati: filtro di tendenza (solo se il prezzo è sopra la media delle ultime 20 giornate), entrata più profonda, piani validi 72 ore o 7 giorni. Si sceglie la migliore sul primo anno e si controlla sul secondo, che non ha visto. Media per operazione con i costi · volte in guadagno.</p>
+    <div class="scroll"><table><thead><tr><th class="l">Regola</th><th>Primo anno</th><th>Secondo anno</th></tr></thead>
+      <tbody>${L.map((v, i) => `<tr${v === sc ? ' style="background:var(--surface2)"' : ''}><td class="l">${esc(v.nome)}${i < 3 ? ' <span class="note">(nell\'app)</span>' : ''}${v === sc ? ' <span class="note">(la migliore sul primo anno)</span>' : ''}</td><td>${t(v.anno1)}</td><td>${t(v.anno2)}</td></tr>`).join('')}</tbody></table></div>
+    <p class="outcome" style="margin-top:8px">${pos.length ? `In guadagno in entrambi gli anni: ${pos.map(v => esc(v.nome)).join(', ')}. Da tenere d'occhio, ma due anni sono pochi.` : `Nessuna è in guadagno, in nessuno dei due anni. La migliore sul primo anno${sc ? ` (${esc(sc.nome.toLowerCase())}, ${pc(sc.anno1.media, 2)})` : ''} sul secondo ha perso ancora${sc ? ` (${pc(sc.anno2.media, 2)})` : ''}. I costi (0,4 % tra entrata e uscita) pesano più del movimento che le regole riescono a prendere: per questo le regole dell'app restano quelle, con il giudizio "Per ora no".`}</p></details>`;
+}
+
 /* ---------------- crypto intraday: le prossime 24 ore ---------------- */
 function intradayHTML() {
   const I = D.intraday; if (!I || !I.crypto) return '';
@@ -1278,9 +1297,24 @@ function intradayHTML() {
           <td class="l">${stato(a)}compra a <b>${f(a.entrata)}</b><br><span class="neg">protezione ${f(a.protezione)}</span> · <span class="pos">obiettivo ${f(a.obiettivo)}</span></td>
           <td class="l">${stato(b)}compra sopra <b>${f(b.entrata)}</b><br><span class="neg">protezione ${f(b.protezione)}</span> · <span class="pos">obiettivo ${f(b.obiettivo)}</span></td>
           <td class="l">${hhmm(x.fino)}</td><td class="l">${st.n ? `${p100(st.p_gain)} in guadagno, media ${pc(st.media, 2)} (${st.n})` : 'n/d'}</td></tr>`; }).join('')}</tbody></table></div>
+    ${variantiHTML(I.varianti)}
     ${aperti.length ? `<p class="note" style="margin-top:8px"><b>Ancora aperti dal piano precedente</b> (l'entrata è scattata, protezione e obiettivo non ancora): ${aperti.map(({p, s}) => `${esc(s.name)}, ${p.regola === 'ribasso' ? 'compra il ribasso' : 'compra la rottura'}: entrato a ${f(p.prezzo_entrata)} €, protezione ${f(p.protezione)} €, obiettivo ${f(p.obiettivo)} €, chiudi entro ${hhmm(p.fino)}`).join(' · ')}.</p>` : ''}
     <p class="note" style="margin-top:8px">Se l'ordine non scatta entro la scadenza, niente operazione; se scatta, chiudi al più tardi alla scadenza. I livelli valgono per i prezzi dell'ultimo aggiornamento (due volte al giorno): controlla il prezzo prima di entrare. Non è consulenza finanziaria.</p>
     <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>Prezzi ogni secondo, con avvisi.</b> Questa pagina si aggiorna due volte al giorno: dentro Claude un'app non può collegarsi alle borse. Sul tuo computer, nella cartella del progetto, avvia <code>python3 crypto_live.py</code>: si apre una pagina con i prezzi di Kraken aggiornati ogni secondo, a che punto è ogni piano (in attesa, dentro, chiuso) e un avviso, anche con suono, quando scatta un'entrata, una protezione, un obiettivo o la scadenza. Serve solo Python 3; i prezzi sono pubblici e gratuiti.</p></div></div>`;
+}
+
+/* ---------------- la probabilità a ogni durata: detta e vera ---------------- */
+const GRUPPO = {usa: 'azioni', italia: 'azioni', etf: 'ETF azionari', bond: 'ETF obbligazionari', oro: 'oro e materie prime', crypto: 'crypto'};
+function durateHTML(V) {
+  const Dd = V && V.durate; if (!Dd || !Dd.length) return '';
+  const anno = Dd.find(d => d.durata === '1 anno');
+  return `<h3 style="margin-top:14px">A ogni durata</h3>
+    <p class="note">La stessa prova per tutte le durate della ricerca per titolo, da 1 giorno a 1 anno. "Stime più basse" e "più alte" sono il terzo delle previsioni con la probabilità più bassa e quello con la più alta: se la stima distingue davvero, i secondi vanno meglio dei primi.</p>
+    <div class="scroll"><table><thead><tr><th class="l">Durata</th><th>Detta</th><th>Successa davvero</th><th>Stime più basse: detta → vera</th><th>Stime più alte: detta → vera</th></tr></thead>
+      <tbody>${Dd.map(d => `<tr><td class="l">${esc(d.durata)}</td><td>${p100(d.stimata)}</td><td><b>${p100(d.vera)}</b></td><td>${p100(d.basse.stimata)} → <b>${p100(d.basse.vera)}</b></td><td>${p100(d.alte.stimata)} → <b>${p100(d.alte.vera)}</b></td></tr>`).join('')}</tbody></table></div>
+    <p class="outcome" style="margin-top:8px">A ogni durata la probabilità detta è stata in media un po' più bassa di quella vera: è prudente. Ma tra strumenti dello stesso tipo le differenze contano poco${anno ? `, e a 1 anno per niente: le stime più alte (${p100(anno.alte.stimata)}) sono andate come le più basse (${p100(anno.alte.vera)} contro ${p100(anno.basse.vera)})` : ''}. Quello che conta è il tipo di strumento, il tempo e il rischio, non due o tre punti di differenza.</p>
+    ${anno ? `<p class="note" style="margin-top:6px">A 1 anno, per gruppo: ${anno.gruppi.map(g => `${esc(g.gruppo)} detta ${p100(g.stimata)}, vera ${p100(g.vera)}`).join(' · ')}. L'unico gruppo in cui la stima è stata ottimista sono gli ETF obbligazionari (il 2022 è stato il peggior anno per le obbligazioni da decenni).</p>` : ''}
+    <p class="note" style="margin-top:6px">10 anni non si possono verificare: 25 anni di prezzi contengono solo due periodi di 10 anni separati, e i titoli di oggi sono quelli sopravvissuti. Per questo l'app si ferma a 1 anno.</p>`;
 }
 
 /* ---------------- 25 anni di verifica della probabilità e del giudizio ---------------- */
@@ -1301,6 +1335,7 @@ function verifica25HTML() {
       <div><h3>Per gruppo</h3><div class="scroll"><table><thead><tr><th class="l">Gruppo</th><th>Detta</th><th>Vera</th></tr></thead>
         <tbody>${T.gruppi.map(g => `<tr><td class="l">${esc(g.gruppo)}</td><td>${p100(g.stimata)}</td><td><b>${p100(g.vera)}</b></td></tr>`).join('')}</tbody></table></div></div>
     </div>
+    ${durateHTML(V)}
     ${alt.length ? `<h3 style="margin-top:14px">Miglioramenti provati</h3><p class="note">Valutati anno per anno su anni che non avevano visto. Il numero è quanto prevedono meglio di chi dice sempre la media (0 = uguale).</p>
       <ul class="note" style="margin:6px 0 0;padding-left:18px">${alt.map(a => `<li><b>${esc(a.nome)}</b>: ${(a.skill >= 0 ? '+' : '') + nf(a.skill * 100, 2)} %${a.nome === 'attuale' ? ' (quella in uso)' : att && a.skill <= att.skill + 0.001 ? ', non migliora: scartato' : ', differenza troppo piccola per cambiare'}</li>`).join('')}</ul>
       <p class="note" style="margin-top:6px">Nessuna variante prevede in modo apprezzabilmente migliore: le differenze tra strumenti dello stesso gruppo sono soprattutto rumore. Quello che conta, e che il giudizio usa, è la categoria, il tempo e il rischio.</p>` : ''}
@@ -1337,7 +1372,7 @@ function renderMetodo() {
     <h3>Il mio portafoglio, Esercitati, Crypto</h3>
     <p><b>Il mio portafoglio</b> applica a ogni titolo che possiedi la regola della sua categoria: <b>TIENI</b> fino alla data di vendita (il periodo consigliato, contato in giorni di borsa dal giorno di acquisto, o di calendario per le crypto); <b>VENDI</b> quando la data è passata o se il prezzo è bloccato; <b>RINNOVA</b> se la data è passata ma oggi il giudizio è ancora "Sì". Non si vende prima per paura del saliscendi: dal 2017 le uscite anticipate (le protezioni) hanno ridotto le operazioni in guadagno in tutte le categorie. <b>Esercitati</b> è un conto finto da 10.000 €, ai prezzi di chiusura dell'ultimo aggiornamento, con i costi (0,1 % per operazione, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro. I dati di entrambi stanno nel tuo archivio privato dell'app: li vedi solo tu. <b>Crypto</b>: le 12 principali in euro, con le stesse regole; si scambiano tutti i giorni, quindi 3 mesi sono 91 giorni di calendario.</p>
     <h3>Crypto intraday</h3>
-    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
+    <p>Per ogni crypto due piani validi 24 ore: <b>comprare un ribasso</b> (ordine limite 3 escursioni orarie sotto il prezzo, protezione 3 escursioni sotto, obiettivo il prezzo di partenza) e <b>comprare una rottura</b> (ordine sopra il massimo delle ultime 24 ore, protezione 1,5 escursioni sotto, obiettivo il doppio del rischio). Le regole sono state fissate prima di guardare i dati e verificate sulle candele orarie degli ultimi 2 anni, separando il primo anno dal secondo: con i costi nessuna ha guadagnato in media, e l'app lo scrive. Lo stesso per 9 varianti provate allo stesso modo (filtro di tendenza, entrata più profonda, piani di 72 ore o 7 giorni): scelta la migliore sul primo anno, sul secondo ha perso ancora. Per seguirli secondo per secondo c'è <b>crypto_live.py</b>, da avviare sul tuo computer: prezzi di Kraken ogni secondo, lo stato di ogni piano rigiocato come nella verifica (prima l'entrata, poi protezione, obiettivo o scadenza) e un avviso a ogni passaggio.</p>
     <h3>La verifica di 25 anni</h3>
     <p>Ogni mese dal 2004, per tutti gli strumenti, la probabilità di guadagno è stata rifatta con i soli prezzi di quel giorno e confrontata con com'è andata (<code>python3 verifica.py</code>). In media è prudente di un paio di punti; i "Sì" sono andati in guadagno più spesso dei "Con cautela" e dei "Per ora no", con perdite più piccole. Tre modi per migliorarla (miscela con la frequenza del gruppo, ricalibratura per tutti e per gruppo) sono stati provati su anni mai visti e nessuno prevede meglio: la stima resta quella prudente, con un avviso sopra il 70 %, dove in passato è stata troppo ottimista.</p>
     <h3>Perché sì e perché no</h3>
