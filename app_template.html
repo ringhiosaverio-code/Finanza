@@ -2241,7 +2241,7 @@ function robotModulo(primo) {
   return `<div class="acct" style="margin-top:10px">
       ${primo ? `<label class="f" for="rb-da">Da quando<select id="rb-da"><option value="${giorni(0)}">da oggi</option><option value="${giorni(7)}">rigioca l'ultima settimana</option><option value="${giorni(14)}">rigioca le ultime 2 settimane (crypto: 7 giorni)</option></select></label>` : ''}
       <label class="f" for="rb-costo">Commissioni del tuo broker, azioni<select id="rb-costo"><option value="0.0002">0,02 %: aste e commissioni basse</option><option value="0.001"${ROBOT && ROBOT.costo >= 0.001 ? ' selected' : ''}>0,10 %: commissione fissa su cifre piccole</option></select></label></div>
-    <div style="margin-top:10px;display:grid;gap:6px">${Object.entries(STRATEGIE).filter(([, S]) => !S.ritirata).map(([k, S]) => `<label><input type="checkbox" id="rb-${k}" ${(ROBOT ? ROBOT.conti[k].n || k !== 'giornata' : k !== 'giornata') ? 'checked' : ''}> ${S.nome} <span class="chip ${S.chip}">${S.stato}</span></label>`).join('')}</div>`;
+    <div style="margin-top:10px;display:grid;gap:6px">${Object.entries(STRATEGIE).filter(([, S]) => !S.ritirata).map(([k, S]) => `<label><input type="checkbox" id="rb-${k}" checked> ${S.nome} <span class="chip ${S.chip}">${S.stato}</span></label>`).join('')}</div>`;
 }
 function robotAttese() {
   const ver = D.intraday && D.intraday.verifica, oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops');
