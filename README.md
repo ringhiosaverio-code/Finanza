@@ -292,8 +292,8 @@ interventi, con un conto finto da 10.000 € per ogni strategia e niente soldi v
   la rottura" ha 1/24 del capitale; entra al livello ed esce alla protezione, all'obiettivo o alla
   scadenza.
 
-Il **registro** mostra ogni operazione aperta e chiusa (quando, cosa, a che prezzo, il risultato e da
-dove viene: prezzi ufficiali, candele orarie o dal vivo); le **posizioni aperte** hanno il risultato in
+Il **registro**, in cima alla pagina, mostra in diretta ogni operazione aperta e chiusa, con l'ora (con i secondi quando è di oggi); una riga in alto compare in tutte le pagine, e con gli avvisi concessi arriva una notifica anche da un'altra scheda. Ogni voce riporta (quando, cosa, a che prezzo, il risultato e da
+dove viene: prezzi ufficiali, candele orarie o dal vivo. Le **posizioni aperte** hanno il risultato in
 tempo reale. **Inizia sessione** (da oggi, o rigiocando l'ultima settimana o le ultime due) e
 **Termina sessione**: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in
 attesa si annullano, le azioni comprate per la notte si vendono all'apertura (di notte la borsa è

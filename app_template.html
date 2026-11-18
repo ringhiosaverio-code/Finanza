@@ -254,6 +254,11 @@ footer{color:var(--muted);font-size:12.5px}
 .reg li{padding:6px 0;border-bottom:1px solid var(--line)}
 .tag{display:inline-block;font-size:11px;font-weight:700;border-radius:6px;padding:1px 7px;text-transform:uppercase;letter-spacing:.03em;background:var(--surface2);color:var(--ink2)}
 .tag.in{background:var(--accent-soft);color:var(--ink)}.tag.ok{color:var(--good)}.tag.ko{color:var(--crit)}
+.reg .ora{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums;margin-right:2px}
+.reg li.nuova{background:var(--accent-soft);border-radius:8px;padding-left:8px;padding-right:8px;border-bottom-color:transparent}
+.ticker{display:block;margin:10px 0 0;padding:8px 12px;border-radius:10px;background:var(--surface2);color:var(--ink2);font-size:13.5px;text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ticker[hidden]{display:none}
+.ticker b{color:var(--ink)}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);max-width:min(560px,calc(100vw - 32px));background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-size:14px;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.25)}
 tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(260px,100%),1fr));gap:12px}
@@ -298,6 +303,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 </header>
 
 <main class="wrap">
+  <a id="ticker" class="ticker" href="#giornata" hidden></a>
   <div id="live-info" class="card" hidden></div>
   <section class="view" id="v-oggi"></section>
   <section class="view" id="v-portafoglio" hidden></section>
@@ -1846,7 +1852,7 @@ const STRATEGIE = {
 };
 const ORARI = {usa: {apre: '15:30', chiude: '22:00'}, italia: {apre: '09:00', chiude: '17:30'}};     // ora italiana
 const PASSI = {attesa: 0, dentro: 1, obiettivo: 2, protezione: 2, scaduto: 2, scaduto_dentro: 2, saltato: 2, annullato: 2, manuale: 2};
-let ROBOT = null, robotSalvo = false, robotUltimo = 0, robotVisti = null, robotTutto = false;
+let ROBOT = null, robotSalvo = false, robotUltimo = 0, robotUltimaChiave = undefined, robotSalvataAlle = 0, robotTutto = false;
 const ROBOT_CHIESTI = {}, ROBOT_FESTA = {};                                      // ultima richiesta a /aperture; borsa chiusa oggi
 const r4 = x => Math.round(x * 1e4) / 1e4, r6 = x => Math.round(x * 1e6) / 1e6;
 const mercatoDi = s => /\.MI$/.test(s) ? 'italia' : 'usa';
@@ -1881,6 +1887,43 @@ function robotMigra(v) {                                                        
   return R;
 }
 function evento(R, e) { R.registro = (R.registro || []).concat([e]).slice(-1000); }
+const chiaveOp = e => [e.t, e.s, e.sym, e.azione, e.prezzo, e.nota].join('|');     // riconosce un'operazione già vista
+const dataRoma = d => d.toLocaleDateString('sv-SE', {timeZone: 'Europe/Rome'});
+const oraDi = t => { const d = new Date(t); return dataRoma(d) === dataRoma(new Date()) ? d.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit', second: '2-digit', timeZone: 'Europe/Rome'}) : d.toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'}); };
+const fresca = t => Date.now() - Date.parse(t) < 90e3;
+function etichettaOp(e) {
+  if (e.azione === 'sessione') return e.nota;
+  const n = e.sym.split(',').length, sym = n > 1 ? `${n} titoli` : tk(e.sym);
+  return `${e.azione === 'compra' ? 'compra' : 'vende'} ${sym}${e.prezzo ? ' a ' + nf(e.prezzo, dec(e.prezzo)) : ''}${e.r != null ? ' · ' + pc(e.r, 2) : ''}`;
+}
+// le operazioni arrivate dall'ultimo giro; il primo giro di una sessione non avvisa per quelle già scritte
+function robotNuovi(R) {
+  const reg = R.registro || [], ultima = reg.length ? chiaveOp(reg[reg.length - 1]) : null, vecchia = robotUltimaChiave;
+  robotUltimaChiave = ultima;
+  if (vecchia === undefined) return [];
+  if (vecchia === null) return reg.slice();
+  const k = reg.findLastIndex(e => chiaveOp(e) === vecchia);
+  return k < 0 ? [] : reg.slice(k + 1);
+}
+function notificaRobot(titolo, corpo) {                                            // solo con gli avvisi concessi e la pagina in un'altra scheda
+  try { if (typeof Notification !== 'undefined' && Notification.permission === 'granted' && document.hidden) new Notification(titolo, {body: corpo, tag: 'robot'}); } catch (e) {}
+}
+function avvisoOperazioni(nuovi) {
+  const righe = nuovi.slice(-3).map(etichettaOp), altre = nuovi.length > 3 ? ` · altre ${nuovi.length - 3}` : '';
+  const titolo = nuovi.length === 1 ? 'Robot: operazione nuova' : `Robot: ${nuovi.length} operazioni nuove`;
+  avviso(`${titolo}: ${righe.join(' · ')}${altre}`);
+  notificaRobot(titolo, righe.join('\n') + altre);
+}
+function aggiornaTicker() {                                                        // la riga in alto, in tutte le pagine
+  const el = $('#ticker'); if (!el) return;
+  const R = ROBOT, reg = (R && R.registro) || [];
+  if (!R || !R.sessione || !R.sessione.aperta || !reg.length) { el.hidden = true; return; }
+  const ultima = reg[reg.length - 1], oggi = dataRoma(new Date()), n = reg.filter(e => dataRoma(new Date(e.t)) === oggi).length;
+  const h = `<span class="lvd${LIVE.fonte ? '' : ' off'}"></span><b>Robot</b> · ${esc(etichettaOp(ultima))} · ${oraDi(ultima.t)} · ${n} oggi`;
+  el.hidden = false;
+  if (el.dataset.h !== h) { el.innerHTML = h; el.dataset.h = h; }
+}
+
 const dalDi = (R, k) => (R.conti[k].dal || '') > R.dal ? R.conti[k].dal : R.dal;
 
 /* i dati: aperture, chiusure, massimi e minimi ufficiali (aggiornamento dell'app) e, servite da live.py, le sedute di oggi */
@@ -2090,18 +2133,17 @@ function robotPasso(R, adesso) {
   const v = {d: oggi}; for (const k of Object.keys(STRATEGIE)) v[k] = r4(valoreConto(R, k));
   const ultimo = st[st.length - 1];
   if (!ultimo || ultimo.d !== oggi) { st.push(v); R.storico = st.slice(-400); cambiato = true; }
-  else if (Object.keys(STRATEGIE).some(k => Math.abs((ultimo[k] || 0) - v[k]) > 0.5)) { st[st.length - 1] = v; cambiato = true; }
+  else if (Object.keys(STRATEGIE).some(k => Math.abs((ultimo[k] || 0) - v[k]) > 0.5)) st[st.length - 1] = v;     // lo storico si salva ogni 10 minuti
   return cambiato;
 }
 function robotGiro() {
   if (!ROBOT) return;
-  const R = ROBOT, prima = (R.registro || []).length, cambiato = robotPasso(R, new Date());
+  const R = ROBOT, cambiato = robotPasso(R, new Date());
   robotUltimo = Date.now();
-  const nuovi = (R.registro || []).slice(prima).filter(e => e.fonte === 'dal vivo');
-  if (nuovi.length && robotVisti !== null) { const e = nuovi[nuovi.length - 1]; avviso(`Robot: ${e.azione === 'compra' ? 'comprato' : 'venduto'} ${tk(e.sym)}${e.prezzo ? ' a ' + nf(e.prezzo, dec(e.prezzo)) : ''}${e.r != null ? ' · ' + pc(e.r, 2) : ''}`); }
-  robotVisti = (R.registro || []).length;
-  if (cambiato) robotSalva();
-  aggiornaRobot();
+  const nuovi = robotNuovi(R);
+  if (nuovi.length) avvisoOperazioni(nuovi);
+  if (cambiato || Date.now() - robotSalvataAlle > 10 * 60e3) robotSalva();          // ogni operazione si salva subito, lo storico ogni 10 minuti
+  aggiornaRobot(); aggiornaTicker();
 }
 function daChiedere(R, adesso) {                                                  // cosa serve a live.py, e solo quando serve
   const T = adessoRoma(adesso); if (!T.feriale) return [];
@@ -2159,7 +2201,7 @@ function robotTermina(R, adesso) {
   for (const k of Object.keys(STRATEGIE)) fermaConto(R, k, adesso, 'fine sessione');
   R.sessione = Object.assign({}, R.sessione, {aperta: false, chiusa: adesso.toISOString()});
 }
-function robotSalva() { ROBOT.rev = (ROBOT.rev || 0) + 1; robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false; }
+function robotSalva() { ROBOT.rev = (ROBOT.rev || 0) + 1; robotSalvataAlle = Date.now(); robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false; }
 Store.on('robot', v => {
   if (robotSalvo) return;                                                         // il nostro salvataggio
   const nuovo = v && !v.vuoto && (v.conti || v.notte) ? v : null;
@@ -2188,24 +2230,29 @@ function robotHTML() {
     ${robotModulo(true)}
     <p style="margin-top:12px"><button type="button" class="go" id="rb-inizia">Inizia la sessione</button></p>${robotAttese()}</div>`;
   const R = ROBOT, aperta = R.sessione && R.sessione.aperta;
-  const live = LIVE.fonte ? `<span class="lvd"></span>prezzi in tempo reale` : `<span class="lvd off"></span>prezzi dell'ultimo aggiornamento (${D.aggiornato ? D.aggiornato.slice(11, 16) : ''})`;
+  const live = LIVE.fonte === 'locale' ? `<span class="lvd"></span>in diretta: prezzi ogni 5 secondi` : LIVE.fonte === 'browser' ? `<span class="lvd"></span>in diretta: prezzi ogni 30 secondi` : `<span class="lvd off"></span>senza prezzi in diretta: si aggiorna alle 18:10 e alle 22:10`;
   const usati = Object.keys(STRATEGIE).filter(k => aperta || R.conti[k].attiva || R.conti[k].n || Math.abs(valoreConto(R, k) - ROBOT_CAPITALE) > 0.005);
-  const tile = k => { const S = STRATEGIE[k], c = R.conti[k], v = valoreConto(R, k), cosa = k.endsWith('notte') ? 'notti' : 'operazioni';
+  const tile = k => { const S = STRATEGIE[k], c = R.conti[k], v = valoreConto(R, k), cosa = k.endsWith('notte') ? (c.n === 1 ? 'notte' : 'notti') : (c.n === 1 ? 'operazione' : 'operazioni');
     const btn = !aperta ? '' : c.attiva ? `<button type="button" class="linkb rb-conto" data-k="${k}" data-fai="ferma">Ferma</button>` : `<button type="button" class="linkb rb-conto" data-k="${k}" data-fai="avvia">Avvia</button>`;
-    return `<div class="stat"${c.attiva || !aperta ? '' : ' style="opacity:.75"'}><div class="k">${S.nome} <span class="chip ${S.chip}">${S.stato}</span></div><div class="v ${v >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${eur(v)}</div><div class="d">${pc(v / ROBOT_CAPITALE - 1, 2)} · ${c.n} ${cosa}${c.n ? ', in guadagno ' + p100(c.vinte / c.n) : ''}</div><div class="d" style="margin-top:4px">${c.attiva ? '<span class="pos">attiva</span>' : 'ferma'}${btn ? ' · ' + btn : ''}</div></div>`; };
+    return `<div class="stat"${c.attiva || !aperta ? '' : ' style="opacity:.75"'}><div class="k">${S.nome} <span class="chip ${S.chip}">${S.stato}</span></div><div class="v ${Math.round(v * 100) >= ROBOT_CAPITALE * 100 ? 'pos' : 'neg'}">${eur(v)}</div><div class="d">${pc(v / ROBOT_CAPITALE - 1, 2)} · ${c.n} ${cosa}${c.n ? ', in guadagno ' + p100(c.vinte / c.n) : ''}</div><div class="d" style="margin-top:4px">${c.attiva ? '<span class="pos">attiva</span>' : 'ferma'}${btn ? ' · ' + btn : ''}</div></div>`; };
   const pos = posizioniAperte(R);
   const tabPos = pos.length ? `<div class="scroll"><table><thead><tr><th class="l">Posizione</th><th>Entrata</th><th>Adesso</th><th>Risultato</th></tr></thead><tbody>${pos.map(p => { const r = p.ora / p.entrata - 1 - (p.costo || 0);
       return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(p.sym))}</b> <span class="note">${STRATEGIE[p.k].breve} · dalle ${new Date(p.quando).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'})}</span><br><span class="note">esce ${esc(p.esce)}</span></td><td>${nf(p.entrata, dec(p.entrata))} ${p.cur}</td><td>${nf(p.ora, dec(p.ora))} ${p.cur}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div>
       ${pos.some(p => p.k.endsWith('notte')) ? '<p class="note" style="margin-top:4px">Di notte la borsa è chiusa: il risultato delle azioni comprate per la notte si vede all\'apertura, quando il robot le vende.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
   const stasera = ['usa_notte', 'ita_notte'].filter(k => R.conti[k].aperta && R.conti[k].aperta.stato === 'stasera').map(k => `<p class="note" style="margin-top:6px"><b>${STRATEGIE[k].nome}</b>: all'asta di chiusura di ${dt(R.conti[k].aperta.data)} (${ORARI[STRATEGIE[k].mercato].chiude}) compra ${R.conti[k].aperta.titoli.map(s => esc(tk(s))).join(', ')}.</p>`).join('');
-  const tuttiReg = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1), reg = robotTutto ? tuttiReg : tuttiReg.slice(0, 50);
-  const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short'}) + ', in seduta' : quandoBreve(e.t);
-  const registro = reg.length ? `<ul class="reg">${reg.map(e => `<li><span class="note">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(e.fonte || '')})</span></li>`).join('')}</ul>` : '<p class="note">Ancora nessuna operazione: le prime arrivano alla prossima occasione delle strategie scelte.</p>';
+  const RIGHE = 15, tutte = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1), reg = robotTutto ? tutte.slice(0, 400) : tutte.slice(0, RIGHE);
+  const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome'}) + ', in seduta' : oraDi(e.t);
+  const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
+  const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>
+    ${LIVE.fonte ? '' : '<p class="note" style="margin-top:4px">Per vederle in diretta: avvia <code>python3 live.py</code> sul computer e tieni aperta la pagina, oppure premi “Prezzi in tempo reale” nell’app desktop di Claude.</p>'}
+    ${avvisi ? `<p style="margin-top:4px">${avvisi}</p>` : ''}
+    ${reg.length ? `<ul class="reg">${reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(e.fonte === 'dal vivo' ? 'in diretta' : (e.fonte || ''))})</span></li>`).join('')}</ul>` : '<p class="note">Ancora nessuna operazione: le prime arrivano alla prossima occasione delle strategie scelte.</p>'}
+    ${tutte.length > RIGHE ? `<p style="margin-top:6px"><button type="button" class="linkb" id="rb-tutto">${robotTutto ? `Mostra solo le ultime ${RIGHE}` : `Mostra tutte le ${tutte.length} operazioni`}</button></p>` : ''}`;
   return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
     <p class="note" style="margin-top:4px">${aperta ? `<b class="pos">Sessione aperta</b> dal ${quandoBreve(R.sessione.da)}` : `<b>Sessione chiusa</b> ${R.sessione.chiusa ? 'il ' + quandoBreve(R.sessione.chiusa) : ''}`} · operazioni dal ${dt(R.inizio, {year: 'numeric'})} · ${live} · ultimo controllo ${new Date(robotUltimo || Date.now()).toLocaleTimeString('it-IT')}. Niente soldi veri.</p>
     <div class="tiles" style="margin-top:10px">${usati.map(tile).join('')}</div>
+    ${feed}
     <h3 style="margin-top:14px">Posizioni aperte adesso</h3>${tabPos}${stasera}
-    <h3 style="margin-top:14px">Registro: tutto quello che apre e chiude</h3>${registro}${tuttiReg.length > 50 ? `<p style="margin-top:6px"><button type="button" class="linkb" id="rb-tutto">${robotTutto ? 'Mostra solo le ultime 50' : `Mostra tutte le ${tuttiReg.length} operazioni`}</button></p>` : ''}
     ${aperta ? `<p style="margin-top:12px"><button type="button" class="more" id="rb-termina">Termina la sessione</button></p>
       <p class="note" style="margin-top:4px">Terminando: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano; le azioni comprate per la notte si vendono all'apertura (di notte la borsa è chiusa). Poi il robot si ferma.</p>`
     : `<h3 style="margin-top:14px">Nuova sessione</h3>${robotModulo(false)}<p style="margin-top:12px"><button type="button" class="go" id="rb-riprendi">Inizia la sessione</button></p>`}
@@ -2221,7 +2268,7 @@ function scelteRobot() { const s = {}; for (const k of Object.keys(STRATEGIE)) s
 function robotEventi() {
   $('#rb-inizia')?.addEventListener('click', () => {
     const scelte = scelteRobot(); if (!Object.values(scelte).some(Boolean)) { avviso('Scegli almeno una strategia.'); return; }
-    ROBOT = robotNuovo($('#rb-da').value, Number($('#rb-costo').value), scelte); robotVisti = null;
+    ROBOT = robotNuovo($('#rb-da').value, Number($('#rb-costo').value), scelte); robotUltimaChiave = undefined;
     robotGiro(); robotSalva(); renderGiornata(); robotAperture(); avviso('Sessione iniziata: le operazioni partono dal ' + dt(ROBOT.inizio) + '.');
   });
   $('#rb-riprendi')?.addEventListener('click', () => {
@@ -2229,7 +2276,7 @@ function robotEventi() {
     const R = ROBOT, ora = new Date().toISOString();
     R.costo = Number($('#rb-costo').value); R.inizio = ora.slice(0, 10); R.dal = ora;
     for (const k of Object.keys(STRATEGIE)) R.conti[k].attiva = scelte[k];
-    R.sessione = {aperta: true, da: ora, chiusa: null}; robotVisti = null;
+    R.sessione = {aperta: true, da: ora, chiusa: null}; robotUltimaChiave = undefined;
     robotGiro(); robotSalva(); renderGiornata(); robotAperture(); avviso('Nuova sessione iniziata.');
   });
   $('#rb-termina')?.addEventListener('click', e => {
@@ -2237,6 +2284,11 @@ function robotEventi() {
     robotTermina(ROBOT, new Date()); robotGiro(); robotSalva(); renderGiornata(); avviso('Sessione terminata.');
   });
   $('#rb-tutto')?.addEventListener('click', () => { robotTutto = !robotTutto; aggiornaRobot(); });
+  $('#rb-avvisi')?.addEventListener('click', async () => {
+    try { const p = await Notification.requestPermission(); avviso(p === 'granted' ? 'Avvisi attivi: se la pagina è in un’altra scheda ti avviso a ogni operazione.' : 'Il browser non concede gli avvisi.'); }
+    catch (e) { avviso('Questo browser non permette gli avvisi.'); }
+    aggiornaRobot();
+  });
   document.querySelectorAll('#robot .rb-conto').forEach(b => b.addEventListener('click', () => {
     const k = b.dataset.k, c = ROBOT.conti[k], S = STRATEGIE[k];
     if (b.dataset.fai === 'avvia') {
@@ -2262,7 +2314,7 @@ function robotDemoHTML() {
   if (!ROBOT) return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b><span class="note" style="display:block;margin-top:4px">Conti finti che comprano e vendono da soli seguendo gli algoritmi dell'app: azioni USA e italiane, di notte e in giornata, e crypto. Lo avvii in In giornata.</span></a>`;
   const usati = Object.keys(STRATEGIE).filter(k => ROBOT.conti[k].attiva || ROBOT.conti[k].n), tot = usati.reduce((t, k) => t + valoreConto(ROBOT, k), 0);
   return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b> <span class="note">· ${ROBOT.sessione && ROBOT.sessione.aperta ? 'sessione aperta' : 'sessione chiusa'}</span>
-    <span class="note" style="display:block;margin-top:4px">${usati.map(k => { const v = valoreConto(ROBOT, k); return `${STRATEGIE[k].breve} <b class="${v >= ROBOT_CAPITALE ? 'pos' : 'neg'}">${pc(v / ROBOT_CAPITALE - 1, 2)}</b>`; }).join(' · ')}${usati.length ? ` · in tutto ${eur(tot)}` : ''}. Tocca per vederlo.</span></a>`;
+    <span class="note" style="display:block;margin-top:4px">${usati.map(k => { const v = valoreConto(ROBOT, k); return `${STRATEGIE[k].breve} <b class="${Math.round(v * 100) >= ROBOT_CAPITALE * 100 ? 'pos' : 'neg'}">${pc(v / ROBOT_CAPITALE - 1, 2)}</b>`; }).join(' · ')}${usati.length ? ` · in tutto ${eur(tot)}` : ''}. Tocca per vederlo.</span></a>`;
 }
 
 /* ---------------- quotazioni in tempo reale ---------------- */

@@ -18,6 +18,8 @@ const {chromium} = require('playwright');
 const ordina = x => Array.isArray(x) ? x.map(ordina) : x && typeof x === 'object'
   ? Object.fromEntries(Object.keys(x).sort().map(k => [k, ordina(x[k])])) : x;
 const uguale = (a, b) => JSON.stringify(ordina(a)) === JSON.stringify(ordina(b));
+// come chiaveOp nel browser: riconosce le operazioni già registrate
+const chiaveOp = e => [e.t, e.s, e.sym, e.azione, e.prezzo, e.nota].join('|');
 
 async function main() {
   const [ingresso, uscita, app = path.join(__dirname, 'trader', 'app.html')] = process.argv.slice(2);
@@ -44,8 +46,8 @@ async function main() {
       return {R, conti, nomi: Object.fromEntries(Object.entries(STRATEGIE).map(([k, S]) => [k, S.breve]))};
     });
     if (errori.length) throw new Error('errori nella pagina: ' + errori.join(' | '));
-    const prima = new Set(((stato.versione === 2 && stato.registro) || []).map(e => JSON.stringify(ordina(e))));
-    const nuovi = (r.R.registro || []).filter(e => !prima.has(JSON.stringify(ordina(e)))).sort((a, b) => a.t < b.t ? -1 : 1);
+    const prima = new Set(((stato.versione === 2 && stato.registro) || []).map(chiaveOp));
+    const nuovi = (r.R.registro || []).filter(e => !prima.has(chiaveOp(e))).sort((a, b) => a.t < b.t ? -1 : 1);
     const pc = x => (x > 0 ? '+' : '') + (x * 100).toLocaleString('it-IT', {minimumFractionDigits: 1, maximumFractionDigits: 1}) + ' %';
     const tk = s => String(s).replace(/\.MI$|-EUR$/, '');
     const op = e => `${r.nomi[e.s] || e.s}: ${e.azione === 'compra' ? 'compra' : 'vende'} ${e.sym.includes(',') ? e.sym.split(',').length + ' titoli' : tk(e.sym)}${e.r != null ? ' ' + pc(e.r) : ''}`;
