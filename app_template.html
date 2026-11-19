@@ -2530,6 +2530,7 @@ function robotPasso(R, adesso) {
 }
 function robotGiro() {
   if (!ROBOT) return;
+  if (SPETTATORE) { aggiornaRobot(); aggiornaTicker(); return; }                  // decide il motore nel cloud
   const R = ROBOT, cambiato = robotPasso(R, new Date());
   robotUltimo = Date.now();
   const nuovi = robotNuovi(R);
@@ -2602,7 +2603,26 @@ function robotTermina(R, adesso) {
   for (const k of Object.keys(STRATEGIE)) fermaConto(R, k, adesso, 'fine sessione');
   R.sessione = Object.assign({}, R.sessione, {aperta: false, chiusa: adesso.toISOString()});
 }
-function robotSalva() { ROBOT.rev = (ROBOT.rev || 0) + 1; robotSalvataAlle = Date.now(); robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false; }
+function robotSalva() {
+  ROBOT.rev = (ROBOT.rev || 0) + 1; robotSalvataAlle = Date.now(); robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false;
+  if (LIVE.fonte === 'locale') fetch('/robot', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ROBOT)}).catch(() => {});
+}
+// tempo reale dal cloud: una pagina "motore" (aperta dal server, ?motore=1) fa girare il robot giorno e notte; le altre
+// pagine (il telefono) sono spettatrici: mostrano lo stato del motore e gli mandano i tuoi comandi (avvia, ferma...)
+const MOTORE_PAGINA = /[?&]motore=1/.test(location.search);
+let SPETTATORE = false;
+async function sincronizzaRobot() {
+  try {
+    const r = await fetch('/robot', {cache: 'no-store'}); if (!r.ok) return;
+    const v = await r.json();
+    if (v && !v.vuoto && v.conti && (!ROBOT || (v.rev || 0) > (ROBOT.rev || 0))) {
+      ROBOT = robotMigra(v); robotUltimaChiave = robotUltimaChiave === undefined ? undefined : robotUltimaChiave;
+      Store.save('robot', JSON.parse(JSON.stringify(ROBOT)));
+      const nuovi = robotNuovi(ROBOT); if (nuovi.length) avvisoOperazioni(nuovi);
+      aggiornaRobot(); aggiornaTicker();
+    }
+  } catch (e) {}
+}
 Store.on('robot', v => {
   if (robotSalvo) return;                                                         // il nostro salvataggio
   const nuovo = v && !v.vuoto && (v.conti || v.notte) ? v : null;
@@ -2873,6 +2893,13 @@ async function avviaLive() {
   const info = $('#live-info'); if (info) { info.innerHTML = liveInfoHTML(); $('#live-chiudi').addEventListener('click', () => { info.hidden = true; }); }
   if (!window.claude && /^https?:$/.test(location.protocol)) {                    // servita da live.py
     try { const r = await fetch('/quotazioni?s=EURUSD%3DX', {cache: 'no-store'}); if (r.ok && (await r.json()).quote) LIVE.fonte = 'locale'; } catch (e) {}
+    if (LIVE.fonte === 'locale') {
+      if (MOTORE_PAGINA) { const batti = () => fetch('/robot/battito', {method: 'POST'}).catch(() => {}); batti(); setInterval(batti, 20e3); setInterval(sincronizzaRobot, 10e3); }
+      else {
+        try { const r = await fetch('/robot/info', {cache: 'no-store'}); SPETTATORE = r.ok && (await r.json()).motore; } catch (e) {}
+        if (SPETTATORE) { ROBOT = null; await sincronizzaRobot(); setInterval(sincronizzaRobot, 5e3); }
+      }
+    }
     if (LIVE.fonte === 'locale' && !ROBOT) {                                      // pagina nuova: riparte dal robot dell'app pubblicata
       try {
         const r = await fetch('/robot', {cache: 'no-store'});

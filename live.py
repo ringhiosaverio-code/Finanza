@@ -39,6 +39,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.join(ROOT, "trader", "app.html")
 STATI = []                                                    # i file da cui una pagina nuova prende lo stato del robot
+STATO_SERVER = os.path.join(ROOT, "trader", "robot_live.json")  # lo stato del robot tenuto dal server (motore e telefoni)
+MOTORE = {"battito": 0.0}
+LOCK_STATO = threading.Lock()                                     # l'ultimo segno di vita della pagina motore
 UA = "Mozilla/5.0 (compatible; finanza/1.0)"
 SPARK = "https://query1.finance.yahoo.com/v7/finance/spark?symbols=%s&range=1d&interval=1d"
 PER_RICHIESTA = 20            # Yahoo rifiuta più di 20 simboli in una richiesta
@@ -200,8 +203,12 @@ def server(quot, porta, host="127.0.0.1", aper=None, ordini=None):
                     self.invia(502, "application/json", json.dumps({"errore": str(e)[:100]}).encode())
                     return
                 self.invia(200, "application/json", corpo)
-            elif u.path == "/robot":                             # lo stato del robot salvato dal cloud, se c'è
-                stati = [p for p in (STATI or []) if os.path.exists(p)]
+            elif u.path == "/robot/info":
+                self.invia(200, "application/json", json.dumps({"motore": time.time() - MOTORE["battito"] < 90}).encode())
+            elif u.path == "/robot":                             # lo stato del robot: quello del server, se no quello salvato dal cloud
+                stati = [p for p in [STATO_SERVER] + (STATI or []) if os.path.exists(p)]
+                if os.path.exists(STATO_SERVER):
+                    stati = [STATO_SERVER]
                 if not stati:
                     self.send_error(404)
                     return
@@ -218,6 +225,42 @@ def server(quot, porta, host="127.0.0.1", aper=None, ordini=None):
                 self.invia(200, "text/html; charset=utf-8", corpo)
             else:
                 self.send_error(404)
+
+        def do_POST(self):
+            """La pagina motore (e il telefono, quando tocchi un pulsante) manda lo stato del robot: si tiene il più nuovo
+            (rev più alta). Il motore manda anche un battito ogni 20 secondi."""
+            u = urllib.parse.urlparse(self.path)
+            if u.path == "/robot/battito":
+                MOTORE["battito"] = time.time()
+                self.invia(200, "application/json", b'{"ok":true}')
+                return
+            if u.path != "/robot":
+                self.send_error(404)
+                return
+            try:
+                n = int(self.headers.get("Content-Length") or 0)
+                if n > 2_000_000:
+                    raise ValueError("troppo grande")
+                nuovo = json.loads(self.rfile.read(n).decode("utf-8"))
+                if not isinstance(nuovo, dict) or "conti" not in nuovo:
+                    raise ValueError("non è lo stato del robot")
+            except (ValueError, UnicodeDecodeError) as e:
+                self.invia(400, "application/json", json.dumps({"errore": str(e)[:80]}).encode())
+                return
+            with LOCK_STATO:
+                vecchio = 0
+                if os.path.exists(STATO_SERVER):
+                    try:
+                        with open(STATO_SERVER, encoding="utf-8") as fh:
+                            vecchio = int(json.load(fh).get("rev") or 0)
+                    except (OSError, ValueError):
+                        vecchio = 0
+                tenuto = int(nuovo.get("rev") or 0) > vecchio
+                if tenuto:
+                    with open(STATO_SERVER + ".tmp", "w", encoding="utf-8") as fh:
+                        json.dump(nuovo, fh)
+                    os.replace(STATO_SERVER + ".tmp", STATO_SERVER)
+            self.invia(200, "application/json", json.dumps({"ok": tenuto, "rev": max(vecchio, int(nuovo.get("rev") or 0))}).encode())
 
         def log_message(self, *a):
             pass
