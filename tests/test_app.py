@@ -10,6 +10,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ["FINANZA_SENZA_RETE"] = "1"                                  # i segnali esterni solo dalla cache: niente rete
 import app  # noqa: E402
 
 
@@ -22,7 +23,7 @@ def dati(**kw):
 
 class Leggero(unittest.TestCase):
     def setUp(self):                                                  # le operazioni delle reti vogliono Kraken e Yahoo: qui no
-        for nome in ("rete_robot_app", "rete_ita_app", "rete_ita_robot_app"):
+        for nome in ("rete_robot_app", "rete_ita_app", "rete_ita_robot_app", "sentimento"):
             p = mock.patch.object(app, nome, return_value=None)
             p.start()
             self.addCleanup(p.stop)

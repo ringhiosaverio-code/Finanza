@@ -1514,9 +1514,10 @@ function reteHTML() {
   const Rt = D.rete; if (!Rt || !Rt.costi) return '';
   const chiavi = Object.keys(Rt.costi).sort((a, b) => b - a), k0 = chiavi[0], c0 = Rt.costi[k0], costo0 = Number(k0);
   const ORIZ = Rt.config.orizzonti, orizTxt = m => m < 60 ? m + ' min' : m < 1440 ? (m / 60) + ' h' : (m / 1440) + (m === 1440 ? ' giorno' : ' giorni');
-  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', ribasso: 'Regola: ribasso a 4 ore', momento: 'Regola: rialzo a 1 giorno', sempre_1g: 'Comprare sempre e tenere 1 giorno'};
+  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', ribasso: 'Regola: ribasso a 4 ore', momento: 'Regola: rialzo a 1 giorno', williams: 'Regola di Larry Williams: rottura di volatilità, 8 ore', prima_mezzora: "Regola: prima mezz'ora del giorno, ultima ora (Gao e altri; Wen e altri)", flusso: 'Regola: flusso degli ordini, un\'ora (Cont e altri)', btc_guida: 'Regola: Bitcoin guida le altre, un\'ora', paura: 'Regola: paura estrema (Fear & Greed sotto 15), un giorno', sempre_1g: 'Comprare sempre e tenere 1 giorno'};
   const COL = {q: 'var(--s1)', previsione: 'var(--s5)', probabilita: 'var(--s6)', ribasso: 'var(--s2)', momento: 'var(--s3)', sempre_1g: 'var(--s4)'};
-  const STRAT = ['q', 'previsione', 'probabilita', 'ribasso', 'momento', 'sempre_1g'].filter(k => c0[k]);
+  const STRAT = ['q', 'previsione', 'probabilita', 'ribasso', 'momento', 'williams', 'prima_mezzora', 'flusso', 'btc_guida', 'paura', 'sempre_1g'].filter(k => c0[k]);
+  const GRAF = STRAT.filter(k => COL[k]);
   const q = c0.q, giorni = q.giorni, tot = x => x.totale, ic = x => `${pc(x.ic90[0] * x.giorni, 1)} … ${pc(x.ic90[1] * x.giorni, 1)}`;
   const credibileConto = x => x.n > 0 && x.totale > 0 && x.ic90[0] > 0;                    // conto positivo con l'intervallo al 90 % tutto sopra zero
   const positivo = x => x.n > 0 && x.totale > 0;
@@ -1527,7 +1528,7 @@ function reteHTML() {
     : `Con costi di ${pc(costo0, 1, false)} per lato, su ${giorni} giorni mai visti in addestramento la rete ha fatto ${q.n} operazioni (${nf(q.al_giorno, 1)} al giorno), in media ${pc(q.media, 2)} ciascuna dopo i costi, e il conto ${pc(q.totale, 1)} (intervallo al 90 %: ${ic(q)}). Nelle ${c0.scelte.length} finestre è rimasta fuori ${fuori} volte, perché nel mese di scelta non vedeva un guadagno credibile.`;
   const righe = STRAT.map(k => { const x = c0[k];
     return `<tr><td class="l" style="white-space:normal"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:${COL[k]}"></span><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.al_giorno, 1)} al giorno</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b><br><span class="note">${ic(x)}</span></td><td>${x.n ? nf(x.sharpe, 2) : '–'}</td><td>${p100(x.esposizione)}</td></tr>`; }).join('');
-  const conti = STRAT.map(k => ({dati: [0].concat(c0[k].conto.map(v => v * 100)), colore: COL[k], spessore: k === 'q' ? 2.6 : 1.6, tratteggio: k === 'sempre_1g'}));
+  const conti = GRAF.map(k => ({dati: [0].concat(c0[k].conto.map(v => v * 100)), colore: COL[k], spessore: k === 'q' ? 2.6 : 1.6, tratteggio: k === 'sempre_1g'}));
   const cella = x => `<td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b>${credibileConto(x) ? ' ✓' : ''}<br><span class="note">${x.n ? pc(x.media, 2) + ' · ' : ''}${x.n} op. · ${ic(x)}</span></td>`;
   const costiRighe = chiavi.map(k => { const C = Rt.costi[k];
     return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td>${cella(C.q)}${cella(C.previsione)}${cella(C.ribasso)}${cella(C.momento)}</tr>`; }).join('');
@@ -1574,7 +1575,7 @@ function reteHTML() {
       <tbody>${righe}</tbody></table></div>
     <p class="note" style="margin-top:4px">Costi ${pc(costo0, 1, false)} per lato. Il conto somma i guadagni netti di ogni operazione, ognuna con 1/${Rt.dati.crypto.length} del capitale. "Tempo dentro": quanta parte del tempo c'è una posizione aperta.</p>
     <h3 style="margin-top:16px">Il conto, giorno per giorno</h3>${lineaSVG(conti, {unita: ' %', etichetta: 'Conto fuori campione per strategia', x: [[0, 'inizio'], [giorni, 'fine']]})}
-    <div class="note" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">${STRAT.map(k => `<span><span style="display:inline-block;width:12px;height:3px;background:${COL[k]};vertical-align:middle;margin-right:4px"></span>${NOMI[k]}</span>`).join('')}</div>
+    <div class="note" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">${GRAF.map(k => `<span><span style="display:inline-block;width:12px;height:3px;background:${COL[k]};vertical-align:middle;margin-right:4px"></span>${NOMI[k]}</span>`).join('')}</div>
     <h3 style="margin-top:16px">Come ha imparato</h3>
     <p class="note" style="margin-top:2px">Apprendimento per rinforzo (Q-learning su decisioni di durata diversa): il valore di una mossa è il guadagno netto dell'operazione più il valore, scontato, di quando si torna liberi. Il prezzo non dipende dalle nostre operazioni, quindi per ogni istante si sa cosa sarebbe successo con ogni mossa, e l'"esperienza" è la storia riletta a ripetizione: a ogni iterazione la rete riconta il valore delle mosse con la rete dell'iterazione prima e impara di nuovo. A sinistra l'errore di addestramento, che scende (la rete impara); a destra come va la sua politica nel mese di scelta, una linea per finestra e in blu la mediana: non migliora in modo stabile, cioè quello che impara non è un vantaggio che si ripete.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px 16px;margin-top:6px"><div><div class="note">Errore di addestramento, per iterazione (mediana)</div>${lineaSVG(lineeErrore, {h: 170, dec: 2, etichetta: 'Errore di addestramento', x: [[0, '1'], [iter - 1, String(iter)]]})}</div>
@@ -1594,6 +1595,9 @@ function reteHTML() {
     <p class="note" style="margin-top:2px">Prima di decidere, la rete prevede il guadagno di ogni orizzonte. Fuori campione, la correlazione di rango tra la previsione e quello che è successo è vicina a zero a tutte le durate. Esito medio netto per il quinto di previsioni più basse e più alte, e per il 2 % più alto:</p>
     <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Orizzonte</th><th>Correlazione di rango</th><th>quinto più basso</th><th>quinto più alto</th><th>2 % più alto</th></tr></thead><tbody>${infoRighe}</tbody></table></div>
     <h3 style="margin-top:16px">Cosa dice la ricerca</h3><ul class="note" style="margin:4px 0 0;padding-left:18px;display:grid;gap:5px">${ricerca}</ul>
+    ${segnaliHTML(Rt.segnali, [['anno', 'Ultimo anno'], ['mese', 'Ultimo mese'], ['settimana', 'Ultima settimana'], ['giorno', 'Ultimo giorno']], 'crypto', Rt.config.orizzonti)}
+    ${fontiHTML()}
+    ${sentimentoHTML()}
     ${probHTML(c0, Rt.esperienza, 'crypto')}
     ${reteOpsHTML(D.rete_robot, 'La rete decide ogni minuto sugli scambi di Kraken; il robot rigioca le sue operazioni nel conto "Crypto, rete neurale" e chiude dal vivo quelle aperte.')}
     <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>La rete dal vivo, ogni secondo.</b> Sul tuo computer, nella cartella del progetto: <code>python3 rete_dati.py</code> scarica gli scambi di Kraken, <code>python3 rete.py --studia</code> rifà tutta questa verifica (circa 40 minuti) e <code>python3 rete_live.py</code> fa girare la rete in un conto finto con i prezzi di Kraken ogni secondo, impara ancora ogni giorno dai dati nuovi e mostra, per ogni crypto, il vantaggio di comprare sull'attesa. Nella verifica nessun modello ha passato il cancello, quindi di serie resta fuori e non compra mai; con <code>--margine 0.001</code> la costringi a comprare per vedere come impara e cosa perde (con <code>--costo 0.0005</code> usi il modello addestrato con costi più bassi).</p></div></div>`;
@@ -1875,6 +1879,52 @@ function giocoEventi() {
   $('#g-nuova')?.addEventListener('click', () => { gSt.i = giornoNuovo(); gSt.esito = null; renderGiornata(true); });
   $('#g-reset')?.addEventListener('click', () => { GIOCO = giocoVuoto(); salvaGioco(); renderGiornata(true); });
 }
+/* ---------------- i segnali dalla ricerca: quali sono legati a quello che succede dopo ---------------- */
+const NOMI_SEGNALI = {
+  rend_1: 'rendimento degli ultimi 5 minuti', rend_3: 'rendimento degli ultimi 15 minuti', rend_6: "rendimento dell'ultima mezz'ora", rend_12: "rendimento dell'ultima ora",
+  rend_24: 'rendimento delle ultime 2 ore', rend_48: 'rendimento delle ultime 4 ore', rend_102: "rendimento dell'ultima seduta", rend_204: 'rendimento delle ultime 2 sedute', rend_510: 'rendimento delle ultime 5 sedute',
+  rend_5: 'rendimento degli ultimi 5 minuti', rend_15: 'rendimento degli ultimi 15 minuti', rend_30: "rendimento dell'ultima mezz'ora", rend_60: "rendimento dell'ultima ora",
+  rend_120: 'rendimento delle ultime 2 ore', rend_240: 'rendimento delle ultime 4 ore', rend_480: 'rendimento delle ultime 8 ore', rend_720: 'rendimento delle ultime 12 ore',
+  rend_1440: 'rendimento di un giorno', rend_2880: 'rendimento di 2 giorni', rend_4320: 'rendimento di 3 giorni', rend_10080: 'rendimento di una settimana',
+  log_sigma_ora: 'volatilità', vol_1h_su_24h: "volatilità dell'ultima ora sul giorno", vol_24h_su_7g: 'volatilità del giorno sulla settimana', vol_2h_su_5g: 'volatilità di 2 ore su 5 sedute',
+  pos_60: "posizione nel minimo-massimo dell'ultima ora", pos_240: 'posizione nel minimo-massimo di 4 ore', pos_1440: 'posizione nel minimo-massimo del giorno', pos_10080: 'posizione nel minimo-massimo della settimana',
+  dist_max_24h: 'distanza dal massimo di 24 ore', dist_min_24h: 'distanza dal minimo di 24 ore',
+  flusso_15: 'acquisti meno vendite, 15 minuti', flusso_60: "acquisti meno vendite, un'ora", flusso_240: 'acquisti meno vendite, 4 ore', flusso_1440: 'acquisti meno vendite, un giorno',
+  intensita_1h: "scambi dell'ultima ora sulla media", liquidita: 'quanti scambi', volume_1h: "volume dell'ultima ora sulla media", spread: 'mossa tra uno scambio e l\'altro',
+  ora_sin: 'ora del giorno', ora_cos: 'ora del giorno', sett_sin: 'giorno della settimana', sett_cos: 'giorno della settimana',
+  mercato_1h: "tutto il mercato, ultima ora", mercato_24h: 'tutto il mercato, un giorno', relativo_24h: 'meglio o peggio del mercato, un giorno',
+  mercato_seduta: "tutto il mercato, ultima seduta", relativo_seduta: 'meglio o peggio del mercato', minuti: 'ora della seduta', minuti_sin: 'ora della seduta', minuti_cos: 'ora della seduta',
+  oggi: "dall'apertura di oggi", salto: 'salto della notte', pos_oggi: 'posizione nel minimo-massimo di oggi', da_ieri: 'dalla chiusura di ieri',
+  vwap_24h: 'prezzo sul VWAP di 24 ore', stagione_1h: "la stessa ora nei 7 giorni prima", btc_5: 'Bitcoin, ultimi 5 minuti', btc_60: "Bitcoin, ultima ora",
+  dal_giorno: 'dalla mezzanotte UTC', prima_mezzora: "prima mezz'ora", williams: 'rottura di volatilità di Williams', rottura_su_ieri: 'sul massimo di ieri', rottura_giu_ieri: 'sul minimo di ieri',
+  sopra_or: 'sopra il range dei primi 15 minuti', sotto_or: 'sopra il minimo dei primi 15 minuti', ampiezza_or: 'ampiezza del range dei primi 15 minuti',
+  volume_relativo: 'volume relativo (in play)', vwap_oggi: 'prezzo sul VWAP di oggi', stagione_30m: "la stessa mezz'ora nelle 10 sedute prima", salto_atr: "salto della notte sull'ATR",
+  g_anno: 'momento di un anno', g_mese: 'momento di un mese', g_settimana: 'momento di una settimana', g_giorno: 'il giorno prima', g_media200: 'sulla media di 200 giorni',
+  g_max52: 'dal massimo di 52 settimane', g_rsi2: 'RSI a 2 giorni', g_nr7: 'giornata stretta NR7', g_range_atr: "escursione di ieri sull'ATR", g_vol_mese: 'volatilità del mese',
+  paura_avidita: 'Fear & Greed', paura_avidita_7g: 'Fear & Greed, variazione in 7 giorni', notizie_volume: 'quantità di notizie', notizie_tono: 'tono delle notizie',
+};
+function segnaliHTML(lista, periodi, unita, oriz) {
+  if (!lista || !lista.length) return '';
+  const ic = v => v == null ? '–' : `<span class="${Math.abs(v) < 0.01 ? '' : v > 0 ? 'pos' : 'neg'}">${nf(v, 3)}</span>`;
+  const conta = lista.filter(r => r.prova && r.prova.n >= 20);
+  const buoni = conta.filter(r => r.prova.media > 0);
+  const righe = lista.slice(0, 14).map(r => { const j = oriz.indexOf(r.orizzonte), P = r.prova;
+    return `<tr><td class="l" style="white-space:normal"><b>${esc(NOMI_SEGNALI[r.nome] || r.nome)}</b>${r.fonte ? `<br><span class="note">${esc(r.fonte)}</span>` : ''}</td><td>${r.orizzonte ? durataTesto(r.orizzonte) : '–'}${r.verso < 0 ? '<br><span class="note">al contrario</span>' : ''}</td>${periodi.map(p => `<td>${j >= 0 ? ic(r.ic[p[0]][j]) : '–'}</td>`).join('')}<td>${P ? P.n : '–'}</td><td>${P && P.n ? p100(P.vinte) : '–'}</td><td class="${P && P.media >= 0 ? 'pos' : 'neg'}">${P && P.n ? pc(P.media, 2) : '–'}</td></tr>`; }).join('');
+  return `<h3 style="margin-top:16px">Quali segnali contano, e da quando</h3>
+    <p class="note" style="margin-top:2px">Per ogni segnale, il legame (correlazione di rango) con il guadagno netto che sarebbe venuto comprando, all'orizzonte in cui conta di più: positivo se più alto vuol dire meglio, negativo se è al contrario. Sopra 0,02 o sotto -0,02 è già un legame che si nota su tanti dati; vicino a zero non dice niente. Poi una prova onesta: verso, orizzonte e soglia scelti sui dati prima, e sull'ultimo mese si compra solo quando il segnale è nel 10 % migliore. ${conta.length ? `Su ${conta.length} segnali provati con almeno 20 operazioni, ${buoni.length} hanno chiuso l'ultimo mese in guadagno dopo i costi.` : ''}</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Segnale e fonte</th><th>Orizzonte</th>${periodi.map(p => `<th>${p[1]}</th>`).join('')}<th>Prova: operazioni</th><th>in guadagno</th><th>media</th></tr></thead><tbody>${righe}</tbody></table></div>
+    <p class="note" style="margin-top:4px">I 14 segnali con il legame più forte su ${esc(periodi[0][1])}, su ${lista.length}. "Al contrario": conta quando il segnale è basso (un ribasso, per esempio). Una posizione alla volta per ${unita}, costi compresi.</p>`;
+}
+function sentimentoHTML() {
+  const S = D.sentimento; if (!S || S.valore == null) return '';
+  const cl = S.valore < 25 ? 'paura estrema' : S.valore < 45 ? 'paura' : S.valore <= 55 ? 'neutro' : S.valore <= 75 ? 'avidità' : 'avidità estrema';
+  return `<p class="note" style="margin-top:8px"><b>Il sentimento di oggi</b>: Fear & Greed ${S.valore} su 100 (${cl}, ${esc(S.data)})${S.prima != null ? `, una settimana fa ${S.prima}` : ''}. Le notizie di GDELT entrano nella rete quando il servizio risponde: dal cloud spesso rifiuta le richieste${S.notizie ? `; ultime notizie scaricate: ${esc(S.notizie)}` : ', e per ora non ne sono arrivate'}.</p>`;
+}
+function fontiHTML() {
+  const F = D.segnali_fonti; if (!F || !F.length) return '';
+  return `<details style="margin-top:10px"><summary>Da dove vengono i segnali: studi, libri e trader (${F.length})</summary><ul class="note" style="margin:6px 0 0;padding-left:18px">${F.map(([a, b]) => `<li><b>${esc(a)}</b>: ${esc(b)}</li>`).join('')}</ul></details>`;
+}
+
 /* ---------------- la probabilità di guadagno: la rete sceglie le operazioni che chiudono in guadagno? ---------------- */
 function probHTML(c0, esperienza, unita) {
   const P = c0 && c0.probabilita, T = c0 && c0.tutte; if (!P || !T) return '';
@@ -1883,16 +1933,16 @@ function probHTML(c0, esperienza, unita) {
   const quanti = P.sedute ? `${P.sedute} sedute` : `${P.giorni} giorni`;
   const fasce = cal.map(f => `<tr><td class="l">${nf(f.da * 100, 0)}–${nf(f.a * 100, 0)} %</td><td>${f.n.toLocaleString('it-IT')}</td><td>${p100(f.stimata)}</td><td class="${f.vinte >= f.stimata - 0.02 ? 'pos' : 'neg'}"><b>${p100(f.vinte)}</b></td><td class="${f.media >= 0 ? 'pos' : 'neg'}">${pc(f.media, 2)}</td></tr>`).join('');
   const quote = (c0.per_quota || []).map(q => `<tr><td class="l">il meglio ${nf(q.quota * 100, q.quota < 0.01 ? 1 : 0)} %</td><td>${q.n}</td><td>${q.n ? p100(q.vinte) : '–'}</td><td class="${q.media >= 0 ? 'pos' : 'neg'}">${q.n ? pc(q.media, 2) : '–'}</td><td class="${q.totale >= 0 ? 'pos' : 'neg'}">${pc(q.totale, 2)}</td></tr>`).join('');
-  const diario = (esperienza || []).slice(-8).reverse().map(r => `<tr><td class="l">${esc(r.data)}</td><td>${r.dati}</td><td>${p100(r.soglia)}</td><td>${nf(r.quota * 100, r.quota < 0.01 ? 1 : 0)} %</td><td>${r.n}</td><td>${p100(r.vinte)}</td><td class="${r.media >= 0 ? 'pos' : 'neg'}">${pc(r.media, 2)}</td><td>${r.fuori ? 'no' : 'sì'}</td></tr>`).join('');
+  const diario = (esperienza || []).slice(-8).reverse().map(r => `<tr><td class="l">${esc(r.data)}</td><td>${r.dati}</td><td>${p100(r.soglia)}</td><td>${nf(r.quota * 100, r.quota < 0.01 ? 1 : 0)} %</td><td>${r.memoria ? 'ultimi ' + nf(r.memoria, 0) + ' giorni' : 'tutto il passato'}</td><td>${r.n}</td><td>${p100(r.vinte)}</td><td class="${r.media >= 0 ? 'pos' : 'neg'}">${pc(r.media, 2)}</td><td>${r.fuori ? 'no' : 'sì'}</td></tr>`).join('');
   return `<h3 style="margin-top:16px">La rete sceglie le operazioni che chiudono in guadagno?</h3>
-    <p class="note" style="margin-top:2px">Una seconda rete impara da tutte le operazioni possibili del passato, e dal loro esito, la <b>probabilità che un'operazione chiuda in guadagno</b> dopo i costi. È quella che usa il robot: compra solo le occasioni con la probabilità più alta, e la soglia la sceglie la rete sul periodo più recente (quante delle occasioni migliori prendere: quella con la media per operazione più alta). Ogni sera si riaddestra con i dati nuovi.</p>
+    <p class="note" style="margin-top:2px">Una seconda rete impara da tutte le operazioni possibili del passato, e dal loro esito, la <b>probabilità che un'operazione chiuda in guadagno</b> dopo i costi. È quella che usa il robot: compra solo le occasioni con la probabilità più alta, e la soglia la sceglie la rete sul periodo più recente (quante delle occasioni migliori prendere: quella con la media per operazione più alta). Sceglie anche la sua <b>memoria</b>: se imparare da tutto il passato o dare più peso agli ultimi mesi o settimane, prendendo quella che prevede meglio il periodo più recente. Ogni sera si riaddestra con i dati nuovi.</p>
     <div class="verdetto ${meglio ? 'v-si' : 'v-no'}" style="margin-top:8px"><div class="vh"><span class="vi" aria-hidden="true">${meglio ? '✓' : '✕'}</span><div><b>${meglio ? 'Sceglie un po’ meglio del caso' : 'Per ora non sa distinguere le operazioni vincenti'}</b><p>Su ${quanti} mai ${P.sedute ? 'viste' : 'visti'} in addestramento, le operazioni scelte così sono state ${P.n}: in guadagno il <b>${P.n ? p100(P.vinte) : '–'}</b>, in media ${P.n ? pc(P.media, 2) : '–'} ciascuna. Tutte le occasioni, senza scegliere: in guadagno il ${p100(T.vinte)}, in media ${pc(T.media, 2)}. La soglia ha avuto il via libera della verifica in ${via} finestre su ${sc.length}.${meglio ? ' Con pochi dati può essere il caso: conta come va nei prossimi mesi.' : ' Il robot la usa lo stesso, perché tu possa vederla imparare.'}</p></div></div></div>
     <p class="note" style="margin-top:8px"><b>Quello che stima e quello che succede</b> (tutte le occasioni dei periodi mai visti, all'orizzonte che la rete preferisce). Se la rete sapesse scegliere, nelle fasce alte si vincerebbe più spesso.</p>
     <div class="scroll" style="margin-top:4px"><table><thead><tr><th class="l">Probabilità stimata</th><th>Occasioni</th><th>Stimata in media</th><th>Vinte davvero</th><th>Media</th></tr></thead><tbody>${fasce}</tbody></table></div>
     <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Prendere solo…</th><th>Operazioni</th><th>In guadagno</th><th>Media</th><th>Conto</th></tr></thead><tbody>${quote}</tbody></table></div>
     <p class="note" style="margin-top:4px">"Il meglio 1 %": le occasioni con la probabilità stimata più alta, con la soglia presa dal periodo di scelta e una posizione alla volta per ${unita}.</p>
     ${diario ? `<p class="note" style="margin-top:8px"><b>Diario degli addestramenti</b>: cosa ha scelto la rete ogni volta che ha imparato (nel periodo di scelta, prima del test).</p>
-    <div class="scroll" style="margin-top:4px"><table><thead><tr><th class="l">Data</th><th>${unita === 'titolo' ? 'Sedute' : 'Giorni'} di dati</th><th>Soglia</th><th>Prende il meglio</th><th>Operazioni</th><th>In guadagno</th><th>Media</th><th>Via libera</th></tr></thead><tbody>${diario}</tbody></table></div>` : ''}`;
+    <div class="scroll" style="margin-top:4px"><table><thead><tr><th class="l">Data</th><th>${unita === 'titolo' ? 'Sedute' : 'Giorni'} di dati</th><th>Soglia</th><th>Prende il meglio</th><th>Memoria</th><th>Operazioni</th><th>In guadagno</th><th>Media</th><th>Via libera</th></tr></thead><tbody>${diario}</tbody></table></div>` : ''}`;
 }
 
 /* ---------------- le operazioni della rete nel robot (crypto e azioni italiane) ---------------- */
@@ -1916,14 +1966,14 @@ function reteOpsHTML(RR, etichetta) {
 function reteItaHTML() {
   const Rt = D.rete_ita, RR = D.rete_ita_robot; if (!Rt || !Rt.costi || !Object.keys(Rt.costi).length) return '';
   const chiavi = Object.keys(Rt.costi).sort((a, b) => b - a), k0 = chiavi[0], c0 = Rt.costi[k0], costo0 = Number(k0), q = c0.q;
-  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', apertura_chiusura: 'Regola: compra alle 9:10, vendi in chiusura', ribasso_1h: "Regola: dopo un'ora in ribasso, tieni un'ora", rialzo_1h: "Regola: dopo un'ora in rialzo, tieni un'ora"};
+  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', orb_in_play: 'Regola ORB sui titoli "in play" (Zarattini e Aziz; Crabel)', momento_intraday: "Regola: prima mezz'ora, poi l'ultima (Gao, Han, Li e Zhou)", buy_on_gap: 'Regola buy-on-gap (Chan)', vwap_ritorno: 'Regola: ritorno al VWAP (Aziz)', stagione: "Regola: la stessa mezz'ora delle sedute prima (Heston e altri)", apertura_chiusura: 'Regola: compra alle 9:10, vendi in chiusura', ribasso_1h: "Regola: dopo un'ora in ribasso, tieni un'ora", rialzo_1h: "Regola: dopo un'ora in rialzo, tieni un'ora"};
   const buono = q.n > 0 && q.totale > 0 && q.ic90[0] > 0;
   const righe = Object.keys(NOMI).filter(k => c0[k]).map(k => { const x = c0[k];
     return `<tr><td class="l" style="white-space:normal"><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.per_seduta || 0, 1)} a seduta</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 2)}</b><br><span class="note">${pc(x.ic90[0] * x.giorni, 2)} … ${pc(x.ic90[1] * x.giorni, 2)}</span></td></tr>`; }).join('');
   const costiRighe = chiavi.map(k => { const a = Rt.costi[k].q, b = Rt.costi[k].previsione;
     return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td><td>${a.n}</td><td class="${a.media >= 0 ? 'pos' : 'neg'}">${a.n ? pc(a.media, 2) : '–'}</td><td>${b.n}</td><td class="${b.media >= 0 ? 'pos' : 'neg'}">${b.n ? pc(b.media, 2) : '–'}</td></tr>`; }).join('');
   const fuori = c0.scelte.filter(s => s.q.fuori).length, sed = q.sedute || 0;
-  const regola = ['apertura_chiusura', 'ribasso_1h', 'rialzo_1h'].filter(k => c0[k] && c0[k].n).map(k => [k, c0[k]]).sort((a, b) => b[1].media - a[1].media)[0];
+  const regola = ['orb_in_play', 'momento_intraday', 'buy_on_gap', 'vwap_ritorno', 'stagione', 'apertura_chiusura', 'ribasso_1h', 'rialzo_1h'].filter(k => c0[k] && c0[k].n).map(k => [k, c0[k]]).sort((a, b) => b[1].media - a[1].media)[0];
   return `<div class="card" id="rete-ita"><h2>Azioni italiane in giornata con la rete neurale</h2>
     <p class="sub" style="margin-top:4px">La stessa rete delle crypto, sui ${Rt.dati.titoli.length} titoli del FTSE MIB: ogni 5 minuti della seduta guarda ogni titolo (rendimenti da 5 minuti a 5 sedute, volatilità, apertura e salto da ieri, posizione nel minimo-massimo di oggi, volumi, ora del giorno, mercato intero) e sceglie se aspettare o comprare e tenere 5, 15, 30 minuti, 1, 2, 4 ore o fino alla chiusura. Tutto si chiude entro le 17:30, con una protezione sotto l'entrata e costi di ${pc(costo0, 1, false)} per lato (per chi compra e vende nello stesso giorno la Tobin tax non si paga). Dati: barre da 5 minuti di Yahoo, ${Rt.dati.sedute} sedute (dal ${esc(Rt.dati.da)} al ${esc(Rt.dati.a)}); Milano arriva con 15 minuti di ritardo.</p>
     <div class="verdetto ${buono ? 'v-si' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${buono ? '✓' : '✕'}</span><div><b>${buono ? 'Guadagna nei dati, con cautela' : q.n ? 'Fuori campione non guadagna' : 'Fuori campione non trova guadagni'}</b><p>${q.n
@@ -1932,6 +1982,8 @@ function reteItaHTML() {
     <div class="scroll" style="margin-top:12px"><table><thead><tr><th class="l">Fuori campione, ${sed} sedute</th><th>Operazioni</th><th>Media per operazione</th><th>In guadagno</th><th>Conto, intervallo al 90 %</th></tr></thead><tbody>${righe}</tbody></table></div>
     <p class="note" style="margin-top:4px">Il conto somma i guadagni netti con 1/${Rt.dati.titoli.length} del capitale per operazione (il robot invece ne usa 1/8, una posizione per titolo e al più 8 insieme).</p>
     <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Costo</th><th>Rinforzo: operazioni</th><th>media</th><th>Previsione: operazioni</th><th>media</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
+    ${segnaliHTML(Rt.segnali, [['tutte', 'Tutte le sedute'], ['mese', 'Ultimo mese'], ['settimana', 'Ultima settimana'], ['giorno', 'Ultima seduta']], 'titolo', Rt.config.orizzonti)}
+    ${fontiHTML()}
     ${probHTML(c0, Rt.esperienza, 'titolo')}
     ${reteOpsHTML(RR, 'La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "Azioni italiane, rete neurale" e le chiude al più tardi in chiusura.')}
     <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 rete_azioni.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;

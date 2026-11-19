@@ -12,6 +12,7 @@ import unittest
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ["FINANZA_SENZA_RETE"] = "1"                                  # i segnali esterni solo dalla cache: niente rete
 import rete as R  # noqa: E402
 
 
@@ -360,7 +361,7 @@ class Studio(unittest.TestCase):
 
     def test_valuta_costo_e_riassumi(self):
         ris = R.valuta_costo(self.D, self.wins, 0.002, iterazioni=2, epoche=1)
-        self.assertEqual(set(ris["strategie"]), {"q", "previsione", "ribasso", "momento", "sempre_1g"})
+        self.assertEqual(set(ris["strategie"]), {"q", "previsione", *R.REGOLE_CRYPTO})
         for nome in ris["strategie"]:
             self.assertEqual(len(ris["strategie"][nome]), 2)
             st = R.riassumi(self.D, ris, nome)
@@ -623,4 +624,74 @@ class ProbabilitaDiGuadagno(unittest.TestCase):
         self.assertEqual(len(scritto["esperienza"]), 1)
         self.assertEqual(scritto["esperienza"][0]["dati"], 45)
         self.assertEqual(ris["probabilita"]["0.002"]["soglia"], scritto["probabilita"]["0.002"]["soglia"])
+
+
+class SegnaliDellaRicerca(unittest.TestCase):
+    """I segnali nuovi, le regole dai libri, i pesi per recenza e lo studio dei segnali."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.D = R.Dati(mondo_casuale(giorni=30, seme=21, monete=2))
+
+    def test_le_regole_dai_libri_decidono_solo_quando_devono(self):
+        D, i0, i1 = self.D, 0, self.D.N
+        F = R.NOMI_FEATURE.index
+        for nome in R.REGOLE_CRYPTO:
+            az = R.az_regola(D, i0, i1, nome)
+            self.assertEqual(az.shape, (D.C, D.N))
+            self.assertTrue(set(np.unique(az)) <= set(range(len(R.ORIZZONTI) + 1)))
+        az = R.az_regola(D, i0, i1, "prima_mezzora")
+        ora = ((D.M.t0 + 60.0 * D.K) % 86400) / 3600.0
+        self.assertFalse(az[:, ~np.isclose(ora, 23.0)].any())                  # solo alle 23 UTC
+        az = R.az_regola(D, i0, i1, "williams")
+        w = D.X[:, :, F("williams")]
+        self.assertTrue(np.all((w[az > 0] > 0) & (w[az > 0] <= 0.25)))
+        self.assertTrue(np.all(az[az > 0] == 1 + R.ORIZZONTI.index(480)))
+
+    def test_i_pesi_dimezzano_ogni_mezza_vita(self):
+        D = self.D
+        i0, i1 = 0, D.N
+        w = R.pesi_recenza(D, i0, i1, 2.0).reshape(D.C, -1)
+        self.assertAlmostEqual(float(w[0, -1]), 1.0)
+        k = int(np.searchsorted(D.K, D.K[-1] - 2 * 1440))
+        self.assertAlmostEqual(float(w[0, k]), 0.5, places=2)
+        self.assertTrue(np.all(np.diff(w[0]) >= 0))                            # più recente, più peso
+        self.assertTrue(np.all(R.pesi_recenza(D, i0, i1, None) == 1.0))
+
+    def test_la_memoria_si_sceglie_e_si_ricorda(self):
+        D = R.Dati(mondo_casuale(giorni=40, seme=22, monete=2))
+        wins = R.finestre(D, giorni_test=4, giorni_val=4, embargo=1, min_addestramento=8, max_finestre=1)
+        w = wins[0]
+        m = R.apprendi_probabilita(D, w["addestramento"], w["scelta"], epoche=1, memorie=(None, 4.0))
+        self.assertIn(m["memoria"], (None, 4.0))
+        self.assertEqual({c["memoria"] for c in m["curve"]}, {None, 4.0})
+        self.assertIn("memoria", R.esperienza(None, m, "2030-01-01", 40)[0])
+
+    def test_studio_dei_segnali(self):
+        D = self.D
+        periodi = [("anno", 0), ("settimana", D.indice(D.giorni - 9)), ("giorno", D.indice(D.giorni - 3))]
+        separa = D.indice(D.giorni - 9)
+        nomi = ["rend_60", "williams", "flusso_60"]
+        ris = R.studio_segnali(D, nomi, periodi, 0.002, separa, fonti={"williams": "Larry Williams"})
+        self.assertEqual({r["nome"] for r in ris}, set(nomi))
+        for r in ris:
+            self.assertEqual(set(r["ic"]), {"anno", "settimana", "giorno"})
+            self.assertEqual(len(r["ic"]["anno"]), len(R.ORIZZONTI))
+            self.assertTrue(all(-1.0 <= v <= 1.0 for v in r["ic"]["anno"]))
+            self.assertIn(r["verso"], (-1, 1))
+            self.assertIn(r["orizzonte"], R.ORIZZONTI)
+            self.assertGreaterEqual(r["prova"]["n"], 0)
+        self.assertEqual(next(r for r in ris if r["nome"] == "williams")["fonte"], "Larry Williams")
+        forze = [max(abs(v) for v in r["ic"]["anno"]) for r in ris]
+        self.assertEqual(forze, sorted(forze, reverse=True))
+
+    def test_un_modello_di_prima_usa_solo_i_suoi_segnali(self):
+        net = R.Rete([R.N_BASE, 4, len(R.ORIZZONTI)], 0)
+        vecchio = R.da_json({"rete": net.a_dizionario(), "media": [0.0] * R.N_BASE, "dev": [1.0] * R.N_BASE, "tipo": "probabilita",
+                             "soglia": 0.6, "quota": 0.01, "fuori": True})
+        X = np.random.default_rng(0).standard_normal((2, 5, R.N_FEATURE)).astype(np.float32)
+        az, p = R.scelte_modello(vecchio, X)
+        self.assertEqual(az.shape, (2, 5))
+        P = R.probabilita(vecchio, self.D, 0, 10)
+        self.assertEqual(P.shape, (2, 10, len(R.ORIZZONTI)))
 

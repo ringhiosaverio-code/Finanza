@@ -39,6 +39,8 @@ import sys
 import time
 
 import numpy as np
+
+import segnali
 from numpy.lib.stride_tricks import sliding_window_view
 
 import rete_dati
@@ -61,8 +63,14 @@ NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_1h_su_
                 + ["pos_%d" % W for W in ESTREMI] + ["dist_max_24h", "dist_min_24h"]
                 + ["flusso_%d" % W for W in FLUSSO]
                 + ["intensita_1h", "liquidita", "volume_1h", "spread", "ora_sin", "ora_cos", "sett_sin", "sett_cos",
-                   "mercato_1h", "mercato_24h", "relativo_24h"])
+                   "mercato_1h", "mercato_24h", "relativo_24h"]
+                # i segnali della ricerca (vedi segnali.py): dentro la giornata...
+                + ["vwap_24h", "stagione_1h", "btc_5", "btc_60", "dal_giorno", "prima_mezzora", "williams",
+                   "rottura_su_ieri", "rottura_giu_ieri"]
+                # ...anno, mese, settimana, giorno dalle chiusure giornaliere, sentimento e notizie
+                + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + list(segnali.NOMI_SENTIMENTO) + list(segnali.NOMI_NOTIZIE))
 N_FEATURE = len(NOMI_FEATURE)
+N_BASE = NOMI_FEATURE.index("vwap_24h")                             # le prime N_BASE: quelle di prima
 ARCO = ("aspetta",) + tuple(ORIZZONTI)
 
 
@@ -199,6 +207,39 @@ class Pronto:
         self.hi = {W: finestra_max(M.h, W) for W in ESTREMI}
         self.lo = {W: finestra_min(M.l, W) for W in ESTREMI}
         self.c, self.t0, self.n = M.c, M.t0, M.n
+        self.vc = cumula(M.v * M.c)                                     # per il VWAP
+        self.simboli = list(getattr(M, "simboli", []))
+        # i giorni UTC: indice del giorno di ogni minuto, prezzo a mezzanotte (chiusura del minuto prima), massimo e
+        # minimo di ogni giorno intero
+        g0 = int(M.t0 // 86400)
+        self.giorno = ((M.t0 + 60.0 * np.arange(M.n)) // 86400).astype(np.int64) - g0
+        ng = int(self.giorno[-1]) + 1
+        self.inizio = np.searchsorted(self.giorno, np.arange(ng))       # primo minuto di ogni giorno
+        C = M.c.shape[0]
+        self.alto, self.basso = np.zeros((C, ng)), np.zeros((C, ng))
+        for d in range(ng):
+            a, b = self.inizio[d], (self.inizio[d + 1] if d + 1 < ng else M.n)
+            self.alto[:, d], self.basso[:, d] = M.h[:, a:b].max(axis=1), M.l[:, a:b].min(axis=1)
+        self.giorni_iso = [datetime.date.fromordinal(datetime.date(1970, 1, 1).toordinal() + g0 + d).isoformat() for d in range(ng)]
+        self.esterni = esterni_crypto(self.simboli, self.giorni_iso)    # (C, giorni, n): giornalieri, sentimento, notizie
+
+
+def esterni_crypto(simboli, giorni_iso):
+    """I segnali che non vengono dagli scambi, per giorno UTC e crypto: anno, mese, settimana, giorno e gli altri dalle
+    chiusure giornaliere di Yahoo, il Fear & Greed e le notizie (sempre del giorno prima, già chiuso). Zeri dove mancano."""
+    n = len(segnali.NOMI_GIORNALIERI) + len(segnali.NOMI_SENTIMENTO) + len(segnali.NOMI_NOTIZIE)
+    out = np.zeros((len(simboli), len(giorni_iso), n), np.float32)
+    if not simboli or not giorni_iso:
+        return out
+    sent = segnali.sentimento_per_giorno(giorni_iso)
+    notizie = segnali.notizie_per_giorno(segnali.notizie("crypto", "bitcoin OR cryptocurrency OR crypto", log=lambda m: None), giorni_iso)
+    ng = len(segnali.NOMI_GIORNALIERI)
+    for c, sym in enumerate(simboli):
+        giorni, o, h, l, cl = segnali.giornaliere(sym, "UTC", (23, 59))
+        out[c, :, :ng] = segnali.per_giorno(giorni, segnali.tabella_giornaliera(o, h, l, cl, anno=365, mese=30, settimana=7), giorni_iso)
+        out[c, :, ng:ng + 2] = sent
+        out[c, :, ng + 2:] = notizie
+    return out
 
 
 def griglia(n, passo=PASSO, avvio=AVVIO):
@@ -251,9 +292,53 @@ def caratteristiche(P, K):
         cols.append(np.broadcast_to(f, (C, len(K))))
     m60, m24 = z[60].mean(axis=0), z[1440].mean(axis=0)
     cols += [np.broadcast_to(m60, (C, len(K))), np.broadcast_to(m24, (C, len(K))), z[1440] - m24]
+    cols += segnali_crypto(P, K, sig, z)
     X = np.stack(cols, axis=-1).astype(np.float32)
     assert X.shape[-1] == N_FEATURE, X.shape
     return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0)
+
+
+def segnali_crypto(P, K, sig, z):
+    """I segnali della ricerca, per ogni crypto e istante K (solo il passato: barre fino a K-1, giorni già chiusi)."""
+    C, ult = P.lr.shape[0], K - 1
+    cK, lrK = P.c[:, ult], P.lr[:, ult]
+    out = []
+    # VWAP delle ultime 24 ore (Aziz): sopra o sotto il prezzo medio pagato
+    vol24 = P.v[:, K] - P.v[:, K - 1440]
+    vwap = (P.vc[:, K] - P.vc[:, K - 1440]) / np.maximum(vol24, 1e-12)
+    out.append(np.where(vol24 > 0, np.clip(np.log(cK / np.maximum(vwap, 1e-12)) / (sig * math.sqrt(24.0)), -8, 8), 0.0))
+    # stagionalità (Heston, Korajczyk e Sadka; Eross e altri): l'ora che comincia adesso, nei 7 giorni prima
+    st = np.zeros((C, len(K)))
+    for d in range(1, 8):
+        a = K - d * 1440
+        st += P.lr[:, a + 59] - P.lr[:, a - 1]
+    out.append(np.clip(st / 7.0 / sig, -8, 8))
+    # Bitcoin guida le altre (5 minuti e un'ora)
+    b = P.simboli.index("BTC-EUR") if "BTC-EUR" in P.simboli else None
+    for L in (5, 60):
+        riga = z[L][b] if b is not None else z[L].mean(axis=0)
+        out.append(np.broadcast_to(riga, (C, len(K))))
+    # dentro il giorno UTC: dall'inizio del giorno, prima mezz'ora (Gao e altri; Wen e altri), rottura di volatilità di
+    # Williams (apertura + metà dell'escursione di ieri) e rotture del massimo e del minimo di ieri
+    d = P.giorno[K]
+    s0 = P.inizio[d]
+    apertura = P.lr[:, np.maximum(s0 - 1, 0)]                          # il prezzo a mezzanotte: chiusura del minuto prima
+    minuti = np.maximum(K - s0, 1)
+    out.append(np.clip((lrK - apertura) / (sig * np.sqrt(minuti / 60.0)), -8, 8))
+    pm = np.where(K - s0 >= 30, P.lr[:, np.minimum(s0 + 29, P.n - 1)] - apertura, 0.0)
+    out.append(np.clip(pm / (sig * math.sqrt(0.5)), -8, 8))
+    ieri = np.maximum(d - 1, 0)
+    hi, lo = P.alto[:, ieri], P.basso[:, ieri]
+    rng = np.maximum(hi - lo, 1e-12)
+    c0 = np.exp(apertura)
+    ok = d >= 1
+    out.append(np.where(ok, np.clip((cK - (c0 + 0.5 * rng)) / rng, -5, 5), 0.0))
+    out.append(np.where(ok, np.clip(np.log(cK / hi) / (sig * math.sqrt(24.0)), -8, 8), 0.0))
+    out.append(np.where(ok, np.clip(np.log(cK / lo) / (sig * math.sqrt(24.0)), -8, 8), 0.0))
+    # anno, mese, settimana, giorno, sentimento e notizie: del giorno prima
+    E = P.esterni[:, d, :]
+    out += [E[:, :, j] for j in range(E.shape[-1])]
+    return out
 
 
 # ---------------------------------------------------------------- etichette: cosa sarebbe successo
@@ -780,9 +865,15 @@ def apprendi_previsione(D, tr, va, epoche=14, nascosti=(96, 48), seed=0, lr=1e-3
             "ritmo": scelta[2], "tipo": "previsione", "fuori": False}
 
 
+def su_misura(X, modello):
+    """Le caratteristiche che il modello conosce: uno addestrato prima dei segnali nuovi usa solo le prime (quelle di
+    allora), perché i segnali nuovi sono aggiunti in fondo."""
+    return X[..., :len(modello["media"])]
+
+
 def decisioni(modello, D, i0, i1):
     """Le azioni (0 aspetta, altrimenti orizzonte + 1) di un modello su [i0, i1), per ogni crypto."""
-    X = D.norm(D.X[:, i0:i1], modello["media"], modello["dev"]).reshape(-1, D.X.shape[-1])
+    X = D.norm(su_misura(D.X[:, i0:i1], modello), modello["media"], modello["dev"]).reshape(D.C * (i1 - i0), -1)
     Q = (modello["rete"].avanti(X) * ESCALA).reshape(D.C, i1 - i0, -1)
     return politica(Q, modello["margine"], modello.get("ritmo", 0.0), _oriz(D)), Q
 
@@ -832,7 +923,7 @@ def _bersagli_probabilita(D, i0, i1):
 
 def probabilita(modello, D, i0, i1):
     """Le probabilità di chiudere in guadagno, per crypto (o titolo), istante e orizzonte: array (C, istanti, orizzonti)."""
-    X = D.norm(D.X[:, i0:i1], modello["media"], modello["dev"]).reshape(-1, D.X.shape[-1])
+    X = D.norm(su_misura(D.X[:, i0:i1], modello), modello["media"], modello["dev"]).reshape(D.C * (i1 - i0), -1)
     return sigmoide(modello["rete"].avanti(X)).reshape(D.C, i1 - i0, -1)
 
 
@@ -841,7 +932,21 @@ def politica_probabilita(P, soglia):
     return np.where(P.max(axis=-1) >= soglia, P.argmax(axis=-1) + 1, 0)
 
 
-def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3, wd=1e-4, log=None):
+MEMORIE = (None, 90.0, 30.0)                  # mezza vita dei pesi per recenza, in giorni (None: tutto il passato conta uguale)
+
+
+def pesi_recenza(D, i0, i1, mezza_vita):
+    """Un peso per ogni campione (crypto x istante) di [i0, i1): 1 per il più recente, la metà ogni `mezza_vita` giorni
+    più indietro (López de Prado, "Advances in Financial Machine Learning", cap. 4). None: tutti 1."""
+    n = D.C * (i1 - i0)
+    if mezza_vita is None:
+        return np.ones(n, np.float32)
+    eta = (D.K[i1 - 1] - D.K[i0:i1]) / 1440.0
+    w = (0.5 ** (eta / mezza_vita)).astype(np.float32)
+    return np.broadcast_to(w, (D.C, i1 - i0)).reshape(n)
+
+
+def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3, wd=1e-4, log=None, memorie=None):
     """La rete impara, da tutte le operazioni possibili del periodo di addestramento e dal loro esito, quali chiudono in
     guadagno. Si tiene l'epoca che stima meglio le operazioni del periodo di scelta (mai viste); poi, sullo stesso periodo,
     si sceglie quante delle occasioni migliori prendere (le soglie di QUOTE): quella con la media per operazione più alta,
@@ -854,22 +959,28 @@ def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3
     Yt, Mt = _bersagli_probabilita(D, i0, i1)
     Xv = D.norm(D.X[:, va[0]:va[1]], media, dev).reshape(-1, nf)
     Yv, Mv = _bersagli_probabilita(D, *va)
-    rete = Rete([nf, *nascosti, H], seed)
     base = np.clip((Yt * Mt).sum(axis=0) / np.maximum(Mt.sum(axis=0), 1.0), 1e-4, 1 - 1e-4)
-    rete.b[-1][:] = np.log(base / (1.0 - base)).astype(np.float32)          # si parte dalla frequenza di ogni orizzonte
-    rng = np.random.default_rng(seed)
     curve, migliore = [], None
-    for e in range(epoche):
-        perdite = addestra_probabilita(rete, Xt, Yt, Mt, 1, lr=lr * (0.8 ** (e // 3)), wd=wd, rng=rng)
-        errore_v = float(_entropia(sigmoide(rete.avanti(Xv)), Yv, Mv).sum() / max(float(Mv.sum()), 1.0))
-        curve.append({"epoca": e + 1, "errore": perdite[-1], "errore_scelta": errore_v})
-        if log:
-            log("   probabilità epoca %2d: errore %.4f · scelta %.4f" % (e + 1, perdite[-1], errore_v))
-        if migliore is None or errore_v < migliore[0]:
-            migliore = (errore_v, e + 1, rete.copia())
-    _, e_best, rete_best = migliore
+    giorni_tr = (D.K[i1 - 1] - D.K[i0]) / 1440.0
+    memorie = MEMORIE if memorie is None else memorie
+    for mv in memorie:                                       # quanto contano i dati recenti: lo sceglie il periodo di scelta
+        if mv is not None and mv * 2 > giorni_tr:
+            continue
+        rete = Rete([nf, *nascosti, H], seed)
+        rete.b[-1][:] = np.log(base / (1.0 - base)).astype(np.float32)      # si parte dalla frequenza di ogni orizzonte
+        rng = np.random.default_rng(seed)
+        Mw = Mt * pesi_recenza(D, i0, i1, mv)[:, None]
+        for e in range(epoche):
+            perdite = addestra_probabilita(rete, Xt, Yt, Mw, 1, lr=lr * (0.8 ** (e // 3)), wd=wd, rng=rng)
+            errore_v = float(_entropia(sigmoide(rete.avanti(Xv)), Yv, Mv).sum() / max(float(Mv.sum()), 1.0))
+            curve.append({"memoria": mv, "epoca": e + 1, "errore": perdite[-1], "errore_scelta": errore_v})
+            if log:
+                log("   probabilità (memoria %s) epoca %2d: errore %.4f · scelta %.4f" % (mv, e + 1, perdite[-1], errore_v))
+            if migliore is None or errore_v < migliore[0]:
+                migliore = (errore_v, e + 1, rete.copia(), mv)
+    _, e_best, rete_best, memoria = migliore
     m = {"rete": rete_best, "media": media, "dev": dev, "curve": curve, "iterazione": e_best, "tipo": "probabilita",
-         "base": base.tolist()}
+         "base": base.tolist(), "memoria": memoria}
     P = probabilita(m, D, *va)
     pm = P.max(axis=-1)
     prove = []
@@ -882,6 +993,75 @@ def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3
     m.update({"soglia": scelta["soglia"], "quota": scelta["quota"], "prove": prove, "fuori": not credibile(scelta),
               "scelta": {k: scelta[k] for k in ("n", "media", "vinte", "somma")}})
     return m
+
+
+# ---------------------------------------------------------------- quali segnali sono legati a quello che succede dopo
+
+def _ranghi(x):
+    o = np.argsort(x, kind="stable")
+    r = np.empty(len(x), np.float64)
+    r[o] = np.arange(len(x))
+    return r
+
+
+def _corr(a, b):
+    a, b = a - a.mean(), b - b.mean()
+    d = math.sqrt(float((a * a).sum() * (b * b).sum()))
+    return float((a * b).sum() / d) if d > 0 else 0.0
+
+
+def studio_segnali(D, nomi, periodi, costo, separa, fonti=None, n_max=400_000, seme=0):
+    """Per ogni segnale (colonna di D.X): la correlazione di rango con l'esito netto di ogni orizzonte in ogni periodo
+    (periodi: [(nome, primo istante)], per esempio l'ultimo anno, mese, settimana, giorno), l'orizzonte e il verso in cui
+    conta di più (scelti sui dati prima di `separa`) e una prova fuori campione: comprando dopo `separa` solo quando il
+    segnale è nel decimo migliore per quel verso (soglia presa dai dati prima), una posizione alla volta, cosa sarebbe
+    successo. Ritorna una lista ordinata per forza del legame nel periodo più lungo."""
+    Dc = D.con_costo(costo)
+    H = len(_oriz(D))
+    rng = np.random.default_rng(seme)
+    out = []
+    for f, nome in enumerate(nomi):
+        riga = {"nome": nome, "fonte": (fonti or {}).get(nome), "ic": {}}
+        for pn, i0 in periodi:
+            x = Dc.X[:, i0:, f].reshape(-1)
+            if x.std() == 0:
+                riga["ic"][pn] = [0.0] * H
+                continue
+            vals = []
+            for h in range(H):
+                ok = Dc.OK[:, i0:, h].reshape(-1)
+                xa, ra = x[ok], Dc.R[:, i0:, h].reshape(-1)[ok]
+                if len(xa) > n_max:
+                    sel = rng.choice(len(xa), n_max, replace=False)
+                    xa, ra = xa[sel], ra[sel]
+                vals.append(_corr(_ranghi(xa), _ranghi(ra)) if len(xa) > 30 else 0.0)
+            riga["ic"][pn] = vals
+        # orizzonte e verso dai dati prima di `separa` (il periodo più lungo, senza la parte finale)
+        i0 = periodi[0][1]
+        x_prima = Dc.X[:, i0:separa, f]
+        if x_prima.std() == 0 or separa <= i0:
+            riga.update({"orizzonte": None, "verso": 0, "prova": None})
+            out.append(riga)
+            continue
+        ic_prima = []
+        for h in range(H):
+            ok = Dc.OK[:, i0:separa, h].reshape(-1)
+            xa, ra = x_prima.reshape(-1)[ok], Dc.R[:, i0:separa, h].reshape(-1)[ok]
+            if len(xa) > n_max:
+                sel = rng.choice(len(xa), n_max, replace=False)
+                xa, ra = xa[sel], ra[sel]
+            ic_prima.append(_corr(_ranghi(xa), _ranghi(ra)) if len(xa) > 30 else 0.0)
+        h_best = int(np.argmax(np.abs(ic_prima)))
+        verso = 1 if ic_prima[h_best] >= 0 else -1
+        soglia = float(np.quantile(x_prima, 0.9 if verso > 0 else 0.1))
+        xd = Dc.X[:, separa:, f]
+        az = np.where((xd >= soglia) if verso > 0 else (xd <= soglia), h_best + 1, 0)
+        st = statistiche(esegui(Dc, az, separa, Dc.N), D.C, Dc.N - separa, _passo(D), H)
+        riga.update({"orizzonte": _oriz(D)[h_best], "verso": verso, "ic_prima": ic_prima[h_best],
+                     "prova": {"n": st["n"], "vinte": st["vinte"], "media": st["media"]}})
+        out.append(riga)
+    forza = lambda r: max((abs(v) for v in r["ic"][periodi[0][0]]), default=0.0)
+    return sorted(out, key=forza, reverse=True)
 
 
 def calibrazione(pp, rr, fasce=FASCE):
@@ -953,13 +1133,14 @@ def modello_probabilita(D, costo, seme=0, log=None, giorni_val=30, embargo=2, ma
 def json_probabilita(m, data=None):
     """Il modello della probabilità per il JSON (pesi compresi: li usa il robot)."""
     return {"tipo": "probabilita", "fuori": m["fuori"], "iterazione": m["iterazione"], "soglia": m["soglia"], "quota": m["quota"],
-            "scelta": m["scelta"], "prove": m["prove"], "base": m["base"], "addestrato": data,
+            "scelta": m["scelta"], "prove": m["prove"], "base": m["base"], "addestrato": data, "memoria": m.get("memoria"),
             "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
 
 
 def esperienza(storia, m, data, n_dati):
     """Una riga in più nel diario degli addestramenti (gli ultimi 60): cosa ha scelto la rete ogni volta che ha imparato."""
     riga = {"data": data, "dati": n_dati, "soglia": round(m["soglia"], 4), "quota": m["quota"], "fuori": m["fuori"],
+            "memoria": m.get("memoria"),
             "n": m["scelta"]["n"], "vinte": round(m["scelta"]["vinte"], 4), "media": round(m["scelta"]["media"], 6)}
     storia = [r for r in (storia or []) if r.get("data") != data] + [riga]
     return storia[-60:]
@@ -967,18 +1148,66 @@ def esperienza(storia, m, data, n_dati):
 
 # ---------------------------------------------------------------- riferimenti e verifica a finestre mobili
 
+# da dove viene ogni segnale (per l'app): studi, libri, trader
+FONTI_SEGNALI = {
+    "rend_5": "rendimenti a più scale: momento e inversione (Jegadeesh 1990; Liu e Tsyvinski 2021)",
+    "flusso_15": "squilibrio acquisti/vendite (Cont, Kukanov e Stoikov 2014)", "flusso_60": "squilibrio acquisti/vendite (Cont, Kukanov e Stoikov 2014)",
+    "flusso_240": "squilibrio acquisti/vendite (Cont, Kukanov e Stoikov 2014)", "flusso_1440": "squilibrio acquisti/vendite (Cont, Kukanov e Stoikov 2014)",
+    "log_sigma_ora": "volatilità (Corsi 2009)", "vol_1h_su_24h": "volatilità a più scale (Corsi 2009)", "vol_24h_su_7g": "volatilità a più scale (Corsi 2009)",
+    "ora_sin": "ora del giorno (Eross e altri 2019)", "ora_cos": "ora del giorno (Eross e altri 2019)",
+    "vwap_24h": "VWAP (Aziz, How to Day Trade for a Living)", "stagione_1h": "stagionalità oraria (Heston, Korajczyk e Sadka 2010)",
+    "btc_5": "Bitcoin guida le altre crypto", "btc_60": "Bitcoin guida le altre crypto",
+    "dal_giorno": "momento dentro la giornata (Gao e altri 2018)", "prima_mezzora": "prima mezz'ora (Gao e altri 2018; Wen e altri 2022)",
+    "williams": "rottura di volatilità (Larry Williams)", "rottura_su_ieri": "massimo di ieri (Crabel)", "rottura_giu_ieri": "minimo di ieri (Crabel)",
+    "g_anno": "momento di un anno (Moskowitz, Ooi e Pedersen 2012)", "g_mese": "momento di un mese (Liu e Tsyvinski 2021)",
+    "g_settimana": "momento di una settimana (Liu e Tsyvinski 2021)", "g_giorno": "ritorno del giorno prima (Jegadeesh 1990)",
+    "g_media200": "media di 200 giorni (Detzel e altri 2021)", "g_max52": "massimo di 52 settimane (George e Hwang 2004)",
+    "g_rsi2": "RSI a 2 giorni (Connors e Raschke)", "g_nr7": "giornata stretta NR7 (Crabel)", "g_range_atr": "escursione di ieri sull'ATR (Crabel)",
+    "g_vol_mese": "volatilità del mese (Corsi 2009)", "paura_avidita": "Fear & Greed (alternative.me)", "paura_avidita_7g": "Fear & Greed, variazione in 7 giorni",
+    "notizie_volume": "quantità di notizie (GDELT; Tetlock 2007)", "notizie_tono": "tono delle notizie (GDELT; Tetlock 2007)",
+}
+
+
+def periodi_crypto(D, margine_fine=2.0):
+    """Ultimo anno, mese, settimana e giorno con gli esiti già noti (gli orizzonti lunghi guardano avanti 2 giorni)."""
+    fine = D.giorni - margine_fine
+    return [(n, D.indice(max(fine - g, _avvio(D) / 1440.0))) for n, g in (("anno", 365), ("mese", 30), ("settimana", 7), ("giorno", 1))]
+
+
+REGOLE_CRYPTO = ("ribasso", "momento", "sempre_1g", "williams", "prima_mezzora", "flusso", "btc_guida", "paura")
+
+
 def az_regola(D, i0, i1, nome):
-    """Tre regole semplici fissate prima di guardare i risultati, per confronto: un ribasso a 4 ore (rendimento a 4 ore
-    sotto -2 volatilità: compra e tieni 4 ore), un rialzo a 1 giorno (sopra +1,5: compra e tieni un giorno) e comprare
-    sempre e tenere un giorno."""
+    """Regole fissate prima di guardare i risultati, per confronto. Tre semplici: un ribasso a 4 ore (rendimento a 4 ore
+    sotto -2 volatilità: compra e tieni 4 ore), un rialzo a 1 giorno (sopra +1,5: tieni un giorno), comprare sempre e
+    tenere un giorno. Cinque dai libri e dagli studi: la rottura di volatilità di Larry Williams (sopra l'apertura del
+    giorno più metà dell'escursione di ieri, appena rotta: tieni 8 ore); il momento dentro la giornata (Gao e altri; Wen e
+    altri: alle 23 UTC, se la prima mezz'ora del giorno è salita, tieni l'ultima ora); il flusso degli ordini (Cont e
+    altri: acquisti a mercato insistenti e prezzo in salita nell'ultima ora, tieni un'ora); Bitcoin che guida (è salito
+    nell'ultima ora, l'altra crypto non ancora: tieni un'ora); la paura estrema (Fear & Greed sotto 15 dopo un giorno
+    di ribasso: tieni un giorno)."""
     X = D.X[:, i0:i1]
+    F = NOMI_FEATURE.index
     az = np.zeros(X.shape[:2], dtype=int)
     if nome == "ribasso":
-        az[X[:, :, NOMI_FEATURE.index("rend_240")] < -2.0] = 1 + ORIZZONTI.index(240)
+        az[X[:, :, F("rend_240")] < -2.0] = 1 + ORIZZONTI.index(240)
     elif nome == "momento":
-        az[X[:, :, NOMI_FEATURE.index("rend_1440")] > 1.5] = 1 + ORIZZONTI.index(1440)
+        az[X[:, :, F("rend_1440")] > 1.5] = 1 + ORIZZONTI.index(1440)
     elif nome == "sempre_1g":
         az[:] = 1 + ORIZZONTI.index(1440)
+    elif nome == "williams":
+        w = X[:, :, F("williams")]
+        az[(w > 0.0) & (w <= 0.25)] = 1 + ORIZZONTI.index(480)
+    elif nome == "prima_mezzora":
+        ora = ((D.M.t0 + 60.0 * D.K[i0:i1]) % 86400) / 3600.0
+        sel = np.isclose(ora, 23.0)
+        az[:, sel] = np.where(X[:, sel, F("prima_mezzora")] > 0.5, 1 + ORIZZONTI.index(60), 0)
+    elif nome == "flusso":
+        az[(X[:, :, F("flusso_60")] > 0.3) & (X[:, :, F("rend_60")] > 1.0)] = 1 + ORIZZONTI.index(60)
+    elif nome == "btc_guida":
+        az[(X[:, :, F("btc_60")] > 1.5) & (X[:, :, F("rend_60")] < 0.5)] = 1 + ORIZZONTI.index(60)
+    elif nome == "paura":
+        az[(X[:, :, F("paura_avidita")] < -1.4) & (X[:, :, F("rend_1440")] < -1.0)] = 1 + ORIZZONTI.index(1440)
     else:
         raise ValueError(nome)
     return az
@@ -993,8 +1222,8 @@ def _giorni(D, i0, i1):
     return int(D.K[i0] // 1440), int(D.K[i1 - 1] // 1440) + 1
 
 
-def regole_crypto():
-    return {n: (lambda D, i0, i1, n=n: az_regola(D, i0, i1, n)) for n in ("ribasso", "momento", "sempre_1g")}
+def regole_crypto(nomi=REGOLE_CRYPTO):
+    return {n: (lambda D, i0, i1, n=n: az_regola(D, i0, i1, n)) for n in nomi}
 
 
 def valuta_costo(D, wins, costo, iterazioni=14, epoche=3, log=None, seme=0, regole=None):
@@ -1176,6 +1405,11 @@ def modello_finale(D, costo, iterazioni=14, seme=0, log=None, giorni_val=30, emb
 
 def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log=print, salva=True):
     t0 = time.time()
+    try:                                                     # il diario degli addestramenti continua da quello di prima
+        with open(MODELLO, encoding="utf-8") as fh:
+            diario = json.load(fh).get("esperienza")
+    except (OSError, ValueError):
+        diario = None
     M = carica_mondo(max_giorni=giorni)
     D = Dati(M)
     wins = finestre(D)
@@ -1195,6 +1429,8 @@ def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log
     ris["orizzonti_scambi"] = studio_orizzonti()
     log("[rete] informazione fuori campione della previsione, per orizzonte")
     ris["informazione"] = ic_per_orizzonte(D, wins)
+    log("[rete] quali segnali sono legati a quello che succede dopo: ultimo anno, mese, settimana, giorno")
+    ris["segnali"] = studio_segnali(D, NOMI_FEATURE, periodi_crypto(D), costi[0], D.indice(D.giorni - 2.0 - 30), FONTI_SEGNALI)
     log("[rete] sovradattamento: periodo di addestramento contro periodo mai visto")
     ris["sovradattamento"] = sovradattamento(D, wins, costi[0], iterazioni, log=log)
     for c in costi:
@@ -1211,7 +1447,7 @@ def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log
         mp = modello_probabilita(D, c)
         ris["probabilita"]["%g" % c] = json_probabilita(mp, fine_dati)
         if c == costi[0]:
-            ris["esperienza"] = esperienza(ris.get("esperienza"), mp, fine_dati, int(M.n / 1440))
+            ris["esperienza"] = esperienza(diario, mp, fine_dati, int(M.n / 1440))
         m = modello_finale(D, c, iterazioni=iterazioni)
         ris["modelli"]["%g" % c] = {"tipo": "q", "fuori": m["fuori"], "iterazione": m["iterazione"], "margine": m["margine"],
                                     "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
@@ -1300,7 +1536,7 @@ def valori_a(modello, M, k):
     """I valori che il modello dà a ogni mossa adesso, per ogni crypto: array (crypto, 1 + orizzonti), in frazioni.
     k è il minuto (indice) in cui si decide: contano solo le barre prima di k."""
     P = Pronto(M)
-    X = caratteristiche(P, np.array([k]))[:, 0, :]
+    X = su_misura(caratteristiche(P, np.array([k]))[:, 0, :], modello)
     Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32)
     return modello["rete"].avanti(Xn) * ESCALA, sigma_ora(P, np.array([k]))[:, 0]
 
@@ -1315,6 +1551,7 @@ def scelte_modello(modello, X, margine=None):
     è il vantaggio di comprare sull'attesa e si compra oltre il margine; per il modello della probabilità è la probabilità
     di chiudere in guadagno dell'orizzonte migliore e si compra dalla soglia (margine, se dato, la sostituisce)."""
     C, N = X.shape[:2]
+    X = su_misura(X, modello)
     Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32).reshape(-1, X.shape[-1])
     out = modello["rete"].avanti(Xn).reshape(C, N, -1)
     if modello.get("tipo") == "probabilita":

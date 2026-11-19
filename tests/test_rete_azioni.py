@@ -15,6 +15,7 @@ from unittest import mock
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ["FINANZA_SENZA_RETE"] = "1"                                  # i segnali esterni solo dalla cache: niente rete
 import rete  # noqa: E402
 import rete_azioni as A  # noqa: E402
 
@@ -289,6 +290,22 @@ class Archivio(unittest.TestCase):
             with open(os.path.join(t, "X.MI.npz"), "wb") as fh:                  # archivio rovinato: si riparte dalle barre nuove
                 fh.write(b"rotto")
             self.assertEqual([r[0] for r in A.archivia("X.MI", dopo, cartella=t)], [400, 700])
+
+
+class RegoleDaiLibri(unittest.TestCase):
+    def test_ogni_regola_decide_solo_nel_suo_momento(self):
+        D = A.DatiAzioni(barre_finte(sedute=8, titoli=3))
+        R = A.regole(D)
+        for nome in ("orb_in_play", "momento_intraday", "buy_on_gap", "vwap_ritorno", "stagione", "apertura_chiusura"):
+            self.assertIn(nome, R)
+            az = R[nome](D, 0, D.N)
+            self.assertEqual(az.shape, (D.C, D.N))
+        j = np.broadcast_to(D.G % A.BARRE, (D.C, D.N))
+        self.assertTrue(np.all(j[R["momento_intraday"](D, 0, D.N) > 0] == 96))          # alle 17:00
+        self.assertTrue(np.all(j[R["buy_on_gap"](D, 0, D.N) > 0] == A.PRIMA))           # alle 9:10
+        orb = R["orb_in_play"](D, 0, D.N)
+        self.assertTrue(np.all((j[orb > 0] >= A.BARRE_OR) & (j[orb > 0] <= 6)))
+        self.assertTrue(np.all(orb[orb > 0] == 1 + A.ORIZZONTI.index(510)))              # fino alla chiusura
 
 
 class RobotConProbabilita(unittest.TestCase):

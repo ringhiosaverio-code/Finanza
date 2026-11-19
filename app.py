@@ -195,6 +195,31 @@ def rete_ita_robot_app(log=print):
         return None
 
 
+def sentimento(log=print):
+    """Il Fear & Greed di oggi e di una settimana fa, e il giorno delle ultime notizie scaricate da GDELT (per l'app)."""
+    try:
+        import datetime as dt
+        import segnali
+        fg = segnali.fear_greed(log=log)
+        if not fg:
+            return None
+        oggi = max(fg)
+        prima = (dt.date.fromisoformat(oggi) - dt.timedelta(days=7)).isoformat()
+        notizie = segnali.notizie("crypto", "bitcoin OR cryptocurrency OR crypto", log=lambda m: None)
+        return {"data": oggi, "valore": fg[oggi], "prima": fg.get(prima), "notizie": max(notizie) if notizie else None}
+    except Exception as e:                                     # rete o file: l'app si genera lo stesso
+        log("[app] sentimento saltato: %s" % str(e)[:120])
+        return None
+
+
+def fonti_segnali():
+    try:
+        import segnali
+        return [list(x) for x in segnali.FONTI]
+    except Exception:
+        return None
+
+
 def calendari():
     """I giorni di borsa dal 2024 al 2027 (NYSE e Borsa Italiana): servono all'app per contare la data
     di vendita di un titolo comprato in un giorno qualsiasi."""
@@ -258,6 +283,8 @@ def leggero(out, log=print):
     data["rete"] = rete_per_app() or data.get("rete")                     # i risultati della rete, se sono stati rifatti
     data["rete_robot"] = rete_robot_app(log) or data.get("rete_robot")    # le operazioni della rete per il robot
     data["rete_ita"] = rete_ita_app(log) or data.get("rete_ita")          # la rete delle azioni italiane
+    data["sentimento"] = sentimento(log) or data.get("sentimento")
+    data["segnali_fonti"] = fonti_segnali() or data.get("segnali_fonti")
     data["rete_ita_robot"] = rete_ita_robot_app(log) or data.get("rete_ita_robot")
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
@@ -290,6 +317,7 @@ def main(argv=None):
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
+            "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "libri": load_json(os.path.join(ROOT, "libri.json")),
             "giornata": piano_giornata(),

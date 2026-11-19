@@ -12,6 +12,7 @@ from unittest import mock
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+os.environ["FINANZA_SENZA_RETE"] = "1"                                  # i segnali esterni solo dalla cache: niente rete
 import rete as R  # noqa: E402
 import rete_live as L  # noqa: E402
 

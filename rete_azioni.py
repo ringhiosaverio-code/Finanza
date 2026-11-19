@@ -30,6 +30,7 @@ from zoneinfo import ZoneInfo
 import numpy as np
 
 import rete
+import segnali
 import settimana
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -49,8 +50,18 @@ SIGMA_MIN = 0.0005
 RITARDI = (1, 3, 6, 12, 24, 48, 102, 204, 510)  # in barre: da 5 minuti a 5 sedute
 NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_2h_su_5g", "oggi", "salto", "pos_oggi",
                  "da_ieri", "minuti", "minuti_sin", "minuti_cos", "sett_sin", "sett_cos", "volume_1h", "mercato_1h",
-                 "mercato_seduta", "relativo_seduta"])
+                 "mercato_seduta", "relativo_seduta"]
+                # i segnali della ricerca e dei libri (vedi segnali.py): opening range (Crabel; Zarattini e Aziz), volume
+                # relativo ("stocks in play"), VWAP (Aziz), prima mezz'ora (Gao e altri), stagionalità della stessa
+                # mezz'ora (Heston, Korajczyk e Sadka)...
+                + ["sopra_or", "sotto_or", "ampiezza_or", "volume_relativo", "vwap_oggi", "prima_mezzora", "stagione_30m"]
+                # ...anno, mese, settimana, giorno e gli altri dalle chiusure giornaliere, salto della notte sull'ATR
+                # (Chan, buy-on-gap; Lou, Polk e Skouras) e le notizie sulla Borsa di Milano
+                + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + ["salto_atr"] + list(segnali.NOMI_NOTIZIE))
 N_FEATURE = len(NOMI_FEATURE)
+N_BASE = NOMI_FEATURE.index("sopra_or")
+BARRE_OR = 3                                    # opening range: i primi 15 minuti
+SEDUTE_STAGIONE = 10                            # stagionalità e volume relativo: le ultime 10 sedute
 
 
 # ---------------------------------------------------------------- dati: barre da 5 minuti di Yahoo
@@ -156,6 +167,81 @@ def carica(simboli=None, max_age=600, log=print):
 
 # ---------------------------------------------------------------- caratteristiche ed esiti
 
+def esterni_azioni(B):
+    """Per titolo e seduta (del giorno prima, già chiuso): i segnali giornalieri di segnali.py, l'ATR a 14 giorni e le
+    notizie sulla Borsa di Milano. Si calcolano una volta per insieme di barre."""
+    if getattr(B, "_esterni", None) is not None:
+        return B._esterni
+    giorni = [g.isoformat() for g in B.giorni]
+    ng = len(segnali.NOMI_GIORNALIERI)
+    tab = np.zeros((B.C, B.S, ng), np.float32)
+    atr = np.zeros((B.C, B.S), np.float32)
+    for c, sym in enumerate(B.simboli):
+        gg, o, h, l, cl = segnali.giornaliere(sym, "Europe/Rome", (17, 35))
+        if len(gg):
+            tab[c] = segnali.per_giorno(gg, segnali.tabella_giornaliera(o, h, l, cl), giorni)
+            atr[c] = segnali.per_giorno(gg, segnali.atr_giornaliero(o, h, l, cl)[:, None], giorni)[:, 0]
+    notizie = segnali.notizie_per_giorno(segnali.notizie(
+        "borsa_milano", '("Piazza Affari" OR "Borsa di Milano" OR "FTSE MIB") sourcelang:italian', log=lambda m: None), giorni)
+    B._esterni = (tab, atr, notizie)
+    return B._esterni
+
+
+def segnali_azioni(B, G, sig, lc, s0, hi, lo, vc):
+    """I segnali della ricerca per ogni titolo e barra di decisione G: solo barre prima di G e giorni già chiusi."""
+    C, N = B.C, len(G)
+    ult = G - 1
+    j = G - s0                                                                   # barre di oggi già chiuse
+    cK = B.c[:, ult]
+    s15 = sig * math.sqrt(BARRE_OR * BARRA / 60.0)
+    out = []
+    # opening range dei primi 15 minuti (o di quelli già passati): sopra il massimo, sotto il minimo, quanto è largo
+    fine_or = s0 + np.minimum(j, BARRE_OR) - 1
+    hor, lor = hi[:, fine_or], lo[:, fine_or]
+    out.append(np.clip(np.log(cK / hor) / s15, -8, 8))
+    out.append(np.clip(np.log(cK / lor) / s15, -8, 8))
+    out.append(np.clip(np.log(np.maximum(hor / lor, 1.0 + 1e-9)) / s15, 0, 10))
+    # volume relativo: il volume di oggi fin qui contro quello delle ultime sedute alla stessa ora (stocks in play)
+    oggi = vc[:, G] - vc[:, s0]
+    somma, quante = np.zeros((C, N)), np.zeros(N)
+    for d in range(1, SEDUTE_STAGIONE + 1):
+        a = s0 - d * BARRE
+        ok = a >= 0
+        aa = np.where(ok, a, 0)
+        somma += np.where(ok, vc[:, aa + j] - vc[:, aa], 0.0)
+        quante += ok
+    out.append(np.where(quante > 0, np.clip(np.log((oggi + 1.0) / (somma / np.maximum(quante, 1) + 1.0)), -5, 5), 0.0))
+    # VWAP di oggi (Aziz): il prezzo contro il prezzo medio pagato oggi
+    pv = _cum(B.v * B.c)
+    vol_oggi = vc[:, G] - vc[:, s0]
+    vwap = (pv[:, G] - pv[:, s0]) / np.maximum(vol_oggi, 1e-9)
+    minuti = np.maximum(j * BARRA, BARRA)
+    out.append(np.where(vol_oggi > 0, np.clip(np.log(cK / np.maximum(vwap, 1e-12)) / (sig * np.sqrt(minuti / 60.0)), -8, 8), 0.0))
+    # prima mezz'ora (Gao, Han, Li e Zhou): dalle 9:30 in poi, il rendimento delle 9:00-9:30
+    pm = np.where(j >= 6, lc[:, np.minimum(s0 + 5, B.n - 1)] - np.log(B.o[:, s0]), 0.0)
+    out.append(np.clip(pm / (sig * math.sqrt(0.5)), -8, 8))
+    # stagionalità (Heston, Korajczyk e Sadka): la mezz'ora che comincia adesso, nelle ultime sedute
+    somma, quante = np.zeros((C, N)), np.zeros(N)
+    fine = np.minimum(j + 5, BARRE - 1)
+    for d in range(1, SEDUTE_STAGIONE + 1):
+        a = s0 - d * BARRE
+        ok = a >= 0
+        aa = np.where(ok, a, 0)
+        somma += np.where(ok, lc[:, aa + fine] - lc[:, aa + j - 1], 0.0)
+        quante += ok
+    out.append(np.clip(somma / np.maximum(quante, 1) / (sig * math.sqrt(0.5)), -8, 8))
+    # giornalieri (anno, mese, settimana, giorno...), salto della notte sull'ATR, notizie: della seduta prima
+    tab, atr, notizie = esterni_azioni(B)
+    s = G // BARRE
+    T = tab[:, s, :]
+    out += [T[:, :, k] for k in range(T.shape[-1])]
+    salto = B.o[:, s0] - B.c[:, s0 - 1]
+    a = atr[:, s]
+    out.append(np.where(a > 0, np.clip(salto / np.maximum(a, 1e-12), -6, 6), 0.0))
+    out += [np.broadcast_to(notizie[s, k], (C, N)) for k in range(notizie.shape[-1])]
+    return out
+
+
 def _cum(x):
     return np.concatenate([np.zeros(x.shape[:-1] + (1,)), np.cumsum(x, axis=-1)], axis=-1)
 
@@ -211,6 +297,7 @@ def caratteristiche(B, G):
     cols.append(np.log((v12 + 1.0) / (v510 + 1.0)))
     m12, m102 = z[12].mean(axis=0), z[102].mean(axis=0)
     cols += [np.broadcast_to(m12, (B.C, len(G))), np.broadcast_to(m102, (B.C, len(G))), z[102] - m102]
+    cols += segnali_azioni(B, G, sig, lc, s0, hi, lo, vc)
     X = np.stack(cols, axis=-1).astype(np.float32)
     assert X.shape[-1] == N_FEATURE, X.shape
     return np.nan_to_num(X, nan=0.0, posinf=0.0, neginf=0.0), sig
@@ -285,10 +372,63 @@ def regole(D):
         az = np.zeros((D.C, i1 - i0), dtype=int)
         az[D.X[:, i0:i1, z] > 2.0] = 1 + ih
         return az
-    return {"apertura_chiusura": apertura, "ribasso_1h": ribasso, "rialzo_1h": rialzo}
+    F = NOMI_FEATURE.index
+    ic, i30, i60 = ORIZZONTI.index(510), ORIZZONTI.index(30), ORIZZONTI.index(60)
+
+    def quando(D, i0, i1, condizione, h):
+        az = np.zeros((D.C, i1 - i0), dtype=int)
+        az[condizione] = 1 + h
+        return az
+
+    def barra(D, i0, i1):
+        return np.broadcast_to(D.G[i0:i1] % BARRE, (D.C, i1 - i0))
+
+    def orb(D, i0, i1):                    # Zarattini e Aziz; Crabel: rottura del range dei primi 15 minuti, titolo "in play"
+        X, j = D.X[:, i0:i1], barra(D, i0, i1)
+        return quando(D, i0, i1, (j >= BARRE_OR) & (j <= 6) & (X[..., F("volume_relativo")] > 1.0) & (X[..., F("sopra_or")] > 0), ic)
+
+    def momento_intraday(D, i0, i1):       # Gao, Han, Li e Zhou: alle 17:00, se la prima mezz'ora è salita, tieni fino alla chiusura
+        X, j = D.X[:, i0:i1], barra(D, i0, i1)
+        return quando(D, i0, i1, (j == 96) & (X[..., F("prima_mezzora")] > 0.5), ic)
+
+    def buy_on_gap(D, i0, i1):             # Chan: aperto più di un ATR sotto la chiusura di ieri, compra alle 9:10 e vendi in chiusura
+        X, j = D.X[:, i0:i1], barra(D, i0, i1)
+        return quando(D, i0, i1, (j == PRIMA) & (X[..., F("salto_atr")] < -1.0), ic)
+
+    def vwap_ritorno(D, i0, i1):           # Aziz: molto sotto il VWAP di oggi, tieni un'ora
+        X, j = D.X[:, i0:i1], barra(D, i0, i1)
+        return quando(D, i0, i1, (X[..., F("vwap_oggi")] < -2.0) & (j < 90), i60)
+
+    def stagione(D, i0, i1):               # Heston, Korajczyk e Sadka: la stessa mezz'ora è salita nelle ultime sedute
+        X = D.X[:, i0:i1]
+        return quando(D, i0, i1, X[..., F("stagione_30m")] > 1.0, i30)
+
+    return {"apertura_chiusura": apertura, "ribasso_1h": ribasso, "rialzo_1h": rialzo, "orb_in_play": orb,
+            "momento_intraday": momento_intraday, "buy_on_gap": buy_on_gap, "vwap_ritorno": vwap_ritorno, "stagione": stagione}
 
 
 # ---------------------------------------------------------------- studia
+
+FONTI_SEGNALI = dict(rete.FONTI_SEGNALI, **{
+    "sopra_or": "opening range (Crabel; Zarattini e Aziz 2023)", "sotto_or": "opening range (Crabel; Zarattini e Aziz 2023)",
+    "ampiezza_or": "ampiezza dell'opening range (Crabel)", "volume_relativo": "volume relativo, stocks in play (Zarattini, Barbon e Aziz 2024)",
+    "vwap_oggi": "VWAP di oggi (Aziz)", "prima_mezzora": "prima mezz'ora (Gao, Han, Li e Zhou 2018)",
+    "stagione_30m": "stessa mezz'ora nelle sedute prima (Heston, Korajczyk e Sadka 2010)",
+    "salto_atr": "salto della notte sull'ATR (Chan; Lou, Polk e Skouras 2019)", "salto": "salto della notte (Lou, Polk e Skouras 2019)",
+    "g_anno": "momento di un anno (Moskowitz, Ooi e Pedersen 2012)", "g_mese": "momento di un mese (Jegadeesh e Titman)",
+    "g_settimana": "inversione di una settimana (Lehmann 1990)", "g_giorno": "ritorno del giorno prima (Jegadeesh 1990)",
+    "notizie_volume": "quantità di notizie su Piazza Affari (GDELT; Tetlock 2007)", "notizie_tono": "tono delle notizie su Piazza Affari (GDELT; Tetlock 2007)",
+    "minuti": "ora della seduta", "oggi": "dall'apertura di oggi", "da_ieri": "dalla chiusura di ieri", "pos_oggi": "posizione nel minimo-massimo di oggi",
+})
+
+
+def periodi_sedute(D):
+    """Tutte le sedute, l'ultimo mese (21), l'ultima settimana (5) e l'ultima seduta, come primo istante di ognuno."""
+    seduta = D.G // BARRE
+    ultima = int(seduta[-1])
+    inizio = lambda n: int(np.searchsorted(seduta, ultima - n + 1))
+    return [("tutte", 0), ("mese", inizio(21)), ("settimana", inizio(5)), ("giorno", inizio(1))]
+
 
 FINESTRE = dict(giorni_test=14, giorni_val=14, embargo=1, min_addestramento=14, max_finestre=8, margine_fine=1.0)
 
@@ -320,6 +460,9 @@ def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
            "incondizionato": rete.incondizionato(D, costi[0]), "costi": {}, "modelli": {}, "probabilita": {}}
     if wins:
         ris["informazione"] = rete.ic_per_orizzonte(D, wins, costo=costi[0])
+    log("[rete_azioni] quali segnali sono legati a quello che succede dopo: tutte le sedute, ultimo mese, settimana, giorno")
+    per = periodi_sedute(D)
+    ris["segnali"] = rete.studio_segnali(D, NOMI_FEATURE, per, costi[0], per[1][1], FONTI_SEGNALI)
     for c in costi:
         log("[rete_azioni] costo %.2f %% per lato" % (100 * c))
         if wins:
