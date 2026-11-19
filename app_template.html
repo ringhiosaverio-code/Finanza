@@ -1096,6 +1096,7 @@ function renderOggi() {
       ${x.s ? verdettoHTML(giudizio(x.s), true) : ''}
     </article>`; }).join('') : '<div class="card empty">Nessuno strumento con questi filtri oggi.</div>'}</div>
   ${!oggiSt.tutti && filtered.length > 10 ? `<button type="button" class="go" id="o-tutti" style="justify-self:center">Mostra tutti (${filtered.length})</button>` : ''}
+  ${reteLungoHTML()}
   <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (prezzi corretti per dividendi e split, tasse escluse). Anche con il ${all.length ? p100(all[0].p) : '70 %'} di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
   v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
   $('#o-ced').addEventListener('change', e => { oggiSt.cedola = e.target.checked; renderOggi(); });
@@ -1406,6 +1407,31 @@ function renderDemo() {
 }
 
 /* ---------------- crypto ---------------- */
+/* ---------------- medio e lungo periodo con la rete neurale (rete_lungo.py) ---------------- */
+const CAT_LUNGO = {usa: 'Azioni USA', italia: 'Azioni italiane', etf: 'ETF azionari', bond: 'ETF obbligazionari', oro: 'Oro e materie prime', crypto: 'Crypto'};
+function reteLungoHTML(solo) {
+  const L = D.rete_lungo; if (!L || !L.verifica || !L.verifica.orizzonti) return '';
+  const V = L.verifica, O = L.orizzonti, N = L.nomi_orizzonti;
+  const righe = O.map((h, j) => { const x = V.orizzonti[String(h)]; if (!x) return '';
+    return `<tr><td class="l"><b>${esc(N[j])}</b></td><td>${x.auc != null ? nf(x.auc, 3) : '–'}</td><td class="${x.scelte.media >= 0 ? 'pos' : 'neg'}"><b>${pc(x.scelte.media, 2)}</b><br><span class="note">${p100(x.scelte.vinte)} in guadagno</span></td><td class="${x.tutti.media >= 0 ? 'pos' : 'neg'}">${pc(x.tutti.media, 2)}<br><span class="note">${p100(x.tutti.vinte)}</span></td><td class="${x.momento.media >= 0 ? 'pos' : 'neg'}">${pc(x.momento.media, 2)}<br><span class="note">${p100(x.momento.vinte)}</span></td><td class="${(x.stesso_mix || 0) >= 0 ? 'pos' : 'neg'}">${x.stesso_mix != null ? pc(x.stesso_mix, 2) : '–'}<br><span class="note">${x.composizione ? p100(x.composizione.crypto || 0) + ' crypto' : ''}</span></td><td class="${x.scarto >= 0 ? 'pos' : 'neg'}">${pc(x.scarto, 2)}<br><span class="note">t ${nf(x.t, 1)}</span></td></tr>`; }).join('');
+  const x30 = V.orizzonti['30'] || V.orizzonti[String(O[1])], x7 = V.orizzonti[String(O[0])];
+  const regge = x => x && x.t >= 2 && x.scelte.media > x.tutti.media && x.scelte.media > x.momento.media && x.scelte.media > (x.stesso_mix || 0);
+  const buono = regge(x30) || regge(x7);
+  const segn = (L.segnali || []).slice(0, 12).map(s => { const v = s.ic.tutte[1], a = s.ic.anno[1];
+    return `<tr><td class="l" style="white-space:normal"><b>${esc(s.fonte || s.nome)}</b>${s.mondo ? ' <span class="chip media">mondo</span>' : ''}</td><td class="${v >= 0 ? 'pos' : 'neg'}">${nf(v, 3)}</td><td class="${s.ic['3 anni'][1] >= 0 ? 'pos' : 'neg'}">${nf(s.ic['3 anni'][1], 3)}</td><td class="${a >= 0 ? 'pos' : 'neg'}">${nf(a, 3)}</td></tr>`; }).join('');
+  const scelte = O.map((h, j) => { const lista = ((L.oggi || {})[String(h)] || []).filter(o => !solo || o.categoria === solo).slice(0, 8);
+    return lista.length ? `<p class="note" style="margin-top:6px"><b>${esc(N[j])}</b> (media di tutti ${p100((L.oggi || {})[h + '_media'] || 0)}): ${lista.map(o => `<b>${esc(tk(o.sym))}</b> ${p100(o.probabilita)} <span class="note">${esc(CAT_LUNGO[o.categoria] || o.categoria)}</span>`).join(' · ')}</p>` : ''; }).join('');
+  return `<div class="card" id="rete-lungo${solo ? '-' + solo : ''}"><h2>Medio e lungo periodo con la rete neurale${solo === 'crypto' ? ': le crypto' : ''}</h2>
+    <p class="sub" style="margin-top:4px">Ogni settimana, per ognuno dei ${L.dati.titoli} titoli (azioni USA e italiane, ETF, obbligazioni, oro, crypto), la rete guarda il titolo (forza di un anno, tre mesi, un mese, una settimana, media di 200 giorni, massimo di 52 settimane, volatilità) e <b>il mondo che lo muove</b> (S&amp;P 500 e FTSE MIB, VIX, tassi USA e curva dei tassi, dollaro, petrolio, oro, credito, euro/dollaro, Fear &amp; Greed), e stima la probabilità di chiudere in guadagno dopo i costi tra 1 settimana, 1 mese e 3 mesi. Dati: chiusure giornaliere dal ${esc(L.dati.da)} al ${esc(L.dati.a)}, ${nf(L.dati.campioni, 0)} casi.</p>
+    <div class="verdetto ${buono ? 'v-cautela' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${buono ? '!' : '✕'}</span><div><b>${buono ? 'Sceglie meglio, con cautela' : 'Non sceglie meglio in modo credibile'}</b><p>Verifica onesta anno per anno (${V.anni.join(', ')}): ogni anno la rete impara solo da quello che era già successo prima, poi ogni settimana sceglie il meglio ${p100(L.quota)} dei titoli. A 1 mese le sue scelte hanno fatto in media ${x30 ? pc(x30.scelte.media, 2) : '–'} dopo i costi, contro ${x30 ? pc(x30.tutti.media, 2) : '–'} di tutti i titoli e ${x30 ? pc(x30.momento.media, 2) : '–'} della regola semplice del momento (i più forti dell'ultimo anno).${x7 ? ` A 1 settimana: ${pc(x7.scelte.media, 2)} contro ${pc(x7.tutti.media, 2)} di tutti e ${pc(x7.stesso_mix || 0, 2)} di titoli a caso con la stessa miscela di categorie (sceglie più crypto, che salgono di più), con t ${nf(x7.t, 1)}${x7.t >= 2 ? ': difficile che sia solo fortuna' : ''}.` : ''}${buono ? ' I costi sono contati; le tasse no, e scegliere ogni settimana vuol dire comprare e vendere spesso.' : ' La differenza non basta a dire che sa scegliere: può essere fortuna.'}</p></div></div></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Durata</th><th>AUC<br><span class="note">0,5 = a caso</span></th><th>Scelte della rete</th><th>Tutti i titoli</th><th>Regola del momento</th><th>A caso, stesso mix</th><th>Scarto settimanale</th></tr></thead><tbody>${righe}</tbody></table></div>
+    <h3 style="margin-top:14px">Perché salgono o scendono: i dati più legati a quello che succede dopo</h3>
+    <p class="note" style="margin-top:2px">Correlazione per ranghi con il rendimento a 1 mese (positiva: più il dato è alto, più dopo si sale; 0,02-0,05 è già tanto in finanza). "Mondo" sono i mercati che muovono tutti i titoli insieme.</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Dato</th><th>Tutti gli anni</th><th>Ultimi 3 anni</th><th>Ultimo anno</th></tr></thead><tbody>${segn}</tbody></table></div>
+    ${scelte ? `<h3 style="margin-top:14px">Oggi la rete stima più alte</h3>${scelte}` : ''}
+    <p class="note" style="margin-top:8px">Si riaddestra ogni sera con <code>python3 rete_lungo.py</code>. Non è consulenza finanziaria: probabilità del passato, non certezze.</p></div>`;
+}
+
 function renderCrypto() {
   const v = $('#v-crypto');
   const list = SIM_LIST.filter(s => s.categoria === 'crypto').map(s => ({s, g: giudizio(s), h: s.orizzonti.find(o => o.giorni === s.hold)}))
@@ -1419,6 +1445,7 @@ function renderCrypto() {
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
       return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b> <span class="note">a ${esc(h.orizzonte)}</span></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
   ${cryptoLungoHTML()}
+  ${reteLungoHTML('crypto')}
   ${reteHTML()}
   ${ordiniOreHTML()}
   <details style="margin-top:12px"><summary><b>Come eravamo partiti</b>: due piani al giorno, ognuno valido 24 ore</summary>${intradayHTML()}</details>

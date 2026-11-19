@@ -574,6 +574,33 @@ python3 rete_usa.py --studia     # barre da 5 minuti dei titoli USA, addestra e 
 python3 rete_usa.py --oggi       # le operazioni della rete nelle ultime 3 sedute
 ```
 
+## Perché la borsa sale o scende: i mercati che la muovono
+
+Tutte le reti vedono anche i mercati che muovono gli altri (`segnali.MOTORI`): futures su S&P 500 e Nasdaq (Wall Street
+guida anche Milano e le crypto), VIX (la paura), tasso USA a 10 anni, petrolio, oro ed euro/dollaro, con il movimento
+nell'ultima ora e nell'ultimo giorno diviso per quanto si muovono di solito. Per le azioni in giornata dalle barre da 5
+minuti, per le crypto (401 giorni di scambi) dalle barre orarie di Yahoo (2 anni); solo barre già chiuse prima di ogni
+decisione. Lo studio dei segnali di ogni rete dice quali contano: sulle azioni italiane in giornata il più legato a
+quello che succede dopo è il petrolio dell'ultimo giorno, poi il giorno della settimana e i futures di Wall Street.
+
+## Medio e lungo periodo con la rete neurale: `rete_lungo.py`
+
+Ogni settimana, per 188 titoli (azioni USA e italiane, ETF azionari e obbligazionari, oro, crypto), la rete vede il titolo
+(momento di un anno, tre mesi, un mese, una settimana, media di 200 giorni, massimo di 52 settimane, volatilità, categoria)
+e il mondo, del giorno prima: S&P 500 e FTSE MIB nell'ultimo mese, S&P 500 sulla media di 200 giorni, VIX e la sua
+variazione, tasso a 10 anni e curva dei tassi (10 anni meno 3 mesi), dollaro, petrolio, oro, credito (HYG contro LQD),
+euro/dollaro, Fear & Greed. Stima la probabilità di chiudere in guadagno dopo i costi tra 7, 30 e 91 giorni.
+
+Verifica anno per anno (2021-2026): ogni anno impara solo dagli esiti chiusi prima, poi sceglie ogni settimana il meglio
+10 %. A una settimana le scelte fanno +0,71 % contro +0,18 % di tutti i titoli, +0,20 % della regola del momento e +0,25 %
+di titoli a caso con la stessa miscela di categorie (t 3,0); a un mese +2,47 % contro +1,36 % (t 1,2, non basta); a tre
+mesi la differenza è nel rumore. I dati più legati al mese dopo sono quelli del mondo: dopo un mese in calo di FTSE MIB e
+S&P 500, e con il VIX alto, i rendimenti dopo sono stati in media più alti (il premio per la paura).
+
+```bash
+python3 rete_lungo.py      # chiusure giornaliere (10 anni), studio dei segnali, verifica, scelte di oggi: rete_lungo.json (un minuto)
+```
+
 ## Le regole della tesi di Sperti e del libro di Rosenbloom: `regole_libri.py`
 
 ```bash

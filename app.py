@@ -217,6 +217,16 @@ def rete_usa_robot_app(log=print):
         return None
 
 
+def rete_lungo_app(log=print):
+    """La rete del medio e lungo periodo (python3 rete_lungo.py), o None."""
+    try:
+        import rete_lungo
+        return rete_lungo.per_app()
+    except Exception as e:
+        log("[app] rete del medio e lungo periodo saltata: %s" % str(e)[:160])
+        return None
+
+
 def sentimento(log=print):
     """Il Fear & Greed di oggi e di una settimana fa, e il giorno delle ultime notizie scaricate da GDELT (per l'app)."""
     try:
@@ -311,6 +321,7 @@ def leggero(out, log=print):
     data["rete_ita_robot"] = rete_ita_robot_app(log) or data.get("rete_ita_robot")
     data["rete_usa"] = rete_usa_app(log) or data.get("rete_usa")          # la rete delle azioni USA
     data["rete_usa_robot"] = rete_usa_robot_app(log) or data.get("rete_usa_robot")
+    data["rete_lungo"] = rete_lungo_app(log) or data.get("rete_lungo")    # medio e lungo periodo
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
@@ -342,7 +353,7 @@ def main(argv=None):
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
-            "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(),
+            "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(), "rete_lungo": rete_lungo_app(),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
