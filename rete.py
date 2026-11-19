@@ -1561,7 +1561,7 @@ def scelte_modello(modello, X, margine=None):
     return politica(Q, modello["margine"] if margine is None else margine), Q[..., 1:].max(axis=-1) - Q[..., 0]
 
 
-def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1):
+def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1, quota_minima=None):
     """Le operazioni che il modello fa decidendo ogni `ogni` minuti in [k_da, k_a), una posizione alla volta per crypto,
     come nell'addestramento: la decisione al minuto k usa solo le barre prima di k e si entra all'apertura di k; la
     protezione scatta sui minimi dei minuti (eseguita un po' peggio); si esce all'apertura del minuto in cui finisce
@@ -1575,6 +1575,12 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
     X = caratteristiche(P, K)
     sig = sigma_ora(P, K)
     az, vantaggio = scelte_modello(modello, X, margine)
+    if quota_minima and modello.get("tipo") == "probabilita" and margine is None:
+        # la soglia imparata può essere così alta che il robot non compra mai: allora prende almeno il meglio
+        # `quota_minima` delle occasioni di questi giorni (sempre le più probabili secondo la rete)
+        soglia = min(modello["soglia"], float(np.quantile(vantaggio, 1.0 - quota_minima)))
+        if soglia < modello["soglia"]:
+            az, vantaggio = scelte_modello(modello, X, soglia)
     iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     chiuse, aperte = [], []
     for c, sym in enumerate(M.simboli):
