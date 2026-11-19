@@ -57,7 +57,9 @@ NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_2h_su_
                 + ["sopra_or", "sotto_or", "ampiezza_or", "volume_relativo", "vwap_oggi", "prima_mezzora", "stagione_30m"]
                 # ...anno, mese, settimana, giorno e gli altri dalle chiusure giornaliere, salto della notte sull'ATR
                 # (Chan, buy-on-gap; Lou, Polk e Skouras) e le notizie sulla Borsa di Milano
-                + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + ["salto_atr"] + list(segnali.NOMI_NOTIZIE))
+                + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + ["salto_atr"] + list(segnali.NOMI_NOTIZIE)
+                # i segnali della skill trader-scanner (in fondo: i modelli di prima usano solo i loro)
+                + list(segnali.NOMI_SCANNER))
 N_FEATURE = len(NOMI_FEATURE)
 N_BASE = NOMI_FEATURE.index("sopra_or")
 BARRE_OR = 3                                    # opening range: i primi 15 minuti
@@ -175,15 +177,17 @@ def esterni_azioni(B):
     giorni = [g.isoformat() for g in B.giorni]
     ng = len(segnali.NOMI_GIORNALIERI)
     tab = np.zeros((B.C, B.S, ng), np.float32)
+    sc = np.zeros((B.C, B.S, len(segnali.NOMI_SCANNER)), np.float32)
     atr = np.zeros((B.C, B.S), np.float32)
     for c, sym in enumerate(B.simboli):
         gg, o, h, l, cl = segnali.giornaliere(sym, "Europe/Rome", (17, 35))
         if len(gg):
             tab[c] = segnali.per_giorno(gg, segnali.tabella_giornaliera(o, h, l, cl), giorni)
             atr[c] = segnali.per_giorno(gg, segnali.atr_giornaliero(o, h, l, cl)[:, None], giorni)[:, 0]
+            sc[c] = segnali.per_giorno(gg, segnali.tabella_scanner(cl), giorni)
     notizie = segnali.notizie_per_giorno(segnali.notizie(
         "borsa_milano", '("Piazza Affari" OR "Borsa di Milano" OR "FTSE MIB") sourcelang:italian', log=lambda m: None), giorni)
-    B._esterni = (tab, atr, notizie)
+    B._esterni = (tab, atr, notizie, sc)
     return B._esterni
 
 
@@ -231,7 +235,7 @@ def segnali_azioni(B, G, sig, lc, s0, hi, lo, vc):
         quante += ok
     out.append(np.clip(somma / np.maximum(quante, 1) / (sig * math.sqrt(0.5)), -8, 8))
     # giornalieri (anno, mese, settimana, giorno...), salto della notte sull'ATR, notizie: della seduta prima
-    tab, atr, notizie = esterni_azioni(B)
+    tab, atr, notizie, sc = esterni_azioni(B)
     s = G // BARRE
     T = tab[:, s, :]
     out += [T[:, :, k] for k in range(T.shape[-1])]
@@ -239,6 +243,7 @@ def segnali_azioni(B, G, sig, lc, s0, hi, lo, vc):
     a = atr[:, s]
     out.append(np.where(a > 0, np.clip(salto / np.maximum(a, 1e-12), -6, 6), 0.0))
     out += [np.broadcast_to(notizie[s, k], (C, N)) for k in range(notizie.shape[-1])]
+    out += [sc[:, s, k] for k in range(sc.shape[-1])]                              # trader-scanner, della seduta prima
     return out
 
 

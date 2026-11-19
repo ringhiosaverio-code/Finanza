@@ -2471,9 +2471,14 @@ const RETI = {
   rete_ita: {dati: () => D.rete_ita_robot, posizioni: 8, fonte: 'barre di 5 minuti', costo: () => (D.rete_ita_robot && D.rete_ita_robot.costo) || 0.001, fine: 'chiusura', fresco: 25},
 };
 const durataTesto = m => m < 60 ? m + ' minuti' : m < 1440 ? (m / 60 === 1 ? '1 ora' : nf(m / 60, m % 60 ? 1 : 0) + ' ore') : (m / 1440 === 1 ? '1 giorno' : nf(m / 1440, 0) + ' giorni');
+// i limiti delle skill trader-risk e trader-budget: ogni posizione grande quanto basta perché la perdita allo stop sia al
+// più lo 0,5 % del capitale; niente acquisti nuovi in un giorno che ha già perso il 2 % o fatto 12 operazioni
+const RISCHIO = {perdita_op: 0.005, perdita_giorno: 0.02, op_giorno: 12};
+const giornoRischio = (C, d) => { if (!C.rischio || C.rischio.d !== d) C.rischio = {d, pnl: 0, n: 0}; return C.rischio; };
 function reteEsce(R, k, chiave, prezzo, quando, nota, fonte) {
   const C = R.conti[k], p = C.posizioni[chiave]; if (!p) return;
   const incasso = p.qty * prezzo * (1 - RETI[k].costo()), rr = incasso / p.speso - 1;
+  giornoRischio(C, isoN(quando).slice(0, 10)).pnl += incasso - p.speso;
   C.cassa += incasso; C.n++; if (rr > 0) C.vinte++;
   delete C.posizioni[chiave]; C.fatte[chiave] = 1;
   evento(R, {t: isoN(quando), s: k, sym: p.sym, azione: 'vende', prezzo: r6(prezzo), r: r6(rr), importo: r6(incasso), nota, fonte});
@@ -2490,10 +2495,15 @@ function robotRete(R, k, adesso) {
       const chiave = o.sym + '|' + t;
       if (C.fatte[chiave]) continue;
       if (!C.posizioni[chiave]) {
-        if (Object.values(C.posizioni).some(p => p.sym === o.sym) || C.cassa < quota - 1e-9) continue;   // una per titolo, finché c'è cassa
-        C.cassa -= quota;
-        C.posizioni[chiave] = {sym: o.sym, t, entrata: o.prezzo, minuti: o.minuti, protezione: o.protezione, scade: isoN(o.scade), qty: quota * (1 - costo) / o.prezzo, speso: quota};
-        evento(R, {t, s: k, sym: o.sym, azione: 'compra', prezzo: r6(o.prezzo), importo: r6(quota), nota: 'rete neurale' + (o.probabilita != null ? ', probabilità stimata ' + p100(o.probabilita) : '') + ', tiene ' + durataTesto(o.minuti), fonte: cfg.fonte});
+        if (Object.values(C.posizioni).some(p => p.sym === o.sym)) continue;     // una per titolo
+        const G = giornoRischio(C, t.slice(0, 10));
+        if (G.n >= RISCHIO.op_giorno || G.pnl <= -RISCHIO.perdita_giorno * ROBOT_CAPITALE) { C.fatte[chiave] = 1; continue; }   // trader-risk: giornata chiusa
+        const rischio = Math.max((o.prezzo - o.protezione) / o.prezzo, 0.001);
+        const spesa = Math.min(quota, RISCHIO.perdita_op * ROBOT_CAPITALE / rischio, C.cassa);   // trader-budget: dimensione dal rischio
+        if (spesa < quota * 0.1) continue;
+        C.cassa -= spesa; G.n++;
+        C.posizioni[chiave] = {sym: o.sym, t, entrata: o.prezzo, minuti: o.minuti, protezione: o.protezione, scade: isoN(o.scade), qty: spesa * (1 - costo) / o.prezzo, speso: spesa};
+        evento(R, {t, s: k, sym: o.sym, azione: 'compra', prezzo: r6(o.prezzo), importo: r6(spesa), nota: 'rete neurale' + (o.probabilita != null ? ', probabilità stimata ' + p100(o.probabilita) : '') + ', tiene ' + durataTesto(o.minuti), fonte: cfg.fonte});
         cambiato = true;
       }
       if (o.t_uscita) {

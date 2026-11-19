@@ -232,6 +232,38 @@ def tabella_giornaliera(o, h, l, c, anno=252, mese=21, settimana=5):
     return np.nan_to_num(out, nan=0.0, posinf=0.0, neginf=0.0)
 
 
+NOMI_SCANNER = ("sc_breakout_20g", "sc_bandiera", "sc_sopra_media20", "sc_ipervenduto", "sc_rimbalzo")
+
+
+def tabella_scanner(c):
+    """I cinque segnali della skill trader-scanner, alla chiusura di ogni giorno (0 o 1): chiusura sopra tutte le 20
+    chiusure prima; bandiera rialzista (oltre +10 % nelle 10 sedute prima delle ultime 5, poi le ultime 5 chiusure in un
+    intervallo del 5 %); ritorno sopra la media di 20 giorni (ieri sotto, oggi sopra); ipervenduto (RSI 14 di Wilder
+    sotto 30); rimbalzo dall'ipervenduto (ieri RSI sotto 30, oggi in rialzo)."""
+    c = np.asarray(c, dtype=np.float64)
+    n = len(c)
+    out = np.zeros((n, len(NOMI_SCANNER)), np.float32)
+    if n < 22:
+        return out
+    d = np.diff(c, prepend=c[0])
+    su, giu = np.where(d > 0, d, 0.0), np.where(d < 0, -d, 0.0)
+    rsi = np.full(n, 50.0)
+    ms, mg = su[1:15].mean(), giu[1:15].mean()
+    for i in range(15, n):                                             # media di Wilder
+        ms, mg = (ms * 13 + su[i]) / 14, (mg * 13 + giu[i]) / 14
+        rsi[i] = 100.0 if mg == 0 else 100.0 - 100.0 / (1.0 + ms / mg)
+    ma20 = np.array([c[max(0, i - 19):i + 1].mean() for i in range(n)])
+    for i in range(21, n):
+        out[i, 0] = float(c[i] > c[i - 20:i].max())
+        if i >= 15:
+            prima, ultime = c[i - 15:i - 4], c[i - 4:i + 1]
+            out[i, 1] = float(prima[-1] / prima[0] - 1 > 0.10 and ultime.max() / ultime.min() - 1 < 0.05)
+        out[i, 2] = float(c[i - 1] < ma20[i - 1] and c[i] > ma20[i])
+        out[i, 3] = float(rsi[i] < 30)
+        out[i, 4] = float(rsi[i - 1] < 30 and c[i] > c[i - 1])
+    return out
+
+
 def atr_giornaliero(o, h, l, c, n=14):
     """L'escursione media (ATR) a n giorni, alla chiusura di ogni giorno."""
     if len(c) == 0:

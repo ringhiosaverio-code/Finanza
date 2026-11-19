@@ -68,7 +68,9 @@ NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_1h_su_
                 + ["vwap_24h", "stagione_1h", "btc_5", "btc_60", "dal_giorno", "prima_mezzora", "williams",
                    "rottura_su_ieri", "rottura_giu_ieri"]
                 # ...anno, mese, settimana, giorno dalle chiusure giornaliere, sentimento e notizie
-                + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + list(segnali.NOMI_SENTIMENTO) + list(segnali.NOMI_NOTIZIE))
+                + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + list(segnali.NOMI_SENTIMENTO) + list(segnali.NOMI_NOTIZIE)
+                # i segnali della skill trader-scanner (in fondo: i modelli di prima usano solo i loro)
+                + list(segnali.NOMI_SCANNER))
 N_FEATURE = len(NOMI_FEATURE)
 N_BASE = NOMI_FEATURE.index("vwap_24h")                             # le prime N_BASE: quelle di prima
 ARCO = ("aspetta",) + tuple(ORIZZONTI)
@@ -227,7 +229,7 @@ class Pronto:
 def esterni_crypto(simboli, giorni_iso):
     """I segnali che non vengono dagli scambi, per giorno UTC e crypto: anno, mese, settimana, giorno e gli altri dalle
     chiusure giornaliere di Yahoo, il Fear & Greed e le notizie (sempre del giorno prima, già chiuso). Zeri dove mancano."""
-    n = len(segnali.NOMI_GIORNALIERI) + len(segnali.NOMI_SENTIMENTO) + len(segnali.NOMI_NOTIZIE)
+    n = len(segnali.NOMI_GIORNALIERI) + len(segnali.NOMI_SENTIMENTO) + len(segnali.NOMI_NOTIZIE) + len(segnali.NOMI_SCANNER)
     out = np.zeros((len(simboli), len(giorni_iso), n), np.float32)
     if not simboli or not giorni_iso:
         return out
@@ -238,7 +240,8 @@ def esterni_crypto(simboli, giorni_iso):
         giorni, o, h, l, cl = segnali.giornaliere(sym, "UTC", (23, 59))
         out[c, :, :ng] = segnali.per_giorno(giorni, segnali.tabella_giornaliera(o, h, l, cl, anno=365, mese=30, settimana=7), giorni_iso)
         out[c, :, ng:ng + 2] = sent
-        out[c, :, ng + 2:] = notizie
+        out[c, :, ng + 2:ng + 4] = notizie
+        out[c, :, ng + 4:] = segnali.per_giorno(giorni, segnali.tabella_scanner(cl), giorni_iso)
     return out
 
 
