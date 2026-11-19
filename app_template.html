@@ -286,11 +286,16 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 @media (max-width:420px){.opts.h .opt .d{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 .perche{margin:3px 0 4px;padding:6px 8px;border-left:3px solid var(--crit-ink);background:color-mix(in srgb,var(--crit-ink) 7%,transparent);border-radius:4px;line-height:1.45}
+.motore-top{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:8px 0 4px}
+.motore-top button{font:inherit;font-size:1.08rem;font-weight:700;padding:12px 20px;min-height:48px;border-radius:12px;border:0;background:var(--accent);color:var(--accent-ink);cursor:pointer;flex:0 0 auto}
+.motore-top button:active{transform:scale(.98)}
+.motore-top .note{flex:1 1 200px}
 </style>
 
 <header class="top">
   <div class="wrap">
     <div class="brand"><b>Finanza</b><span id="meta"></span><span id="live"></span></div>
+    <div class="motore-top"><button type="button" id="rb-motore">⟳ Aggiorna motore</button><span class="note" id="rb-motore-esito">Le operazioni del motore nel cloud: si aggiornano anche da sole ogni minuto.</span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
       <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
@@ -2523,8 +2528,8 @@ const RETI = {
 };
 const durataTesto = m => m < 60 ? m + ' minuti' : m < 1440 ? (m / 60 === 1 ? '1 ora' : nf(m / 60, m % 60 ? 1 : 0) + ' ore') : (m / 1440 === 1 ? '1 giorno' : nf(m / 1440, 0) + ' giorni');
 // i limiti delle skill trader-risk e trader-budget: ogni posizione grande quanto basta perché la perdita allo stop sia al
-// più lo 0,5 % del capitale; niente acquisti nuovi in un giorno che ha già perso il 5 % o fatto 150 operazioni
-const RISCHIO = {perdita_op: 0.005, perdita_giorno: 0.05, op_giorno: 150};   // tante operazioni piccole: ognuna rischia al più lo 0,5 %
+// più lo 0,5 % del capitale; nessun limite al numero di operazioni del giorno (richiesto)
+const RISCHIO = {perdita_op: 0.005, perdita_giorno: Infinity, op_giorno: Infinity};   // operazioni senza limite al giorno: ognuna rischia al più lo 0,5 %
 const giornoRischio = (C, d) => { if (!C.rischio || C.rischio.d !== d) C.rischio = {d, pnl: 0, n: 0}; return C.rischio; };
 function reteEsce(R, k, chiave, prezzo, quando, nota, fonte) {
   const C = R.conti[k], p = C.posizioni[chiave]; if (!p) return;
@@ -2546,7 +2551,7 @@ function robotRete(R, k, adesso) {
       const chiave = o.sym + '|' + t;
       if (C.fatte[chiave]) continue;
       if (!C.posizioni[chiave]) {
-        if (Object.values(C.posizioni).some(p => p.sym === o.sym)) continue;     // una per titolo
+        if (Object.values(C.posizioni).filter(p => p.sym === o.sym).length >= 3) continue;     // al più 3 insieme per titolo
         const G = giornoRischio(C, t.slice(0, 10));
         if (G.n >= RISCHIO.op_giorno || G.pnl <= -RISCHIO.perdita_giorno * ROBOT_CAPITALE) { C.fatte[chiave] = 1; continue; }   // trader-risk: giornata chiusa
         const rischio = Math.max((o.prezzo - o.protezione) / o.prezzo, 0.001);
@@ -2720,7 +2725,7 @@ const quandoBreve = t => new Date(t).toLocaleString('it-IT', {weekday: 'short', 
 function robotHTML() {
   if (!ROBOT && SPETTATORE) return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
     <p class="sub" style="margin-top:4px">Il robot lavora nel cloud; qui leggo le sue operazioni.</p>
-    <p style="margin-top:10px"><button type="button" class="more" id="rb-motore">Aggiorna dal motore</button> <span class="note" id="rb-motore-esito">Leggo il motore…</span></p></div>`;
+    </div>`;
   if (!ROBOT) return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
     <p class="sub" style="margin-top:4px">Segue gli algoritmi dell'app senza che tu faccia niente. Le <b>azioni</b> le compra e le vende solo durante la seduta del loro mercato, mai di notte; le <b>crypto</b> 24 ore su 24, con gli ordini rinnovati ogni ora (esercitazione: nella verifica corretta in media perdono). Ogni strategia ha il suo conto finto da ${eur(ROBOT_CAPITALE)}, così vedi quale guadagna e quale perde. Niente soldi veri.</p>
     ${robotModulo(true)}
@@ -2760,7 +2765,7 @@ function robotHTML() {
       <p class="note" style="margin-top:4px">Terminando: crypto e azioni in giornata si vendono subito al prezzo di adesso; i piani in attesa si annullano. Poi il robot si ferma.</p>`
     : `<h3 style="margin-top:14px">Nuova sessione</h3>${robotModulo(false)}<p style="margin-top:12px"><button type="button" class="go" id="rb-riprendi">Inizia la sessione</button></p>`}
     <p class="note" style="margin-top:12px">Le azioni si comprano e si vendono solo a borsa aperta, dal lunedì al venerdì: Stati Uniti ${oraItaliana('usa', 'apre')}–${oraItaliana('usa', 'chiude')} e Milano ${oraItaliana('italia', 'apre')}–${oraItaliana('italia', 'chiude')} (in ora italiana di oggi). Le crypto 24 ore su 24. Il robot lavora sempre nel cloud, con i prezzi ogni 5 secondi; qui le sue operazioni arrivano quando premi <b>Aggiorna dal motore</b> (e ogni sera alle 18). Milano ha 15 minuti di ritardo. <button type="button" class="linkb" id="rb-reset">Ricomincia da capo</button></p>
-    <p style="margin-top:8px"><button type="button" class="more" id="rb-motore">Aggiorna dal motore</button> <span class="note" id="rb-motore-esito"></span></p>${robotAttese()}</div>`;
+    ${robotAttese()}</div>`;
 }
 function chiediConferma(b, testo) {                                             // primo tocco: chiede conferma per 6 secondi
   if (b.dataset.ok === '1') { delete b.dataset.ok; return true; }                // secondo tocco: si fa
@@ -2805,7 +2810,7 @@ function robotEventi() {
     if (!chiediConferma(b, k === 'crypto' || k === 'giornata' ? 'Sicuro? Vende subito' : 'Sicuro? Tocca di nuovo')) return;
     fermaConto(ROBOT, k, new Date(), 'strategia fermata'); robotGiro(); robotSalva(); aggiornaRobot(); avviso(`${S.nome}: fermata.`);
   }));
-  $('#rb-motore')?.addEventListener('click', aggiornaDalMotore);
+
   $('#rb-reset')?.addEventListener('click', e => {
     if (!chiediConferma(e.target, 'Sicuro? Tocca di nuovo per cancellare il robot e i suoi conti')) return;
     ROBOT = null; robotSalvo = true; Store.save('robot', {vuoto: true}); robotSalvo = false; renderGiornata();
@@ -2924,8 +2929,10 @@ function nascondiScheda() {
 const MOTORE_COMPITO = 'trig_01D9L2QpeEcNpSxe5CSgzazk', CCR = 'Claude Code Remote';
 async function aggiornaDalMotore() {
   const esito = t => { const e = $('#rb-motore-esito'); if (e) e.textContent = t; };
-  if ((SU_PAGES && !window.claude) || DAL_GITHUB) {                              // sul sito GitHub (o su claude.ai se legge GitHub): rilegge lo stato del motore, senza token
-    esito('Leggo il motore…'); await caricaDaGitHub(true);
+  esito('Leggo il motore…');
+  if ((SU_PAGES && !window.claude) || DAL_GITHUB || await caricaDaGitHub(true)) {   // prima rilegge lo stato del motore da GitHub, senza token
+    if (window.claude && !DAL_GITHUB) { DAL_GITHUB = true; SPETTATORE = true; setInterval(() => caricaDaGitHub(false), 60e3); }
+    await caricaDaGitHub(true);
     esito('Aggiornato alle ' + new Date().toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}) + ' (si aggiorna anche da solo ogni minuto).');
     return;
   }
@@ -3012,6 +3019,7 @@ async function caricaDaGitHub(fresco) {
   } catch (e) { return false; }
 }
 async function avviaLive() {
+  const bm = $('#rb-motore'); if (bm && !bm.dataset.ok) { bm.dataset.ok = 1; bm.addEventListener('click', aggiornaDalMotore); }
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
   // su claude.ai: se la pagina può leggere GitHub, segue il motore nel cloud ogni minuto (senza token); se no, il suo archivio
   if (window.claude && !MOTORE_PAGINA) {

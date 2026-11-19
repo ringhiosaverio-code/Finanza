@@ -173,6 +173,7 @@ class Storia:
 QUOTA_MINIMA = 0.01                                        # il robot prende almeno l'1 % migliore delle occasioni
 QUOTA_ORA = 0.04                                           # e in ogni ora almeno il 4 % migliore delle occasioni di quell'ora
 ORIZZONTE_MAX = 240                                        # il robot tiene al più 4 ore: operazioni più numerose, in diretta
+PER_CRYPTO, DISTANZA = 3, 15                               # fino a 3 posizioni insieme sulla stessa crypto, a 15 minuti l'una dall'altra
 MARGINE_ROBOT = 0.001                                      # il robot dell'app la fa comprare quando batte l'attesa di 0,1 %
 GIORNI_ROBOT = 3                                           # giorni di decisioni rigiocate a ogni aggiornamento dell'app
 
@@ -191,7 +192,7 @@ def robot_crypto(giorni=GIORNI_ROBOT, margine=MARGINE_ROBOT, log=print):
     storia.carica(log=lambda m: None)
     M, k = storia.mondo()
     chiuse, aperte, vantaggio = rete.rigioca(modello, M, k - giorni * 1440, k + 1, usato, costo, quota_minima=QUOTA_MINIMA, quota_ora=QUOTA_ORA,
-                                             orizzonte_max=ORIZZONTE_MAX)
+                                             orizzonte_max=ORIZZONTE_MAX, per_crypto=PER_CRYPTO, distanza=DISTANZA)
     log("[rete_live] rete crypto per il robot: %d operazioni chiuse, %d aperte in %d giorni" % (len(chiuse), len(aperte), giorni))
     prob = modello.get("tipo") == "probabilita"
     return {"generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "costo": costo,

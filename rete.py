@@ -557,10 +557,31 @@ class Rete:
 
     @staticmethod
     def da_dizionario(d):
+        if "insieme" in d:
+            return Insieme([Rete.da_dizionario(x) for x in d["insieme"]])
         r = Rete(d["dims"])
         r.W = [np.array(w, dtype=np.float32) for w in d["W"]]
         r.b = [np.array(b, dtype=np.float32) for b in d["b"]]
         return r
+
+
+class Insieme:
+    """Più reti addestrate con semi diversi: la stima è la media dei loro logit. Un insieme sbaglia meno di una rete
+    sola, perché gli errori dovuti al caso dell'addestramento si compensano (Lakshminarayanan e altri 2017)."""
+
+    def __init__(self, membri):
+        self.membri, self.dims = list(membri), membri[0].dims
+
+    def avanti(self, X, tieni=False):
+        return np.mean([m.avanti(X) for m in self.membri], axis=0).astype(np.float32)
+
+    def copia(self):
+        return Insieme([m.copia() for m in self.membri])
+
+    copy = copia
+
+    def a_dizionario(self, cifre=7):
+        return {"insieme": [m.a_dizionario(cifre) for m in self.membri], "dims": self.dims}
 
 
 class Adam:
@@ -957,7 +978,10 @@ def pesi_recenza(D, i0, i1, mezza_vita):
     return np.broadcast_to(w, (D.C, i1 - i0)).reshape(n)
 
 
-def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3, wd=1e-4, log=None, memorie=None):
+INSIEME = 3                                                  # quante reti, con semi diversi, nella media
+
+
+def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3, wd=1e-4, log=None, memorie=None, insieme=INSIEME):
     """La rete impara, da tutte le operazioni possibili del periodo di addestramento e dal loro esito, quali chiudono in
     guadagno. Si tiene l'epoca che stima meglio le operazioni del periodo di scelta (mai viste); poi, sullo stesso periodo,
     si sceglie quante delle occasioni migliori prendere (le soglie di QUOTE): quella con la media per operazione più alta,
@@ -990,6 +1014,19 @@ def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3
             if migliore is None or errore_v < migliore[0]:
                 migliore = (errore_v, e + 1, rete.copia(), mv)
     _, e_best, rete_best, memoria = migliore
+    if insieme and insieme > 1:                              # altre reti con semi diversi, stessa memoria e stesse epoche
+        membri = [rete_best]
+        for k in range(1, insieme):
+            r2 = Rete([nf, *nascosti, H], seed + 1000 * k)
+            r2.b[-1][:] = np.log(base / (1.0 - base)).astype(np.float32)
+            rng2 = np.random.default_rng(seed + 1000 * k)
+            Mw = Mt * pesi_recenza(D, i0, i1, memoria)[:, None]
+            for e in range(e_best):
+                addestra_probabilita(r2, Xt, Yt, Mw, 1, lr=lr * (0.8 ** (e // 3)), wd=wd, rng=rng2)
+            membri.append(r2)
+        rete_best = Insieme(membri)
+        if log:
+            log("   insieme di %d reti" % insieme)
     m = {"rete": rete_best, "media": media, "dev": dev, "curve": curve, "iterazione": e_best, "tipo": "probabilita",
          "base": base.tolist(), "memoria": memoria}
     P = probabilita(m, D, *va)
@@ -1579,7 +1616,7 @@ def scelte_modello(modello, X, margine=None, orizzonti_ok=None):
 
 
 def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1, quota_minima=None, quota_ora=None,
-            orizzonte_max=None):
+            orizzonte_max=None, per_crypto=1, distanza=0):
     """Le operazioni che il modello fa decidendo ogni `ogni` minuti in [k_da, k_a), una posizione alla volta per crypto,
     come nell'addestramento: la decisione al minuto k usa solo le barre prima di k e si entra all'apertura di k; la
     protezione scatta sui minimi dei minuti (eseguita un po' peggio); si esce all'apertura del minuto in cui finisce
@@ -1609,10 +1646,11 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
     iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     chiuse, aperte = [], []
     for c, sym in enumerate(M.simboli):
-        libero = 0
+        attive, ultimo = [], -10 ** 9                          # fine delle posizioni aperte su questa crypto, ultimo ingresso
         for i in np.flatnonzero(az[c] > 0):
             k = int(K[i])
-            if k < libero:
+            attive = [e for e in attive if e > k]
+            if len(attive) >= per_crypto or k - ultimo < distanza:
                 continue
             h = ORIZZONTI[int(az[c, i]) - 1]
             entrata = float(M.o[c, k])
@@ -1627,12 +1665,15 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
             elif fine <= M.n - 1:
                 uscita, t_usc, motivo = float(M.o[c, fine]), fine, "scadenza"
             else:
-                aperte.append(op)
-                break                                          # aperta: finché non si chiude, niente altro su questa crypto
+                aperte.append(op)                              # aperta: occupa un posto finché non si chiude
+                attive.append(float("inf"))
+                ultimo = k
+                continue
             op.update({"t_uscita": iso(t_usc), "prezzo_uscita": round(uscita, 8), "motivo": motivo,
                        "r": round((1.0 - costo) ** 2 * uscita / entrata - 1.0, 6)})
             chiuse.append(op)
-            libero = t_usc
+            attive.append(t_usc)
+            ultimo = k
     chiuse.sort(key=lambda o: o["t"])
     return chiuse, aperte, {sym: round(float(vantaggio[c, -1]), 6) for c, sym in enumerate(M.simboli)}
 
