@@ -46,9 +46,9 @@ python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a qu
 ```
 
 Sezioni: Oggi, Il mio portafoglio, Esercitati, Crypto, Cerca un titolo, Altro (Azioni, Funziona?,
-Come funziona, esempio di day trade). L'app si aggiorna da sola nei giorni di borsa alle 18:10 e
-alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York. `python3 app.py --leggero` rifà in
-pochi secondi solo la parte crypto dall'ultima app generata.
+Come funziona, esempio di day trade). L'app si aggiorna da sola ogni ora: alle 18 e alle 22 dei giorni
+di borsa (ora italiana, dopo la chiusura di Milano e di New York) tutto, nelle altre ore solo crypto e reti
+neurali con `python3 app.py --leggero`, che riparte dall'ultima app generata (meno di un minuto).
 
 - **Il mio portafoglio**: scrivi cosa possiedi (quantità, prezzo e data d'acquisto) e ogni giorno
   l'app dice una sola cosa per titolo: **TIENI** fino alla data di vendita (il periodo consigliato
@@ -291,13 +291,22 @@ Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10
 
 - **Azioni in seduta** (esercitazione, in media perde): sui 14 titoli più scambiati di USA e Milano. Se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura. Compra e vende solo a borsa aperta, dal lunedì al venerdì (New York 9:30–16:00, Milano 9:00–17:30), mai di notte. Costi: quelli scelti in Commissioni.
 - **Crypto, ordini ogni ora** (esercitazione, in media perde): ogni ora mette tre ordini "compra il ribasso" per crypto, ognuno con 1/36 del capitale (12 crypto per 3 profondità); l'ordine vale un'ora, poi si esce alla protezione, all'obiettivo o dopo 24 ore. 24 ore su 24. Nella verifica corretta del 19 novembre 2026 perde in media lo 0,4-0,6 % per operazione (vedi sopra): lo tengo acceso perché le operazioni si vedano lavorare, ma non è una strategia che guadagna. Il piano di 24 ore di prima non c'è più.
+- **Crypto, rete neurale** (esercitazione): le operazioni che la rete neurale di `rete.py` decide ogni minuto sugli scambi
+  di Kraken degli ultimi 3 giorni (`rete_live.robot_crypto`), rigiocate nel conto con 1/12 del capitale per posizione, una
+  per crypto. La rete compra quando la mossa migliore batte l'attesa di 0,1 %: è un margine imposto, perché con il suo
+  cancello resterebbe fuori (nella verifica non ha trovato un guadagno credibile). Così fa più operazioni e la vedi
+  lavorare, sapendo che in media non guadagna. Le posizioni aperte si chiudono dal vivo (protezione, fine della durata) o
+  con i dati del prossimo aggiornamento.
+- **Azioni italiane, rete neurale** (esercitazione): lo stesso con la rete di `rete_azioni.py` sui titoli del FTSE MIB,
+  decisioni ogni 5 minuti della seduta (barre di Yahoo, 15 minuti di ritardo), 1/8 del capitale per posizione, tutto
+  chiuso al più tardi alle 17:30. Stesso margine imposto, stessa avvertenza: nella verifica resta fuori.
 - **Strategie di notte ritirate**: il robot non compra più azioni a borsa chiusa. Le posizioni rimaste da prima si chiudono alla prossima apertura. La verifica di notte resta nei libri.
 
 **Operazioni in diretta.** Il registro in cima alla scheda elenca ogni operazione, tutte o solo azioni o solo crypto, con l'ora (con i secondi per quelle di oggi), il prezzo, l'importo investito o incassato, il risultato e la fonte (in diretta, prezzi ufficiali, candele orarie). Una riga in alto compare in tutte le pagine mentre una sessione è aperta, e ogni operazione nuova avvisa (con notifica del dispositivo, se hai concesso gli avvisi e la pagina è in un'altra scheda). Il registro tiene le ultime 1000 operazioni.
 
 **Sessioni.** Inizia sessione (da oggi, o rigiocando l'ultima settimana o le ultime due) e Termina sessione: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano, poi il robot si ferma. Ogni strategia si avvia e si ferma da sola.
 
-In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (ogni 5 secondi), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi). A pagina chiusa il cloud rifà le operazioni alle 18:10 e alle 22:10 dei giorni feriali con i prezzi ufficiali (`robot_cloud.js`), senza cambiare quelle già registrate e con un avviso per le operazioni nuove.
+In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (ogni 5 secondi), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi). A pagina chiusa il cloud rifà le operazioni ogni ora (l'intervallo più breve che la pianificazione consente), con i dati dell'ultimo aggiornamento (`robot_cloud.js`), senza cambiare quelle già registrate e con un avviso per le operazioni nuove.
 
 Il robot salva a ogni operazione e lo storico ogni 10 minuti. Verifica: rigiocando da inizio novembre 2026, le operazioni in seduta coincidono con il calcolo in Python (stesse liste, stessi risultati); le crypto usano la stessa logica già verificata sulle candele orarie.
 ### I dati di oggi: seduta in corso e chiusura mancante
@@ -330,7 +339,7 @@ Barbon 2025, Fondo Monetario 2022, BlackRock 2024, Vanguard) e le tasse italiane
 
 ## Quotazioni in tempo reale nell'app
 
-L'app pubblicata si rigenera alle 18:10 e alle 22:10; i prezzi in tempo reale arrivano in due modi,
+L'app pubblicata si rigenera ogni ora (le azioni alle 18 e alle 22); i prezzi in tempo reale arrivano in due modi,
 mostrati accanto a ogni prezzo ("ora 128,18 € +0,79 % · 13:17") e nella spia in alto:
 
 1. **App desktop di Claude**: in alto compare il pulsante "Prezzi in tempo reale". La pagina usa il
@@ -464,10 +473,42 @@ python3 rete.py --ordini-limite     # gli ordini orari di intraday.py sugli scam
 python3 rete_live.py                # la rete dal vivo
 ```
 
+## La rete neurale sulle azioni italiane: `rete_azioni.py`
+
+La stessa rete delle crypto (stesso codice di addestramento e di verifica, `rete.py`) sui 43 titoli
+del FTSE MIB, in giornata: ogni 5 minuti della seduta, dalle 9:10, per ogni titolo vede 24 numeri che usano solo il
+passato (rendimenti da 5 minuti a 5 sedute, volatilità, apertura e salto da ieri, posizione nel minimo-massimo di oggi,
+volumi, ora e giorno, mercato intero) e sceglie se aspettare o comprare e tenere 5, 15, 30 minuti, 1, 2, 4 ore o fino
+alla chiusura. Tutto si chiude entro le 17:30 (niente posizioni di notte), con una protezione sotto l'entrata e costi
+dello 0,1 % per lato (per chi compra e vende nello stesso giorno la Tobin tax non si paga). Dati: barre da 5 minuti di
+Yahoo, le sole gratuite a questo passo, quindi solo gli ultimi 60 giorni: 60 sedute, dal 2026-08-28 al 2026-11-19.
+
+**Risultati fuori campione, 30 sedute** (3 finestre da 14 giorni, addestramento su tutto quello che viene prima, scelta sulle
+2 settimane prima del test, un giorno di intervallo; stesso cancello delle crypto):
+
+| | costi 0,10 % per lato | costi 0,05 % per lato |
+|---|---|---|
+| Rete, apprendimento per rinforzo | resta fuori (0 op.) | 501, -0,14 % a op., conto -1,6 % |
+| Rete, previsione diretta | resta fuori (0 op.) | resta fuori (0 op.) |
+| Regola: compra alle 9:10, vendi in chiusura | 1290, -0,11 % a op., conto -3,3 % | 1290, -0,01 % a op., conto -0,3 % |
+| Regola: dopo un'ora in ribasso, tieni un'ora | 834, -0,17 % a op., conto -3,3 % | 834, -0,07 % a op., conto -1,4 % |
+| Regola: dopo un'ora in rialzo, tieni un'ora | 821, -0,15 % a op., conto -2,8 % | 821, -0,05 % a op., conto -0,9 % |
+
+A 0,1 % per lato la rete resta fuori in 3 finestre su 3: non trova mai mosse che battano l'attesa in modo credibile.
+A 0,05 % entra in una finestra e perde. Comprare sempre perde i costi e un po' di più (-0,20 % a 5 minuti,
+-0,29 % tenendo fino alla chiusura), e la correlazione di rango tra la previsione della rete e quello che succede
+va da -0,019 a +0,001: in queste sedute la rete non sa niente del prossimo movimento. 60 sedute sono
+poche (un solo periodo di mercato, nessun anno intero): servirebbero anni di barre da 5 minuti, che gratis non ci sono.
+
+```bash
+python3 rete_azioni.py --studia     # scarica le barre, addestra e verifica (circa 2 minuti), scrive rete_azioni_modello.json
+python3 rete_azioni.py --oggi       # le operazioni che la rete fa nelle ultime 3 sedute (quelle che il robot rigioca)
+```
+
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete e rete_live, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live e rete_azioni, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

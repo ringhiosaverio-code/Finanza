@@ -1,4 +1,4 @@
-"""Test offline di app.py: l'aggiornamento leggero (solo crypto) parte dall'ultima app generata. Niente rete.
+"""Test offline di app.py: l'aggiornamento leggero (crypto e reti neurali) parte dall'ultima app generata. Niente rete.
 
     python3 -m unittest discover -s tests
 """
@@ -21,6 +21,12 @@ def dati(**kw):
 
 
 class Leggero(unittest.TestCase):
+    def setUp(self):                                                  # le operazioni delle reti vogliono Kraken e Yahoo: qui no
+        for nome in ("rete_robot_app", "rete_ita_app", "rete_ita_robot_app"):
+            p = mock.patch.object(app, nome, return_value=None)
+            p.start()
+            self.addCleanup(p.stop)
+
     def test_i_dati_si_rileggono_dall_app_anche_con_il_testo_che_chiude_uno_script(self):
         with tempfile.TemporaryDirectory() as t:
             out = os.path.join(t, "app.html")
@@ -57,6 +63,23 @@ class Leggero(unittest.TestCase):
             with mock.patch.object(app, "crypto_intraday", return_value=nuovo), mock.patch.object(app, "rete_per_app", return_value=None):
                 self.assertEqual(app.leggero(out, log=lambda x: None), 0)         # senza file nuovo restano quelli di prima
             self.assertEqual(app.dati_di(out)["rete"], {"costi": {"0.002": "nuovi"}})
+
+    def test_l_aggiornamento_leggero_porta_le_operazioni_delle_due_reti(self):
+        nuovo = {"crypto": {}, "ore": {"crypto": {}, "kraken": None}}
+        with tempfile.TemporaryDirectory() as t:
+            out = os.path.join(t, "app.html")
+            app.build(dati(rete_ita={"costi": "vecchi"}, rete_ita_robot={"operazioni": ["vecchia"]}, rete_robot={"operazioni": []}), out)
+            with mock.patch.object(app, "crypto_intraday", return_value=nuovo), \
+                    mock.patch.object(app, "rete_ita_robot_app", return_value={"operazioni": ["nuova"]}), \
+                    mock.patch.object(app, "rete_robot_app", return_value={"operazioni": ["crypto"]}):
+                self.assertEqual(app.leggero(out, log=lambda x: None), 0)
+            d = app.dati_di(out)
+            self.assertEqual(d["rete_ita_robot"], {"operazioni": ["nuova"]})
+            self.assertEqual(d["rete_robot"], {"operazioni": ["crypto"]})
+            self.assertEqual(d["rete_ita"], {"costi": "vecchi"})                  # senza risultati nuovi restano quelli di prima
+            with mock.patch.object(app, "crypto_intraday", return_value=nuovo):  # Yahoo non risponde: restano le operazioni di prima
+                self.assertEqual(app.leggero(out, log=lambda x: None), 0)
+            self.assertEqual(app.dati_di(out)["rete_ita_robot"], {"operazioni": ["nuova"]})
 
     def test_se_le_crypto_non_arrivano_l_app_resta_com_era(self):
         with tempfile.TemporaryDirectory() as t:
@@ -102,6 +125,18 @@ class ReteNellApp(unittest.TestCase):
     def test_senza_risultati_non_c_e_la_sezione(self):
         with tempfile.TemporaryDirectory() as t, mock.patch.object(app, "ROOT", t):
             self.assertIsNone(app.rete_per_app())
+
+    def test_la_rete_delle_azioni_italiane_non_ferma_l_app(self):
+        import rete_azioni
+        righe = []
+        with mock.patch.object(rete_azioni, "robot", side_effect=OSError("Yahoo non risponde")), \
+                mock.patch.object(rete_azioni, "per_app", side_effect=ValueError("file rovinato")):
+            self.assertIsNone(app.rete_ita_robot_app(log=righe.append))
+            self.assertIsNone(app.rete_ita_app(log=righe.append))
+        self.assertEqual(len(righe), 2)
+        self.assertIn("Yahoo non risponde", righe[0])
+        with mock.patch.object(rete_azioni, "robot", return_value={"operazioni": []}):
+            self.assertEqual(app.rete_ita_robot_app(log=righe.append), {"operazioni": []})
 
 
 if __name__ == "__main__":

@@ -512,12 +512,24 @@ def addestra(rete, X, Y, Mk, epoche, lr=1e-3, wd=1e-4, batch=2048, rng=None, dop
 
 # ---------------------------------------------------------------- politica, simulazione, statistiche
 
-def politica(Q, margine=0.0, ritmo=0.0):
+def _oriz(D):
+    return tuple(getattr(D, "orizzonti", ORIZZONTI))
+
+
+def _passo(D):
+    return getattr(D, "passo", PASSO)
+
+
+def _avvio(D):
+    return getattr(D, "avvio", AVVIO)
+
+
+def politica(Q, margine=0.0, ritmo=0.0, orizzonti=None):
     """Q: (..., 1 + orizzonti), in frazioni (0,01 = 1 %). Compra se la mossa migliore supera l'attesa di `margine`.
     `ritmo` toglie un costo per ora di capitale bloccato (serve alla previsione diretta: nell'apprendimento per
     rinforzo il valore dell'attesa contiene già quel costo). Ritorna per ogni istante 0 (aspetta) o l'indice
     dell'orizzonte + 1."""
-    ore = np.array(ORIZZONTI, dtype=np.float32) / 60.0
+    ore = np.array(orizzonti or ORIZZONTI, dtype=np.float32)[:Q.shape[-1] - 1] / 60.0
     punti = Q[..., 1:] - ritmo * ore
     miglior = punti.max(axis=-1)
     az = punti.argmax(axis=-1) + 1
@@ -543,14 +555,14 @@ def simula(az, R, LK, FE, OK, passo=PASSO):
     return np.array(righe, dtype=np.float64).reshape(-1, 6)
 
 
-def statistiche(T, n_crypto, n_istanti, passo=PASSO):
+def statistiche(T, n_crypto, n_istanti, passo=PASSO, n_orizzonti=None):
     """Riassunto di un insieme di operazioni (l'output di simula) su n_istanti decisioni per crypto."""
     if len(T) == 0:
         return {"n": 0, "media": 0.0, "dev": 0.0, "vinte": 0.0, "mediana": 0.0, "p10": 0.0, "somma": 0.0, "minuti": 0.0,
-                "esposizione": 0.0, "al_giorno": 0.0, "protezione": 0.0, "orizzonti": [0] * len(ORIZZONTI)}
+                "esposizione": 0.0, "al_giorno": 0.0, "protezione": 0.0, "orizzonti": [0] * (n_orizzonti or len(ORIZZONTI))}
     r = T[:, 3]
     giorni = n_istanti * passo / 1440.0
-    hist = np.bincount(T[:, 2].astype(int), minlength=len(ORIZZONTI)).tolist()
+    hist = np.bincount(T[:, 2].astype(int), minlength=n_orizzonti or len(ORIZZONTI)).tolist()
     return {"n": int(len(T)), "media": float(r.mean()), "dev": float(r.std()), "vinte": float((r > 0).mean()), "mediana": float(np.median(r)),
             "p10": float(np.percentile(r, 10)), "somma": float(r.sum()), "minuti": float(T[:, 4].mean()),
             "esposizione": float(T[:, 4].sum() / (n_crypto * n_istanti * passo)), "al_giorno": float(len(T) / giorni),
@@ -614,15 +626,15 @@ class Dati:
         return np.clip((X - media) / dev, -6.0, 6.0).astype(np.float32)
 
     def statistiche_norm(self, i0, i1):
-        x = self.X[:, i0:i1].reshape(-1, N_FEATURE)
+        x = self.X[:, i0:i1].reshape(-1, self.X.shape[-1])
         return x.mean(axis=0).astype(np.float32), np.maximum(x.std(axis=0), 1e-3).astype(np.float32)
 
 
-def finestre(D, giorni_test=30, giorni_val=30, embargo=2, min_addestramento=100, max_finestre=6):
+def finestre(D, giorni_test=30, giorni_val=30, embargo=2, min_addestramento=100, max_finestre=6, margine_fine=2.0):
     """Le finestre mobili: per ognuna un periodo di addestramento, uno di scelta (il mese prima del test) e uno di
     test. Tra l'uno e l'altro c'è un intervallo di `embargo` giorni (l'esito di un'operazione guarda avanti fino a
     2 giorni: senza intervallo l'addestramento vedrebbe un pezzo del futuro del test)."""
-    fine = D.giorni - 2.0                                           # gli esiti lunghi dell'ultimo tratto mancano
+    fine = D.giorni - margine_fine                                  # gli esiti lunghi dell'ultimo tratto mancano
     out = []
     for k in range(max_finestre):
         te1 = fine - k * giorni_test
@@ -630,9 +642,9 @@ def finestre(D, giorni_test=30, giorni_val=30, embargo=2, min_addestramento=100,
         va1 = te0 - embargo
         va0 = va1 - giorni_val
         tr1 = va0 - embargo
-        if tr1 < min_addestramento + AVVIO / 1440.0:
+        if tr1 < min_addestramento + _avvio(D) / 1440.0:
             break
-        out.append({"addestramento": (D.indice(AVVIO / 1440.0), D.indice(tr1)), "scelta": (D.indice(va0), D.indice(va1)),
+        out.append({"addestramento": (D.indice(_avvio(D) / 1440.0), D.indice(tr1)), "scelta": (D.indice(va0), D.indice(va1)),
                     "test": (D.indice(te0), D.indice(te1)), "giorni": (round(te0, 1), round(te1, 1))})
     return out[::-1]
 
@@ -643,20 +655,20 @@ def _bersagli_previsione(D, i0, i1):
     """Previsione diretta: l'uscita di ogni orizzonte è il guadagno netto; aspettare vale zero."""
     R, OK = D.R[:, i0:i1], D.OK[:, i0:i1]
     n = R.shape[0] * R.shape[1]
-    Y = np.zeros((n, 1 + len(ORIZZONTI)), np.float32)
+    Y = np.zeros((n, 1 + R.shape[-1]), np.float32)
     M = np.ones_like(Y)
     Y[:, 1:] = (R / ESCALA).reshape(n, -1)
     M[:, 1:] = OK.reshape(n, -1)
     return Y, M
 
 
-def _bersagli_q(D, i0, i1, V, gamma=GAMMA, passo=PASSO):
+def _bersagli_q(D, i0, i1, V, gamma=GAMMA, passo=None):
     """Apprendimento per rinforzo: il valore di una mossa è il guadagno netto dell'operazione più il valore,
     scontato, dello stato in cui si torna liberi (V, calcolato dalla rete dell'iterazione prima).
     Aspettare vale il valore scontato del quarto d'ora dopo. V ha forma (crypto, istanti)."""
-    C, Ns = D.C, i1 - i0
+    C, Ns, passo = D.C, i1 - i0, passo or _passo(D)
     R, LK, OK = D.R[:, i0:i1], D.LK[:, i0:i1], D.OK[:, i0:i1]
-    Y = np.zeros((C, Ns, 1 + len(ORIZZONTI)), np.float32)
+    Y = np.zeros((C, Ns, 1 + R.shape[-1]), np.float32)
     M = np.zeros_like(Y)
     Y[:, :-1, 0] = gamma * V[:, 1:]
     M[:, :-1, 0] = 1.0
@@ -671,13 +683,13 @@ def _bersagli_q(D, i0, i1, V, gamma=GAMMA, passo=PASSO):
 
 def _valuta(D, rete, media, dev, i0, i1, margini, ritmi=(0.0,)):
     """La politica della rete sul periodo [i0, i1): per ogni margine e ritmo, le statistiche delle operazioni."""
-    X = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, N_FEATURE)
+    X = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, D.X.shape[-1])
     Q = (rete.avanti(X) * ESCALA).reshape(D.C, i1 - i0, -1)
     out = {}
     for m in margini:
         for r in ritmi:
-            T = simula(politica(Q, m, r), D.R[:, i0:i1], D.LK[:, i0:i1], D.FE[:, i0:i1], D.OK[:, i0:i1])
-            out[(m, r)] = (T, statistiche(T, D.C, i1 - i0))
+            T = simula(politica(Q, m, r, _oriz(D)), D.R[:, i0:i1], D.LK[:, i0:i1], D.FE[:, i0:i1], D.OK[:, i0:i1], _passo(D))
+            out[(m, r)] = (T, statistiche(T, D.C, i1 - i0, _passo(D), len(_oriz(D))))
     return Q, out
 
 
@@ -699,8 +711,9 @@ def apprendi_q(D, tr, va, iterazioni=14, epoche=3, nascosti=(96, 48), seed=0, lr
     (l'iterazione con il risultato migliore nel periodo di scelta, margine medio), le normalizzazioni e le curve."""
     i0, i1 = tr
     media, dev = D.statistiche_norm(i0, i1)
-    Xt = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, N_FEATURE)
-    rete = Rete([N_FEATURE, *nascosti, 1 + len(ORIZZONTI)], seed)
+    nf, no = D.X.shape[-1], 1 + len(_oriz(D))
+    Xt = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, nf)
+    rete = Rete([nf, *nascosti, no], seed)
     rng = np.random.default_rng(seed)
     V = np.zeros((D.C, i1 - i0), np.float32)
     curve, migliore = [], None
@@ -738,11 +751,12 @@ def apprendi_previsione(D, tr, va, epoche=14, nascosti=(96, 48), seed=0, lr=1e-3
     con l'errore più basso nel periodo di scelta; margine e costo del tempo si scelgono sullo stesso periodo."""
     i0, i1 = tr
     media, dev = D.statistiche_norm(i0, i1)
-    Xt = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, N_FEATURE)
+    nf, no = D.X.shape[-1], 1 + len(_oriz(D))
+    Xt = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, nf)
     Yt, Mt = _bersagli_previsione(D, i0, i1)
-    Xv = D.norm(D.X[:, va[0]:va[1]], media, dev).reshape(-1, N_FEATURE)
+    Xv = D.norm(D.X[:, va[0]:va[1]], media, dev).reshape(-1, nf)
     Yv, Mv = _bersagli_previsione(D, *va)
-    rete = Rete([N_FEATURE, *nascosti, 1 + len(ORIZZONTI)], seed)
+    rete = Rete([nf, *nascosti, no], seed)
     rng = np.random.default_rng(seed)
     curve, migliore = [], None
     for e in range(epoche):
@@ -768,9 +782,9 @@ def apprendi_previsione(D, tr, va, epoche=14, nascosti=(96, 48), seed=0, lr=1e-3
 
 def decisioni(modello, D, i0, i1):
     """Le azioni (0 aspetta, altrimenti orizzonte + 1) di un modello su [i0, i1), per ogni crypto."""
-    X = D.norm(D.X[:, i0:i1], modello["media"], modello["dev"]).reshape(-1, N_FEATURE)
+    X = D.norm(D.X[:, i0:i1], modello["media"], modello["dev"]).reshape(-1, D.X.shape[-1])
     Q = (modello["rete"].avanti(X) * ESCALA).reshape(D.C, i1 - i0, -1)
-    return politica(Q, modello["margine"], modello.get("ritmo", 0.0)), Q
+    return politica(Q, modello["margine"], modello.get("ritmo", 0.0), _oriz(D)), Q
 
 
 # ---------------------------------------------------------------- riferimenti e verifica a finestre mobili
@@ -793,7 +807,7 @@ def az_regola(D, i0, i1, nome):
 
 
 def esegui(D, az, i0, i1):
-    return simula(az, D.R[:, i0:i1], D.LK[:, i0:i1], D.FE[:, i0:i1], D.OK[:, i0:i1])
+    return simula(az, D.R[:, i0:i1], D.LK[:, i0:i1], D.FE[:, i0:i1], D.OK[:, i0:i1], _passo(D))
 
 
 def _giorni(D, i0, i1):
@@ -801,11 +815,17 @@ def _giorni(D, i0, i1):
     return int(D.K[i0] // 1440), int(D.K[i1 - 1] // 1440) + 1
 
 
-def valuta_costo(D, wins, costo, iterazioni=14, epoche=3, log=None, seme=0):
-    """Tutte le finestre mobili per un costo: addestra le due reti, le prova sul test, mette a confronto le regole.
-    Ritorna per ogni strategia le operazioni di test di ogni finestra e le curve di apprendimento."""
+def regole_crypto():
+    return {n: (lambda D, i0, i1, n=n: az_regola(D, i0, i1, n)) for n in ("ribasso", "momento", "sempre_1g")}
+
+
+def valuta_costo(D, wins, costo, iterazioni=14, epoche=3, log=None, seme=0, regole=None):
+    """Tutte le finestre mobili per un costo: addestra le due reti, le prova sul test, mette a confronto le regole
+    (di serie quelle delle crypto: {nome: funzione(D, i0, i1) -> azioni}). Ritorna per ogni strategia le operazioni
+    di test di ogni finestra e le curve di apprendimento."""
+    regole = regole_crypto() if regole is None else regole
     Dc = D.con_costo(costo)
-    out = {"finestre": [], "strategie": {k: [] for k in ("q", "previsione", "ribasso", "momento", "sempre_1g")},
+    out = {"finestre": [], "strategie": {k: [] for k in ("q", "previsione", *regole)},
            "curve_q": [], "curve_previsione": [], "scelte": []}
     for k, w in enumerate(wins):
         i0, i1 = w["test"]
@@ -816,8 +836,8 @@ def valuta_costo(D, wins, costo, iterazioni=14, epoche=3, log=None, seme=0):
         az_q, _ = decisioni(mq, Dc, i0, i1)
         az_p, _ = decisioni(mp, Dc, i0, i1)
         T = {"q": esegui(Dc, az_q, i0, i1), "previsione": esegui(Dc, az_p, i0, i1)}
-        for nome in ("ribasso", "momento", "sempre_1g"):
-            T[nome] = esegui(Dc, az_regola(Dc, i0, i1, nome), i0, i1)
+        for nome, f in regole.items():
+            T[nome] = esegui(Dc, f(Dc, i0, i1), i0, i1)
         for nome, t in T.items():
             out["strategie"][nome].append(t)
         out["finestre"].append({"giorni": w["giorni"], "test": (i0, i1)})
@@ -826,11 +846,11 @@ def valuta_costo(D, wins, costo, iterazioni=14, epoche=3, log=None, seme=0):
         out["scelte"].append({"q": {"fuori": mq["fuori"], "iterazione": mq["iterazione"], "margine": mq["margine"]},
                               "previsione": {"fuori": mp["fuori"], "epoca": mp["iterazione"], "margine": mp["margine"]}})
         if log:
-            st = {nome: statistiche(t, D.C, i1 - i0) for nome, t in T.items()}
-            log("   Q: %s · %d operazioni, media %+.3f %% | previsione: %s · %d op., media %+.3f %% | ribasso %+.3f %% (%d) · momento %+.3f %% (%d) · sempre 1g %+.3f %%" % (
+            st = {nome: statistiche(t, D.C, i1 - i0, _passo(D), len(_oriz(D))) for nome, t in T.items()}
+            log("   Q: %s · %d operazioni, media %+.3f %% | previsione: %s · %d op., media %+.3f %% | %s" % (
                 "FUORI" if mq["fuori"] else "dentro it.%d marg.%g" % (mq["iterazione"], mq["margine"]), st["q"]["n"], 100 * st["q"]["media"],
                 "FUORI" if mp["fuori"] else "dentro", st["previsione"]["n"], 100 * st["previsione"]["media"],
-                100 * st["ribasso"]["media"], st["ribasso"]["n"], 100 * st["momento"]["media"], st["momento"]["n"], 100 * st["sempre_1g"]["media"]))
+                " · ".join("%s %+.3f %% (%d)" % (nome, 100 * st[nome]["media"], st[nome]["n"]) for nome in regole)))
     return out
 
 
@@ -842,13 +862,13 @@ def riassumi(D, ris, strategia):
         g0, g1 = _giorni(D, i0, i1)
         serie = serie_giornaliera(T, D.K[i0:i1], D.M.t0, D.C, g0 + int(D.M.t0 // 86400), g1 + int(D.M.t0 // 86400))
         giornaliera.append(serie)
-        per_finestra.append(statistiche(T, D.C, i1 - i0))
+        per_finestra.append(statistiche(T, D.C, i1 - i0, _passo(D), len(_oriz(D))))
         if len(T):
             tutte.append(T)
     T = np.concatenate(tutte) if tutte else np.zeros((0, 6))
     g = np.concatenate(giornaliera) if giornaliera else np.zeros(0)
     n_istanti = sum(w["test"][1] - w["test"][0] for w in ris["finestre"])
-    st = statistiche(T, D.C, n_istanti)
+    st = statistiche(T, D.C, n_istanti, _passo(D), len(_oriz(D)))
     st.update({"giorni": int(len(g)), "totale": float(g.sum()), "sharpe": float(g.mean() / g.std() * math.sqrt(365)) if g.std() > 0 else 0.0,
                "ic90": bootstrap_blocchi(g), "conto": np.round(np.cumsum(g), 5).tolist(), "per_finestra": per_finestra})
     return st
@@ -858,16 +878,17 @@ def ic_per_orizzonte(D, wins, costo=COSTO, seme=0):
     """Fuori campione: la correlazione di rango tra la previsione diretta e l'esito, per ogni orizzonte e finestra,
     e l'esito medio per quinti della previsione (messi insieme tutte le finestre)."""
     Dc = D.con_costo(costo)
-    ic, acc = [], [([], []) for _ in ORIZZONTI]
+    H = len(_oriz(D))
+    ic, acc = [], [([], []) for _ in range(H)]
     rango = lambda x: np.argsort(np.argsort(x)) / max(len(x) - 1, 1)
     for k, w in enumerate(wins):
         mp = apprendi_previsione(Dc, w["addestramento"], w["scelta"], epoche=3, seed=seme + k)
         i0, i1 = w["test"]
-        X = Dc.norm(Dc.X[:, i0:i1], mp["media"], mp["dev"]).reshape(-1, N_FEATURE)
+        X = Dc.norm(Dc.X[:, i0:i1], mp["media"], mp["dev"]).reshape(-1, Dc.X.shape[-1])
         Q = mp["rete"].avanti(X) * ESCALA
-        Rt, Ok = Dc.R[:, i0:i1].reshape(-1, len(ORIZZONTI)), Dc.OK[:, i0:i1].reshape(-1, len(ORIZZONTI))
+        Rt, Ok = Dc.R[:, i0:i1].reshape(-1, H), Dc.OK[:, i0:i1].reshape(-1, H)
         riga = []
-        for j in range(len(ORIZZONTI)):
+        for j in range(H):
             m = Ok[:, j]
             riga.append(float(np.corrcoef(rango(Q[m, 1 + j]), rango(Rt[m, j]))[0, 1]))
             acc[j][0].append(Q[m, 1 + j])
@@ -878,7 +899,7 @@ def ic_per_orizzonte(D, wins, costo=COSTO, seme=0):
         q, r = np.concatenate(q), np.concatenate(r)
         o, n = np.argsort(q), len(q)
         quinti.append([float(r[o[a * n // 5:(a + 1) * n // 5]].mean()) for a in range(5)] + [float(r[o[int(n * 0.98):]].mean())])
-    return {"orizzonti": list(ORIZZONTI), "per_finestra": ic, "medio": np.mean(ic, axis=0).tolist(), "quinti": quinti}
+    return {"orizzonti": list(_oriz(D)), "per_finestra": ic, "medio": np.mean(ic, axis=0).tolist(), "quinti": quinti}
 
 
 def sovradattamento(D, wins, costo=COSTO, iterazioni=14, margine=0.001, seme=0, log=None):
@@ -891,10 +912,10 @@ def sovradattamento(D, wins, costo=COSTO, iterazioni=14, margine=0.001, seme=0, 
         m = apprendi_q(Dc, w["addestramento"], w["scelta"], iterazioni=iterazioni, seed=seme + k, valuta=False)
         riga = {}
         for nome, (i0, i1) in (("addestramento", w["addestramento"]), ("test", w["test"])):
-            X = Dc.norm(Dc.X[:, i0:i1], m["media"], m["dev"]).reshape(-1, N_FEATURE)
+            X = Dc.norm(Dc.X[:, i0:i1], m["media"], m["dev"]).reshape(-1, Dc.X.shape[-1])
             Q = (m["rete"].avanti(X) * ESCALA).reshape(Dc.C, i1 - i0, -1)
-            T = esegui(Dc, politica(Q, margine), i0, i1)
-            riga[nome] = statistiche(T, Dc.C, i1 - i0)
+            T = esegui(Dc, politica(Q, margine, 0.0, _oriz(Dc)), i0, i1)
+            riga[nome] = statistiche(T, Dc.C, i1 - i0, _passo(Dc), len(_oriz(Dc)))
         out.append(riga)
         if log:
             log("   finestra %d: addestramento %d operazioni, media %+.3f %% · test %d operazioni, media %+.3f %%" % (
@@ -906,7 +927,7 @@ def incondizionato(D, costo=COSTO):
     """Comprando a ogni quarto d'ora e tenendo h minuti: esito netto medio e quante volte si guadagna, per orizzonte."""
     Dc = D.con_costo(costo)
     out = []
-    for j, h in enumerate(ORIZZONTI):
+    for j, h in enumerate(_oriz(D)):
         m = Dc.OK[:, :, j]
         r = Dc.R[:, :, j][m]
         out.append({"orizzonte": h, "media": float(r.mean()), "vinte": float((r > 0).mean()), "dev": float(r.std()),
@@ -965,12 +986,12 @@ def _pulisci(x):
     return x
 
 
-def modello_finale(D, costo, iterazioni=14, seme=0, log=None):
+def modello_finale(D, costo, iterazioni=14, seme=0, log=None, giorni_val=30, embargo=2, margine_fine=2.0):
     """La rete che si usa davvero: addestrata su tutti i dati tranne l'ultimo mese, che serve a scegliere (iterazione e
     margine) con lo stesso cancello della verifica. Se nell'ultimo mese non c'è un guadagno credibile resta fuori."""
-    fine = D.giorni - 2.0
-    tr = (D.indice(AVVIO / 1440.0), D.indice(fine - 34))
-    va = (D.indice(fine - 32), D.indice(fine - 2))
+    fine = D.giorni - margine_fine
+    tr = (D.indice(_avvio(D) / 1440.0), D.indice(fine - giorni_val - 2 * embargo))
+    va = (D.indice(fine - giorni_val - embargo), D.indice(fine - embargo))
     m = apprendi_q(D.con_costo(costo), tr, va, iterazioni=iterazioni, seed=seme, log=log)
     return m
 
@@ -1048,6 +1069,57 @@ def valori_a(modello, M, k):
     X = caratteristiche(P, np.array([k]))[:, 0, :]
     Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32)
     return modello["rete"].avanti(Xn) * ESCALA, sigma_ora(P, np.array([k]))[:, 0]
+
+
+# ---------------------------------------------------------------- le operazioni della rete, minuto per minuto (per il robot)
+
+def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1):
+    """Le operazioni che il modello fa decidendo ogni `ogni` minuti in [k_da, k_a), una posizione alla volta per crypto,
+    come nell'addestramento: la decisione al minuto k usa solo le barre prima di k e si entra all'apertura di k; la
+    protezione scatta sui minimi dei minuti (eseguita un po' peggio); si esce all'apertura del minuto in cui finisce
+    l'orizzonte scelto. Le posizioni che a fine dati non sono ancora chiuse tornano tra le 'aperte', con protezione e
+    scadenza, perché chi le segue dal vivo possa chiuderle. margine=None: quello del modello.
+    Ritorna (operazioni chiuse, aperte, vantaggio dell'ultimo minuto per crypto)."""
+    margine = modello["margine"] if margine is None else margine
+    P = Pronto(M)
+    K = np.arange(max(k_da, AVVIO), k_a, ogni)
+    if len(K) == 0:
+        return [], [], {}
+    X = caratteristiche(P, K)
+    sig = sigma_ora(P, K)
+    Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32)
+    Q = (modello["rete"].avanti(Xn.reshape(-1, X.shape[-1])) * ESCALA).reshape(M.o.shape[0], len(K), -1)
+    az = politica(Q, margine)
+    vantaggio = Q[..., 1:].max(axis=-1) - Q[..., 0]
+    iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    chiuse, aperte = [], []
+    for c, sym in enumerate(M.simboli):
+        libero = 0
+        for i in np.flatnonzero(az[c] > 0):
+            k = int(K[i])
+            if k < libero:
+                continue
+            h = ORIZZONTI[int(az[c, i]) - 1]
+            entrata = float(M.o[c, k])
+            stop = entrata * (1.0 - min(K_STOP * float(sig[c, i]) * math.sqrt(h / 60.0), 0.9))
+            fine = k + h
+            tocca = np.flatnonzero(M.l[c, k:min(fine, M.n)] <= stop)
+            op = {"sym": sym, "t": iso(k), "prezzo": round(entrata, 8), "minuti": int(h), "protezione": round(stop, 8),
+                  "scade": iso(fine), "vantaggio": round(float(vantaggio[c, i]), 6)}
+            if len(tocca):
+                kk = k + int(tocca[0])
+                uscita, t_usc, motivo = min(stop, float(M.o[c, kk])) * (1.0 - slip), kk + 1, "protezione"
+            elif fine <= M.n - 1:
+                uscita, t_usc, motivo = float(M.o[c, fine]), fine, "scadenza"
+            else:
+                aperte.append(op)
+                break                                          # aperta: finché non si chiude, niente altro su questa crypto
+            op.update({"t_uscita": iso(t_usc), "prezzo_uscita": round(uscita, 8), "motivo": motivo,
+                       "r": round((1.0 - costo) ** 2 * uscita / entrata - 1.0, 6)})
+            chiuse.append(op)
+            libero = t_usc
+    chiuse.sort(key=lambda o: o["t"])
+    return chiuse, aperte, {sym: round(float(vantaggio[c, -1]), 6) for c, sym in enumerate(M.simboli)}
 
 
 # ---------------------------------------------------------------- a riga di comando

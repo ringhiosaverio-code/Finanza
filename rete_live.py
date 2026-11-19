@@ -168,6 +168,29 @@ class Storia:
         return rete.Mondo(self.simboli, t0, B), n - 1
 
 
+# ---------------------------------------------------------------- per l'app: le operazioni degli ultimi giorni
+
+MARGINE_ROBOT = 0.001                                      # il robot dell'app la fa comprare quando batte l'attesa di 0,1 %
+GIORNI_ROBOT = 3                                           # giorni di decisioni rigiocate a ogni aggiornamento dell'app
+
+
+def robot_crypto(giorni=GIORNI_ROBOT, margine=MARGINE_ROBOT, log=print):
+    """Per il robot dell'app: le operazioni che la rete fa decidendo ogni minuto negli ultimi `giorni` giorni, sugli
+    scambi di Kraken fino a adesso, con il margine imposto (senza, la rete resterebbe fuori: nella verifica non ha
+    trovato un guadagno credibile), e le posizioni ancora aperte. Il robot le rigioca nel suo conto finto."""
+    modello, costo = rete.carica_modello(rete.COSTO)
+    storia = Storia(giorni=giorni + 8)                     # 7 giorni e un'ora di storia per le caratteristiche, più il resto
+    storia.carica(log=lambda m: None)
+    M, k = storia.mondo()
+    chiuse, aperte, vantaggio = rete.rigioca(modello, M, k - giorni * 1440, k + 1, margine, costo)
+    log("[rete_live] rete crypto per il robot: %d operazioni chiuse, %d aperte in %d giorni" % (len(chiuse), len(aperte), giorni))
+    return {"generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "costo": costo,
+            "margine": margine, "giorni": giorni, "orizzonti": list(rete.ORIZZONTI),
+            "modello": {"fuori": modello["fuori"], "iterazione": modello.get("iterazione")},
+            "operazioni": chiuse, "aperte": aperte, "vantaggio": vantaggio,
+            "prezzi": {s: round(float(storia.p[s][-1]), 8) for s in storia.simboli if len(storia.p[s])}}   # l'ultimo scambio
+
+
 # ---------------------------------------------------------------- l'agente
 
 class Agente:

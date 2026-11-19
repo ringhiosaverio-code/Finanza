@@ -163,6 +163,38 @@ def rete_per_app():
     return r
 
 
+def rete_robot_app(log=print):
+    """Le operazioni della rete neurale sulle crypto per il robot dell'app (rete_live.robot_crypto): servono gli
+    scambi di Kraken (cache di rete_dati.py, più quelli che mancano) e rete_modello.json. None se non si può."""
+    try:
+        import rete_live
+        return rete_live.robot_crypto(log=log)
+    except Exception as e:                                     # rete, dati o modello mancanti: l'app si genera lo stesso
+        log("[app] rete neurale per il robot saltata: %s" % str(e)[:160])
+        return None
+
+
+def rete_ita_app(log=print):
+    """I risultati della rete neurale per le azioni italiane (python3 rete_azioni.py --studia) senza i pesi, o None."""
+    try:
+        import rete_azioni
+        return rete_azioni.per_app()
+    except Exception as e:                                     # numpy mancante o file rovinato: l'app si genera lo stesso
+        log("[app] rete delle azioni italiane saltata: %s" % str(e)[:160])
+        return None
+
+
+def rete_ita_robot_app(log=print):
+    """Le operazioni della rete neurale sulle azioni italiane nelle ultime sedute, per il robot dell'app
+    (rete_azioni.robot: barre da 5 minuti di Yahoo e rete_azioni_modello.json). None se non si può."""
+    try:
+        import rete_azioni
+        return rete_azioni.robot(log=log)
+    except Exception as e:                                     # rete, dati o modello mancanti: l'app si genera lo stesso
+        log("[app] rete delle azioni italiane per il robot saltata: %s" % str(e)[:160])
+        return None
+
+
 def calendari():
     """I giorni di borsa dal 2024 al 2027 (NYSE e Borsa Italiana): servono all'app per contare la data
     di vendita di un titolo comprato in un giorno qualsiasi."""
@@ -188,8 +220,10 @@ def build(data, out):
     with open(TEMPLATE, encoding="utf-8") as fh:
         page = fh.read()
     blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
-    with open(out, "w", encoding="utf-8") as fh:
-        fh.write(page.replace("__DATA__", blob))
+    tmp = out + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as fh:                         # prima un file a parte: se si interrompe,
+        fh.write(page.replace("__DATA__", blob))                          # l'app di prima resta intera
+    os.replace(tmp, out)
     return out
 
 
@@ -209,7 +243,8 @@ def dati_di(path):
 
 def leggero(out, log=print):
     """Aggiornamento leggero, per il controllo di ogni ora: rifà solo i dati crypto intraday (candele orarie e ordini
-    di adesso) sull'ultima app generata, senza riscaricare i dieci anni di prezzi del resto. Ritorna 0 se ha
+    di adesso) e le operazioni delle due reti neurali (crypto e azioni italiane) sull'ultima app generata, senza
+    riscaricare i dieci anni di prezzi del resto. Ritorna 0 se ha
     riscritto l'app, 1 se manca un'app da cui partire o i dati crypto non ci sono (serve allora l'aggiornamento completo)."""
     data = dati_di(out)
     if not data:
@@ -221,8 +256,11 @@ def leggero(out, log=print):
         return 1
     data["intraday"] = nuovo
     data["rete"] = rete_per_app() or data.get("rete")                     # i risultati della rete, se sono stati rifatti
+    data["rete_robot"] = rete_robot_app(log) or data.get("rete_robot")    # le operazioni della rete per il robot
+    data["rete_ita"] = rete_ita_app(log) or data.get("rete_ita")          # la rete delle azioni italiane
+    data["rete_ita_robot"] = rete_ita_robot_app(log) or data.get("rete_ita_robot")
     build(data, out)
-    log("[app] scritta %s (%d KB), solo crypto aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
+    log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
 
 
@@ -250,7 +288,8 @@ def main(argv=None):
         print("[app] nessun mercato disponibile")
         return 1
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
-            "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(),
+            "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
+            "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "libri": load_json(os.path.join(ROOT, "libri.json")),
             "giornata": piano_giornata(),

@@ -430,3 +430,57 @@ class MuroDeiCosti(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def modello_che_compra(azione, valore=0.5):
+    """Una rete che vuole sempre la stessa mossa (1..len(ORIZZONTI)), `valore` % meglio di aspettare."""
+    net = R.Rete([R.N_FEATURE, 4, 1 + len(R.ORIZZONTI)], 0)
+    net.W[-1][:] = 0.0
+    net.b[-1][:] = 0.0
+    net.b[-1][azione] = valore
+    return R.da_json({"rete": net.a_dizionario(), "media": [0.0] * R.N_FEATURE, "dev": [1.0] * R.N_FEATURE, "margine": None, "fuori": True})
+
+
+class Rigioca(unittest.TestCase):
+    """Le operazioni che il robot dell'app rigioca: una alla volta per crypto, entrata all'apertura del minuto, uscita
+    all'apertura del minuto in cui finisce la durata o alla protezione; quelle non ancora finite restano aperte."""
+
+    def iso(self, M, k):
+        import datetime
+        return datetime.datetime.fromtimestamp(M.t0 + 60 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def test_una_alla_volta_e_le_aperte_alla_fine(self):
+        import datetime
+        M = mondo_casuale(giorni=9, seme=3)
+        j = R.ORIZZONTI.index(60) + 1
+        chiuse, aperte, vant = R.rigioca(modello_che_compra(j), M, M.n - 2 * 1440, M.n, margine=0.001, costo=0.002)
+        self.assertGreater(len(chiuse), 30)
+        self.assertTrue(1 <= len(aperte) <= 2)
+        self.assertEqual(set(vant), {"A-EUR", "B-EUR"})
+        quando = lambda s: datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=datetime.timezone.utc).timestamp()
+        per = {}
+        for o in chiuse:
+            c, k = M.simboli.index(o["sym"]), int((quando(o["t"]) - M.t0) // 60)
+            self.assertGreaterEqual(k, R.AVVIO)
+            self.assertAlmostEqual(o["prezzo"], M.o[c, k], places=6)                  # si entra all'apertura del minuto
+            self.assertLess(o["protezione"], o["prezzo"])
+            self.assertAlmostEqual(o["r"], (1 - 0.002) ** 2 * o["prezzo_uscita"] / o["prezzo"] - 1, places=5)
+            if o["motivo"] == "scadenza":
+                self.assertEqual(o["t_uscita"], self.iso(M, k + 60))
+                self.assertAlmostEqual(o["prezzo_uscita"], M.o[c, k + 60], places=6)
+            else:
+                self.assertEqual(o["motivo"], "protezione")
+                self.assertLessEqual(quando(o["t_uscita"]), quando(o["t"]) + 3600)
+                self.assertLessEqual(o["prezzo_uscita"], o["protezione"])
+            per.setdefault(o["sym"], []).append(o)
+        for ops in per.values():
+            for a, b in zip(ops, ops[1:]):
+                self.assertGreaterEqual(b["t"], a["t_uscita"])
+        for o in aperte:                                                              # finirebbero oltre i dati
+            self.assertGreater(quando(o["scade"]), M.t0 + 60 * (M.n - 1))
+            self.assertNotIn("t_uscita", o)
+
+    def test_il_modello_fuori_resta_fuori_se_non_si_impone_un_margine(self):
+        M = mondo_casuale(giorni=8, seme=4)
+        chiuse, aperte, _ = R.rigioca(modello_che_compra(3), M, M.n - 1440, M.n)
+        self.assertEqual((chiuse, aperte), ([], []))
