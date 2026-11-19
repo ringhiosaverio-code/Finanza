@@ -47,9 +47,8 @@ python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a qu
 
 Sezioni: Oggi, Il mio portafoglio, Esercitati, Crypto, Cerca un titolo, Altro (Azioni, Funziona?,
 Come funziona, esempio di day trade). L'app si aggiorna da sola nei giorni di borsa alle 18:10 e
-alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York; ogni ora, tutti i giorni, un
-aggiornamento leggero (`python3 app.py --leggero`, pochi secondi) rifà solo le crypto, che non hanno
-orari, e fa lavorare il robot nel cloud.
+alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York. `python3 app.py --leggero` rifà in
+pochi secondi solo la parte crypto dall'ultima app generata.
 
 - **Il mio portafoglio**: scrivi cosa possiedi (quantità, prezzo e data d'acquisto) e ogni giorno
   l'app dice una sola cosa per titolo: **TIENI** fino alla data di vendita (il periodo consigliato
@@ -59,23 +58,23 @@ orari, e fa lavorare il robot nel cloud.
 - **Esercitati**: un conto finto da 10.000 € ai prezzi di chiusura dell'ultimo aggiornamento, con i
   costi (0,1 %, Tobin tax sulle azioni italiane, 0,2 % sulle crypto) e il cambio euro/dollaro.
   Prima di comprare mostra il giudizio, quando vendi confronta il risultato con il piano.
-- **Crypto, ordini ogni ora** (`intraday.py`): a ogni ora piena, per ognuna delle 12 crypto, tre
-  ordini "compra il ribasso" validi un'ora: entrata a 1,5, 2 o 3 escursioni medie orarie (ATR delle
-  ultime 24 candele) sotto il prezzo, protezione 3 escursioni sotto l'entrata, obiettivo il prezzo
-  di partenza, uscita comunque dopo 24 ore. Una posizione alla volta per crypto e profondità. Gli
-  ordini sono molti di più (circa 27 al giorno sulle 12 crypto) e la strategia è cambiata, quindi è
-  stata verificata da capo: 2 anni di candele orarie di Yahoo, primo anno contro secondo, costi 0,2 %
-  per lato. Media per operazione: leggero +0,36 % e +0,24 %, medio +0,60 % e +0,39 %, profondo
-  +0,62 % e +0,63 % (in guadagno il 70-82 % delle volte: tante piccole vincite, poche perdite
-  grandi, quando la protezione scatta). Con una prova prudente (l'ordine scatta solo se il minimo
-  scende ancora di un quarto di escursione) restano +0,13 %, +0,28 % e +0,50 % nel secondo anno.
-  Controllo indipendente sulle candele di Kraken (12 crypto, ultimi 30 giorni): +0,18 %, +0,48 %,
-  +1,0 %. La rottura, tenuta come confronto, perde (-0,4 % e -0,5 %). Limiti: un ordine limite
-  sul minimo di una candela non è garantito che si esegua (nella realtà una parte di quelli che
-  tornano subito su non scatta), 2 anni sono pochi e gli ultimi trimestri sono più deboli dei
-  primi, finestre di 2 ore o più perdono, e il robot è un conto finto: niente ordini veri.
-  `python3 intraday.py --ore` rifà la verifica. I due piani al giorno di prima (rottura compresa,
-  media da -0,4 % a -0,5 %) restano nella sezione Crypto come "Come eravamo partiti".
+- **Crypto, ordini ogni ora** (`intraday.py`) — **perdono, ritirati il 19 novembre 2026**. A ogni ora piena,
+  per ognuna delle 12 crypto, tre ordini "compra il ribasso" validi un'ora: entrata a 1,5, 2 o 3
+  escursioni medie orarie (ATR delle ultime 24 candele) sotto il prezzo, protezione 3 escursioni sotto
+  l'entrata, obiettivo il prezzo di partenza, uscita comunque dopo 24 ore, una posizione alla volta per
+  crypto e profondità. La prima verifica (18 novembre) li dava in guadagno (+0,2 % / +0,6 % a operazione
+  nel secondo anno, anche su Kraken) ed era sbagliata: nella candela in cui scatta l'ordine contava come
+  obiettivo raggiunto anche il massimo, che può essere venuto prima del minimo (l'obiettivo è il prezzo di
+  partenza e la candela dopo apre proprio lì). Corretto (l'obiettivo conta dalla candela dopo l'entrata) e
+  rifatto minuto per minuto sugli scambi veri di Kraken, 400 giorni e 12 crypto, con l'ordine che scatta
+  solo se qualcuno vende a mercato sotto il suo prezzo: leggero -0,60 %, medio -0,61 %, profondo -0,49 % per
+  operazione dopo i costi (0,2 % per lato), negativo in ogni periodo di 60 giorni. Le candele di Yahoo
+  corrette danno lo stesso (da -0,5 % a -1,0 %). Il controllo su Kraken di allora usava le stesse candele
+  con la stessa regola: non era indipendente. Il robot non li usa più; restano nella sezione Crypto, con il
+  verdetto "Per ora no" e la spiegazione dell'errore. `python3 intraday.py --ore` rifà la verifica sulle candele;
+  `python3 rete_dati.py` scarica gli scambi di Kraken (400 giorni, circa 75 minuti) e `python3 rete.py --ordini-limite`
+  la rifà minuto per minuto sugli scambi. I due
+  piani al giorno di prima (rottura compresa, media da -0,4 % a -0,5 %) restano come "Come eravamo partiti".
 - **Crypto**: le 12 principali in euro (Bitcoin, Ethereum, Solana…) con le stesse regole: probabilità
   a 3 mesi di calendario, oscillazione, calo massimo storico (Bitcoin fino a -83 %) e giudizio.
 
@@ -291,14 +290,14 @@ notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la 
 Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10.000 € per strategia e niente soldi veri. Non invia ordini a nessun broker: le operazioni sono simulate a prezzi reali (Yahoo Finance).
 
 - **Azioni in seduta** (esercitazione, in media perde): sui 14 titoli più scambiati di USA e Milano. Se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura. Compra e vende solo a borsa aperta, dal lunedì al venerdì (New York 9:30–16:00, Milano 9:00–17:30), mai di notte. Costi: quelli scelti in Commissioni.
-- **Crypto, ordini ogni ora** (provata su 2 anni, vedi sopra): ogni ora mette tre ordini "compra il ribasso" per crypto, ognuno con 1/36 del capitale (12 crypto per 3 profondità); l'ordine vale un'ora, poi si esce alla protezione, all'obiettivo o dopo 24 ore. 24 ore su 24, solo crypto.
+- **Strategie crypto ritirate** (19 novembre 2026): i piani di 24 ore e gli ordini di ogni ora perdono nelle verifiche corrette (vedi sopra). Il robot non apre più ordini crypto: gli ordini in attesa si annullano e le posizioni già aperte si chiudono alla protezione, all'obiettivo o dopo 24 ore.
 - **Strategie di notte ritirate**: il robot non compra più azioni a borsa chiusa. Le posizioni rimaste da prima si chiudono alla prossima apertura. La verifica di notte resta nei libri.
 
 **Operazioni in diretta.** Il registro in cima alla scheda elenca ogni operazione, tutte o solo azioni o solo crypto, con l'ora (con i secondi per quelle di oggi), il prezzo, l'importo investito o incassato, il risultato e la fonte (in diretta, prezzi ufficiali, candele orarie). Una riga in alto compare in tutte le pagine mentre una sessione è aperta, e ogni operazione nuova avvisa (con notifica del dispositivo, se hai concesso gli avvisi e la pagina è in un'altra scheda). Il registro tiene le ultime 1000 operazioni.
 
 **Sessioni.** Inizia sessione (da oggi, o rigiocando l'ultima settimana o le ultime due) e Termina sessione: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano, poi il robot si ferma. Ogni strategia si avvia e si ferma da sola.
 
-In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (prezzi ogni 5 secondi e ordini rifatti a ogni ora piena, `/ordini`), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi, con gli ordini dell'ultimo aggiornamento dell'app). A pagina chiusa il cloud rifà le operazioni ogni ora (le crypto, con le candele orarie) e alle 18:10 e alle 22:10 dei giorni feriali (anche le azioni, con i prezzi ufficiali) (`robot_cloud.js`), senza cambiare quelle già registrate e con un avviso per le operazioni nuove. I secondi in mezzo li vede solo `live.py`, acceso sul tuo computer.
+In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (ogni 5 secondi), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi). A pagina chiusa il cloud rifà le operazioni alle 18:10 e alle 22:10 dei giorni feriali con i prezzi ufficiali (`robot_cloud.js`), senza cambiare quelle già registrate e con un avviso per le operazioni nuove.
 
 Il robot salva a ogni operazione e lo storico ogni 10 minuti. Verifica: rigiocando da inizio novembre 2026, le operazioni in seduta coincidono con il calcolo in Python (stesse liste, stessi risultati); le crypto usano la stessa logica già verificata sulle candele orarie.
 ### I dati di oggi: seduta in corso e chiusura mancante
@@ -375,9 +374,8 @@ con la sola libreria standard di Python:
 - **avvisi**, con suono e notifica se li attivi, a ogni passaggio. I livelli già superati prima
   dell'avvio non fanno avviso: la tabella li mostra.
 
-La pagina è servita solo su 127.0.0.1. La verifica di 2 anni dà un guadagno medio per operazione
-dopo i costi, ma un ordine limite sul minimo di una candela oraria non è garantito che si esegua:
-è uno strumento per seguire gli ordini del robot, non una promessa di guadagno.
+La pagina è servita solo su 127.0.0.1. Gli ordini orari, nella verifica corretta, perdono in media
+dopo i costi: è uno strumento per seguire un'idea, non una promessa di guadagno.
 
 ## Test
 

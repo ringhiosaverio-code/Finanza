@@ -138,8 +138,9 @@ def crypto_intraday(log=print, leggero=None):
         r["varianti"] = (leggero or {}).get("varianti") or intraday.varianti(log)
         try:
             r["ore"] = intraday.analizza_ore(log, kraken=not leggero)
-            if leggero and (leggero.get("ore") or {}).get("kraken"):
-                r["ore"]["kraken"] = leggero["ore"]["kraken"]
+            vecchio = (leggero or {}).get("ore") or {}
+            if vecchio.get("kraken") and vecchio.get("metodo") == intraday.METODO_ORE:    # solo se calcolato allo stesso modo
+                r["ore"]["kraken"] = vecchio["kraken"]
         except Exception as e:                               # rete o dati: restano i piani di prima
             log("[app] ordini orari saltati: %s" % e)
         return r

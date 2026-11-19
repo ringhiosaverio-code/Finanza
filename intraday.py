@@ -16,9 +16,11 @@ Due regole, fissate prima di guardare i risultati, più il confronto "compra e v
   candela oraria nelle ultime 24 ore.
 La verifica rifà il piano alle 17 e alle 21 UTC (quando si aggiorna l'app) di ogni giorno degli
 ultimi 2 anni, per tutte e 12 le crypto, e separa il primo anno dal secondo.
-Dal 18 novembre 2026 l'app e il robot usano ordini rinnovati ogni ora (analizza_ore, più sotto): tre ribassi
-da 1,5 / 2 / 3 escursioni, validi un'ora, uno alla volta per moneta e profondità, verificati su 2 anni di Yahoo e
-controllati su Kraken. I due piani al giorno (17 e 21 UTC) restano qui come confronto.
+Il 18 novembre 2026 l'app ha provato ordini rinnovati ogni ora (analizza_ore, più sotto): tre ribassi da 1,5 / 2 / 3
+escursioni, validi un'ora, uno alla volta per moneta e profondità. La prima verifica li dava in guadagno, ma contava
+l'obiettivo anche nella candela in cui scatta l'ordine (il massimo può essere venuto prima del minimo): corretto il
+19 novembre, e rifatto minuto per minuto sugli scambi veri di Kraken (rete.py), perdono lo 0,4-0,6 % per operazione.
+Il robot non li usa più. I due piani al giorno (17 e 21 UTC) restano qui come confronto.
 Solo libreria standard. Non è consulenza finanziaria.
 """
 
@@ -283,6 +285,7 @@ def varianti(log=print):
 # ---------------------------------------------------------------------------------------------------------
 FINESTRA = 1                  # ore in cui vale ogni ordine: a ogni ora piena se ne fa uno nuovo
 TENUTA = 24                   # ore al massimo in posizione dopo l'entrata
+METODO_ORE = 2          # 2: l'obiettivo di un ribasso non conta nella candela dell'entrata (corretto il 19 novembre 2026)
 STOP_ATR = 3                  # protezione sotto l'entrata, in escursioni orarie
 PENETRAZIONE = 0.25           # prova prudente: il minimo deve scendere un quarto di escursione sotto il livello
 # le tre profondità: fissate dopo la prova su 2 anni di Yahoo e controllate su Kraken (30 giorni); la prova con
@@ -348,6 +351,11 @@ def episodio(B, i, lv, ai, tipo="ribasso", finestra=FINESTRA, tenuta=TENUTA, pen
     base = {"prezzo_entrata": fill, "quando": _t(B[trig][0]), "scade": _t(B[trig][0] + tenuta * 3600)}
     for j in range(trig, min(n, trig + tenuta)):
         b, k = B[j], j - trig
+        # Un ribasso ha l'obiettivo al prezzo di partenza, che è anche dove apre di solito la candela dopo: nella candela
+        # dell'entrata il suo massimo può essere venuto PRIMA del minimo che fa scattare l'ordine. Non si sa in che ordine
+        # sono venuti, quindi lì l'obiettivo non conta (la protezione sì: è il caso peggiore). Contarlo, come si faceva
+        # prima del 19 novembre 2026, gonfiava i risultati: sugli scambi veri passava da -0,5 % a +0,4 % per operazione.
+        obiettivo_vale = k > 0 or tipo != "ribasso"
         px = nome = None
         if k > 0 and b[1] <= stop:
             px, nome = b[1], "protezione"
@@ -355,7 +363,7 @@ def episodio(B, i, lv, ai, tipo="ribasso", finestra=FINESTRA, tenuta=TENUTA, pen
             px, nome = b[1], "obiettivo"
         elif b[3] <= stop:
             px, nome = stop, "protezione"
-        elif b[2] >= tgt:
+        elif obiettivo_vale and b[2] >= tgt:
             px, nome = tgt, "obiettivo"
         if nome:
             return dict(base, fase=nome, chiusura=_t(b[0]), prezzo_uscita=px, rendimento=px / fill - 1 - 2 * COSTO, x=j)
@@ -491,7 +499,7 @@ def analizza_ore(log=print, max_age=3600, kraken=True):
             k = controllo_kraken(log)
         except Exception as e:                               # rete: il resto resta
             log("[intraday] controllo su Kraken saltato: %s" % e)
-    return {"generato": datetime.date.today().isoformat(), "finestra_ore": FINESTRA, "tenuta_ore": TENUTA,
+    return {"generato": datetime.date.today().isoformat(), "metodo": METODO_ORE, "finestra_ore": FINESTRA, "tenuta_ore": TENUTA,
             "stop_escursioni": STOP_ATR, "penetrazione": PENETRAZIONE, "costo_per_lato": COSTO,
             "livelli": LIVELLI_ORE, "rottura": ROTTURA_ORE, "verifica": verifica, "kraken": k, "crypto": per}
 

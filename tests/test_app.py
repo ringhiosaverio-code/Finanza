@@ -56,8 +56,16 @@ class Leggero(unittest.TestCase):
                     self.assertEqual(app.leggero(out, log=lambda x: None), 1)
             self.assertEqual(leggi(), prima)
 
+    def test_il_controllo_su_kraken_di_un_altro_metodo_non_si_riusa(self):
+        vecchio = dati()["intraday"]                                    # senza "metodo": calcolato prima della correzione
+        with mock.patch.object(app.intraday, "analizza", return_value={"crypto": {}}), \
+                mock.patch.object(app.intraday, "analizza_ore", return_value={"crypto": {}, "kraken": None}):
+            r = app.crypto_intraday(log=lambda m: None, leggero=vecchio)
+        self.assertIsNone(r["ore"]["kraken"])
+
     def test_crypto_intraday_leggero_riusa_varianti_e_kraken(self):
         vecchio = dati()["intraday"]
+        vecchio["ore"]["metodo"] = app.intraday.METODO_ORE
         with mock.patch.object(app.intraday, "analizza", return_value={"crypto": {}}), \
                 mock.patch.object(app.intraday, "varianti", side_effect=AssertionError("non va rifatto")), \
                 mock.patch.object(app.intraday, "analizza_ore", return_value={"crypto": {}, "kraken": None}) as ore:

@@ -85,6 +85,28 @@ class Episodio(unittest.TestCase):
         self.assertEqual(r["x"], self.i + 2)
         self.assertEqual(r["quando"], I._t(T0 + (self.i + 1) * 3600))
 
+    def test_l_obiettivo_non_conta_nella_candela_dell_entrata(self):
+        # la stessa candela tocca il livello (97) e arriva sopra l'obiettivo (100): non si sa se il massimo è venuto
+        # prima del minimo, cioè prima dell'entrata. Sugli scambi veri contarlo faceva passare un ribasso da -0,5 % a +0,4 %
+        B = list(self.B[:self.i + 4])
+        candela(B, self.i + 1, 100, 100.4, 96.5, 99)
+        candela(B, self.i + 2, 99, 99.5, 98.0, 98.5)                    # le candele dopo restano sotto l'obiettivo
+        candela(B, self.i + 3, 98.5, 99.5, 98.0, 99)
+        self.assertEqual(self.fase(B)["fase"], "dentro")
+        candela(B, self.i + 3, 99, 100.2, 98.5, 100)                    # alla candela dopo l'entrata, sì
+        r = self.fase(B)
+        self.assertEqual(r["fase"], "obiettivo")
+        self.assertEqual(r["x"], self.i + 3)
+
+    def test_la_protezione_conta_nella_candela_dell_entrata(self):
+        candela(self.B, self.i + 1, 100, 100.4, 90.0, 99)               # arriva sotto la protezione (91): il caso peggiore
+        self.assertEqual(self.fase()["fase"], "protezione")
+
+    def test_la_rottura_conserva_la_regola_di_prima(self):
+        lv = I.ordine_ore(self.B, self.i, self.a, self.m, "rottura")     # entrata 103, obiettivo 107
+        candela(self.B, self.i + 1, 100, 107.5, 99.9, 106)              # sale dal basso: passa dall'entrata prima dell'obiettivo
+        self.assertEqual(I.episodio(self.B, self.i, lv, self.a[self.i], "rottura")["fase"], "obiettivo")
+
     def test_entra_all_apertura_se_e_gia_sotto(self):
         candela(self.B, self.i + 1, 95, 96, 94, 95.5)                   # apre sotto il limite: si compra all'apertura
         r = self.fase()

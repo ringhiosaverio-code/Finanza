@@ -17,9 +17,9 @@ app blocca ogni collegamento a siti esterni), quindi il tempo reale passa da qui
             compare nell'elenco degli avvisi e, se lo permetti, suona e manda una notifica
 
 La pagina è servita solo su 127.0.0.1 (non è raggiungibile da altri computer).
-Solo libreria standard, Python 3.8+. Non è consulenza finanziaria: la verifica su 2 anni e su
-Kraken dà un guadagno medio per operazione dopo i costi, ma un ordine limite sul minimo di una
-candela oraria non è garantito che si esegua.
+Solo libreria standard, Python 3.8+. Non è consulenza finanziaria: gli ordini orari, nella
+verifica corretta del 19 novembre 2026 (sugli scambi veri di Kraken), perdono in media dopo i costi.
+Questo programma serve a seguire l'idea, non a sfruttare un vantaggio che non c'è.
 """
 
 import argparse
@@ -307,7 +307,7 @@ async function giro() {
   const P0 = Object.values(D.piani || {})[0];
   $('#pi').innerHTML = P0 ? `<b>Ordini delle ${hm(P0.ora)}, validi fino alle ${hm(P0.fino)}.</b> Se ne fanno di nuovi a ogni ora piena, dall'ultima candela oraria chiusa; l'ultimo calcolo alle ${D.piani_ora}.` : 'Calcolo gli ordini dalle candele orarie…';
   if (D.verifica && D.verifica.ribasso15) { const v = D.verifica, g = s => s && s.n ? `${Math.round(s.p_gain * 100)} % in guadagno, media ${pc(s.media)}` : 'n/d';
-    $('#ver').innerHTML = `<b>Verifica di 2 anni, costi inclusi (secondo anno):</b> ribasso leggero ${g(v.ribasso15.anno2)} · medio ${g(v.ribasso20.anno2)} · profondo ${g(v.ribasso30.anno2)} · la rottura ${g(v.rottura.anno2)}. Un ordine limite sul minimo di una candela non è garantito che si esegua: se provi, fallo prima nel conto demo dell'app.`; }
+    $('#ver').innerHTML = `<b>Verifica di 2 anni, costi inclusi (secondo anno):</b> ribasso leggero ${g(v.ribasso15.anno2)} · medio ${g(v.ribasso20.anno2)} · profondo ${g(v.ribasso30.anno2)} · la rottura ${g(v.rottura.anno2)}. Verifica corretta il 19 novembre 2026: nessuno guadagna in media, è un esperimento da guardare, non da usare.`; }
   const S = D.seguiti || [];
   $('#tb').innerHTML = Object.keys(D.nomi).map(s => { const x = D.prezzi[s]; if (!x) return '';
     const v = x.prezzo / x.apertura - 1, cl = x.direzione > 0 ? 'flashu' : x.direzione < 0 ? 'flashd' : '';
