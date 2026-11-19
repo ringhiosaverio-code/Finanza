@@ -2123,6 +2123,7 @@ const STRATEGIE = {
 const MERCATI_ORE = {usa: {tz: 'America/New_York', apre: '09:30', chiude: '16:00'}, italia: {tz: 'Europe/Rome', apre: '09:00', chiude: '17:30'}};
 
 const PASSI = {attesa: 0, dentro: 1, obiettivo: 2, protezione: 2, scaduto: 2, scaduto_dentro: 2, saltato: 2, annullato: 2, manuale: 2};
+let robotVerso = 'tutte';
 let ROBOT = null, robotSalvo = false, robotUltimo = 0, robotUltimaChiave = undefined, robotSalvataAlle = 0, robotTutto = false, robotFiltro = 'tutte', robotLimite = 30;
 const ROBOT_CHIESTI = {}, ROBOT_FESTA = {};                                      // ultima richiesta a /aperture; borsa chiusa oggi
 const r4 = x => Math.round(x * 1e4) / 1e4, r6 = x => Math.round(x * 1e6) / 1e6;
@@ -2676,11 +2677,13 @@ function robotHTML() {
       ${pos.some(p => STRATEGIE[p.k].ritirata) ? '<p class="note" style="margin-top:4px">Le posizioni di notte rimaste da prima di questa versione si chiudono alla prossima apertura: il robot non ne apre di nuove.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
   const tutte = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1);
   if (!['tutte', 'giornata', 'crypto', 'rete', 'rete_ita'].includes(robotFiltro)) robotFiltro = 'tutte';
-  const filtrate = tutte.filter(e => robotFiltro === 'tutte' || e.s === robotFiltro);       // una sezione per strategia
+  const filtrate = tutte.filter(e => (robotFiltro === 'tutte' || e.s === robotFiltro)       // una sezione per strategia
+    && (robotVerso === 'tutte' || (robotVerso === 'entrate' ? e.azione === 'compra' : e.azione === 'vende')));
   const reg = filtrate.slice(0, robotLimite);
   const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome'}) + ', in seduta' : oraDi(e.t);
   const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
-  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['crypto', 'Crypto, ordini ogni ora'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>`;
+  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['crypto', 'Crypto, ordini ogni ora'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
+    <div class="seg" style="margin-top:6px" role="group" aria-label="Entrate o uscite">${[['tutte', 'Entrate e uscite'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([f, t]) => `<button type="button" data-v="${f}" aria-pressed="${robotVerso === f}">${t}</button>`).join('')}</div>`;
   const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span></li>`).join('');
   const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>
     ${LIVE.fonte || SPETTATORE ? '' : '<p class="note" style="margin-top:4px">Per vederle in diretta: avvia <code>python3 live.py</code> sul computer e tieni aperta la pagina, oppure premi “Prezzi in tempo reale” nell’app desktop di Claude.</p>'}
@@ -2725,6 +2728,7 @@ function robotEventi() {
     robotTermina(ROBOT, new Date()); robotGiro(); robotSalva(); renderGiornata(); avviso('Sessione terminata.');
   });
   document.querySelectorAll('#robot [data-f]').forEach(b => b.addEventListener('click', () => { robotFiltro = b.dataset.f; robotLimite = 30; aggiornaRobot(); }));
+  document.querySelectorAll('#robot [data-v]').forEach(b => b.addEventListener('click', () => { robotVerso = b.dataset.v; robotLimite = 30; aggiornaRobot(); }));
   $('#rb-altre')?.addEventListener('click', () => { robotLimite += 30; aggiornaRobot(); });
   $('#rb-avvisi')?.addEventListener('click', async () => {
     try { const p = await Notification.requestPermission(); avviso(p === 'granted' ? 'Avvisi attivi: se la pagina è in un’altra scheda ti avviso a ogni operazione.' : 'Il browser non concede gli avvisi.'); }
