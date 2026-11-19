@@ -38,6 +38,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 APP = os.path.join(ROOT, "trader", "app.html")
+STATI = []                                                    # i file da cui una pagina nuova prende lo stato del robot
 UA = "Mozilla/5.0 (compatible; finanza/1.0)"
 SPARK = "https://query1.finance.yahoo.com/v7/finance/spark?symbols=%s&range=1d&interval=1d"
 PER_RICHIESTA = 20            # Yahoo rifiuta più di 20 simboli in una richiesta
@@ -199,6 +200,13 @@ def server(quot, porta, host="127.0.0.1", aper=None, ordini=None):
                     self.invia(502, "application/json", json.dumps({"errore": str(e)[:100]}).encode())
                     return
                 self.invia(200, "application/json", corpo)
+            elif u.path == "/robot":                             # lo stato del robot salvato dal cloud, se c'è
+                stati = [p for p in (STATI or []) if os.path.exists(p)]
+                if not stati:
+                    self.send_error(404)
+                    return
+                with open(max(stati, key=os.path.getmtime), "rb") as fh:
+                    self.invia(200, "application/json", fh.read())
             elif u.path in ("/", "/index.html"):
                 try:
                     with open(APP, "rb") as fh:                    # sempre l'ultima app generata da app.py
@@ -232,12 +240,15 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--porta", type=int, default=8770)
     ap.add_argument("--no-browser", action="store_true", help="non aprire il browser")
+    ap.add_argument("--stato", action="append", default=[],
+                    help="file JSON con lo stato del robot (quello salvato dall'app pubblicata): una pagina nuova riparte da lì")
     ap.add_argument("--rete", action="store_true",
                     help="raggiungibile anche dagli altri dispositivi della rete di casa (nessuna password: solo in reti fidate)")
     a = ap.parse_args(argv)
     if not os.path.exists(APP):
         print("[live] manca trader/app.html: genera prima l'app con python3 app.py")
         return 1
+    STATI[:] = a.stato
     srv = server(Quotazioni(), a.porta, "0.0.0.0" if a.rete else "127.0.0.1", Aperture(), Ordini())
     url = "http://127.0.0.1:%d" % a.porta
     print("[live] l'app con le quotazioni in tempo reale: %s · Ctrl+C per fermare" % url)

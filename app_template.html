@@ -2873,6 +2873,13 @@ async function avviaLive() {
   const info = $('#live-info'); if (info) { info.innerHTML = liveInfoHTML(); $('#live-chiudi').addEventListener('click', () => { info.hidden = true; }); }
   if (!window.claude && /^https?:$/.test(location.protocol)) {                    // servita da live.py
     try { const r = await fetch('/quotazioni?s=EURUSD%3DX', {cache: 'no-store'}); if (r.ok && (await r.json()).quote) LIVE.fonte = 'locale'; } catch (e) {}
+    if (LIVE.fonte === 'locale' && !ROBOT) {                                      // pagina nuova: riparte dal robot dell'app pubblicata
+      try {
+        const r = await fetch('/robot', {cache: 'no-store'});
+        const v = r.ok ? await r.json() : null;
+        if (v && !v.vuoto && v.conti) { ROBOT = robotMigra(v); robotUltimaChiave = undefined; robotSalva(); robotGiro(); aggiornaRobot(); }
+      } catch (e) {}
+    }
   }
   if (!LIVE.fonte && window.claude && claude.use) {                               // app desktop di Claude
     try {
