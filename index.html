@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finanza</title>
+<style>
+  :root { --bg: #fff; --fg: #1d1d1f; --muted: #6e6e73; --accent: #0a66c2; }
+  @media (prefers-color-scheme: dark) { :root { --bg: #111; --fg: #f2f2f2; --muted: #a1a1a6; --accent: #5aa9ff; } }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+  main { max-width: 520px; margin: 18vh auto 0; padding: 0 16px; text-align: center; }
+  p { color: var(--muted); } a { color: var(--accent); }
+</style>
+</head>
+<body>
+<main id="m"><h1>Finanza</h1><p>Carico l'app aggiornata…</p></main>
+<script>
+// Il sito carica l'ultima app generata nel cloud (ramo robot-stato, rifatta ogni 15 minuti): così funziona sia quando
+// GitHub Pages pubblica l'app con il workflow, sia quando pubblica i file del ramo, e mostra sempre i dati più freschi.
+(async () => {
+  const fonti = [
+    'https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/app.html?t=' + Math.floor(Date.now() / 60e3),
+    'app.html'
+  ];
+  for (const u of fonti) {
+    try {
+      const r = await fetch(u, {cache: 'no-store'});
+      if (!r.ok) continue;
+      const t = await r.text();
+      if (t.length < 100000) continue;
+      document.open(); document.write(t); document.close();
+      return;
+    } catch (e) {}
+  }
+  document.getElementById('m').innerHTML = '<h1>Finanza</h1><p>Non riesco a caricare l\'app in questo momento. Riprova tra qualche minuto, oppure apri <a href="https://claude.ai/artifact/BFb47DAbrhA61B4FuBUmBf">l\'app su Claude</a>.</p>';
+})();
+</script>
+</body>
+</html>
