@@ -522,6 +522,20 @@ def per_app():
 
 MARGINE_ROBOT = 0.001
 SEDUTE_ROBOT = 3
+QUOTA_ORA = 0.02                                # per ogni ora di ogni seduta, almeno il 2 % migliore delle occasioni di quell'ora
+
+
+def soglie_per_ora(G, prob, soglia, quota=QUOTA_ORA):
+    """Una soglia per ogni ora della seduta (09, 10, ... 17): la soglia imparata, abbassata fino al meglio `quota` delle
+    occasioni di quell'ora di quella seduta. La rete vede probabilità più alte all'apertura (si muove di più): con una soglia sola
+    comprerebbe solo alle 9, così sceglie le migliori di ogni ora fino alla chiusura."""
+    G = np.asarray(G)
+    ora = (G // BARRE) * 100 + ((G % BARRE) * BARRA) // 60                 # ogni ora di ogni seduta
+    S = np.full(len(G), float(soglia))
+    for h in np.unique(ora):
+        m = ora == h
+        S[m] = min(float(soglia), float(np.quantile(prob[:, m], 1.0 - quota)))
+    return S
 
 
 def rigioca(modello, B, margine=None, sedute=SEDUTE_ROBOT, costo=COSTO):
@@ -535,6 +549,9 @@ def rigioca(modello, B, margine=None, sedute=SEDUTE_ROBOT, costo=COSTO):
         return [], [], {}
     X, sig = caratteristiche(B, G)
     az, vantaggio = rete.scelte_modello(modello, X, margine)
+    if modello.get("tipo") == "probabilita" and margine is None:
+        tutte, _ = rete.scelte_modello(modello, X, 0.0)                     # l'orizzonte migliore di ogni occasione
+        az = np.where(vantaggio >= soglie_per_ora(G, vantaggio, modello["soglia"])[None, :], tutte, 0)
     voce = "probabilita" if modello.get("tipo") == "probabilita" else "vantaggio"
     iso = lambda t: datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     chiuse, aperte = [], []

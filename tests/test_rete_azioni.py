@@ -330,7 +330,8 @@ class RobotConProbabilita(unittest.TestCase):
             self.assertAlmostEqual(o["probabilita"], 0.7, places=4)
             self.assertLessEqual(o["minuti"], 60)
         r = self.robot({"modelli": {"0.001": q_json}, "probabilita": {"0.001": modello_probabile_azioni(j, soglia=0.8)}}, B)
-        self.assertEqual((r["operazioni"], r["aperte"]), ([], []))                # sotto la soglia non compra
+        self.assertTrue(r["operazioni"])                                          # sotto la soglia prende il meglio di ogni ora
+        self.assertTrue(all(abs(o["probabilita"] - 0.7) < 1e-4 for o in r["operazioni"]))
 
     def test_senza_probabilita_il_q_learning_con_il_margine(self):
         B = barre_finte(sedute=7, titoli=2, ultima=50)
@@ -350,6 +351,22 @@ class RobotConProbabilita(unittest.TestCase):
         self.assertNotIn("rete", m)
         self.assertNotIn("media", m)
         self.assertEqual(m["soglia"], 0.6)
+
+
+class SoglieOgniOra(unittest.TestCase):
+    def test_ogni_ora_della_seduta_ha_le_sue_occasioni(self):
+        B = A.BARRE
+        G = np.arange(2 * B)                                                    # due sedute intere
+        ora = (G % B) * A.BARRA // 60
+        prob = np.tile(np.where(ora == 0, 0.9, 0.5 + 0.001 * (G % B)), (5, 1))     # all'apertura molto più alte
+        S = A.soglie_per_ora(G, prob, 0.8, quota=0.05)
+        self.assertTrue(np.all(S <= 0.8))
+        scelte = prob >= S[None, :]
+        for s in range(2):
+            for h in range(9):
+                m = (G // B == s) & (ora == h)
+                self.assertTrue(scelte[:, m].any(), (s, h))                     # ogni ora di ogni seduta compra qualcosa
+        self.assertEqual(S[0], 0.8)                                             # dove la soglia imparata basta, resta quella
 
 
 if __name__ == "__main__":
