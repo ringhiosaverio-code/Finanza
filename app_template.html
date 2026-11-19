@@ -1597,6 +1597,7 @@ function reteHTML() {
     <h3 style="margin-top:16px">Cosa dice la ricerca</h3><ul class="note" style="margin:4px 0 0;padding-left:18px;display:grid;gap:5px">${ricerca}</ul>
     ${segnaliHTML(Rt.segnali, [['anno', 'Ultimo anno'], ['mese', 'Ultimo mese'], ['settimana', 'Ultima settimana'], ['giorno', 'Ultimo giorno']], 'crypto', Rt.config.orizzonti)}
     ${fontiHTML()}
+    ${regoleLibriHTML('crypto')}
     ${sentimentoHTML()}
     ${probHTML(c0, Rt.esperienza, 'crypto')}
     ${reteOpsHTML(D.rete_robot, 'La rete decide ogni minuto sugli scambi di Kraken; il robot rigioca le sue operazioni nel conto "Crypto, rete neurale" e chiude dal vivo quelle aperte.')}
@@ -1921,6 +1922,13 @@ function sentimentoHTML() {
   const cl = S.valore < 25 ? 'paura estrema' : S.valore < 45 ? 'paura' : S.valore <= 55 ? 'neutro' : S.valore <= 75 ? 'avidità' : 'avidità estrema';
   return `<p class="note" style="margin-top:8px"><b>Il sentimento di oggi</b>: Fear & Greed ${S.valore} su 100 (${cl}, ${esc(S.data)})${S.prima != null ? `, una settimana fa ${S.prima}` : ''}. Le notizie di GDELT entrano nella rete quando il servizio risponde: dal cloud spesso rifiuta le richieste${S.notizie ? `; ultime notizie scaricate: ${esc(S.notizie)}` : ', e per ora non ne sono arrivate'}.</p>`;
 }
+function regoleLibriHTML(mercato) {
+  const R = D.regole_libri; if (!R || !R[mercato] || !Object.keys(R[mercato]).length) return '';
+  const righe = Object.values(R[mercato]).sort((a, b) => b.media - a.media).map(x => `<tr><td class="l" style="white-space:normal"><b>${esc(x.nome)}</b></td><td>${x.n}</td><td>${p100(x.vinte)}</td><td class="${x.media >= 0 ? 'pos' : 'neg'}"><b>${pc(x.media, 2)}</b></td><td class="${x.meta[0].media >= 0 ? 'pos' : 'neg'}">${pc(x.meta[0].media, 2)}</td><td class="${x.meta[1].media >= 0 ? 'pos' : 'neg'}">${pc(x.meta[1].media, 2)}</td></tr>`).join('');
+  return `<h3 style="margin-top:16px">Le regole della tesi di Sperti e del libro di Rosenbloom</h3>
+    <p class="note" style="margin-top:2px">Le regole intraday della tesi "Silloge di metodi operativi per il trading azionario intraday" (Claudio Sperti, Università di Bologna) e del libro "Guida completa al trading" di Corey Rosenbloom, scritte in codice e provate su barre da 60 minuti di Yahoo dal ${esc(R.dati.da)} al ${esc(R.dati.a)}, con stop, obiettivi e uscita come nei testi e costi di ${pc(R.costi[mercato], 1, false)} per lato. Se nella stessa ora si toccano stop e obiettivo vale lo stop. La tesi riporta i risultati prima delle commissioni e con la leva: qui sono dopo i costi e senza leva.</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Regola</th><th>Operazioni</th><th>In guadagno</th><th>Media</th><th>Prima metà</th><th>Seconda metà</th></tr></thead><tbody>${righe}</tbody></table></div>`;
+}
 function fontiHTML() {
   const F = D.segnali_fonti; if (!F || !F.length) return '';
   return `<details style="margin-top:10px"><summary>Da dove vengono i segnali: studi, libri e trader (${F.length})</summary><ul class="note" style="margin:6px 0 0;padding-left:18px">${F.map(([a, b]) => `<li><b>${esc(a)}</b>: ${esc(b)}</li>`).join('')}</ul></details>`;
@@ -1985,6 +1993,7 @@ function reteItaHTML() {
     <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Costo</th><th>Rinforzo: operazioni</th><th>media</th><th>Previsione: operazioni</th><th>media</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
     ${segnaliHTML(Rt.segnali, [['tutte', 'Tutte le sedute'], ['mese', 'Ultimo mese'], ['settimana', 'Ultima settimana'], ['giorno', 'Ultima seduta']], 'titolo', Rt.config.orizzonti)}
     ${fontiHTML()}
+    ${regoleLibriHTML('azioni')}
     ${probHTML(c0, Rt.esperienza, 'titolo')}
     ${reteOpsHTML(RR, 'La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "Azioni italiane, rete neurale" e le chiude al più tardi in chiusura.')}
     <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 rete_azioni.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;

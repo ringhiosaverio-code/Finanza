@@ -558,10 +558,41 @@ python3 rete_azioni.py --studia     # scarica le barre, addestra e verifica (cir
 python3 rete_azioni.py --oggi       # le operazioni che la rete fa nelle ultime 3 sedute (quelle che il robot rigioca)
 ```
 
+## Le regole della tesi di Sperti e del libro di Rosenbloom: `regole_libri.py`
+
+```bash
+python3 regole_libri.py      # 2 anni di barre da 60 minuti (Yahoo), circa un minuto; scrive regole_libri.json
+```
+
+Le regole intraday di due testi, scritte in codice come sono descritte e provate sui titoli del FTSE MIB (e, per
+Rosenbloom, sulle 12 crypto) con barre da 60 minuti dal 2024-01-04 al 2026-11-19: dalla tesi di Claudio Sperti
+"Silloge di metodi operativi per il trading azionario intraday" (Università di Bologna, 2010) l'Opening Gap all'1 %,
+l'Opening Gap al 2 % di James Altucher, l'80-20 di Larry Connors e l'Oops di Larry Williams, con stop all'1 %, obiettivi
+come nella tesi e uscita in chiusura; dal libro di Corey Rosenbloom "Guida completa al trading" l'impulse buy (dopo un
+nuovo massimo di prezzo e di momentum MACD 3/10, compra sul ritorno alla media esponenziale a 20, stop sotto quella a
+50, obiettivo il massimo dell'impulso) e il bullish cradle (ritorno sull'incrocio rialzista delle medie a 20 e 50,
+obiettivo 2 volte il rischio). Costi 0,1 % per lato sulle azioni e 0,2 % sulle crypto; se nella stessa ora si toccano
+stop e obiettivo vale lo stop; con un ordine stop la barra d'entrata non conta (il minimo è venuto prima).
+
+| Mercato | Regola | operazioni | in guadagno | media | prima metà | seconda metà |
+|---|---|---|---|---|---|---|
+| azioni | Opening Gap al 2 % di James Altucher (tesi di Sperti) | 721 | 33 % | -0,05 % | -0,11 % | +0,00 % |
+| azioni | 80-20 di Larry Connors (tesi di Sperti) | 56 | 41 % | -0,13 % | -0,10 % | -0,15 % |
+| azioni | Opening Gap all'1 % (tesi di Sperti) | 2293 | 36 % | -0,13 % | -0,15 % | -0,12 % |
+| azioni | Oops di Larry Williams, versione della tesi | 975 | 42 % | -0,16 % | -0,21 % | -0,12 % |
+| azioni | Bullish cradle di Rosenbloom | 1643 | 36 % | -0,22 % | -0,21 % | -0,22 % |
+| azioni | Impulse buy di Rosenbloom | 1588 | 33 % | -0,25 % | -0,23 % | -0,26 % |
+| crypto | Bullish cradle di Rosenbloom | 1367 | 29 % | -0,53 % | -0,55 % | -0,52 % |
+| crypto | Impulse buy di Rosenbloom | 1139 | 24 % | -0,60 % | -0,65 % | -0,58 % |
+
+Nessuna regola guadagna dopo i costi; la più vicina al pareggio è l'Opening Gap al 2 % di Altucher (il rimbalzo dopo
+un'apertura molto sotto c'è, ma vale circa quanto i costi). La tesi riporta i risultati prima delle commissioni e con
+la leva fino a 20 volte, che moltiplica anche le perdite.
+
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni e segnali, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali e regole_libri, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

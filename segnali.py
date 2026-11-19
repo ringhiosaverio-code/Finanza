@@ -321,6 +321,10 @@ FONTI = [
     ("Ernest Chan (2013), Algorithmic Trading: Winning Strategies and Their Rationale",
      "buy-on-gap: comprare i titoli aperti molto sotto la chiusura di ieri e vendere in chiusura"),
     ("Andrew Aziz (2016), How to Day Trade for a Living", "VWAP, volume relativo e opening range per il day trading"),
+    ("Claudio Sperti, Silloge di metodi operativi per il trading azionario intraday (tesi, Università di Bologna, 2010)",
+     "Opening Gap, Opening Gap di Altucher, 80-20 di Connors e Oops di Williams sul FTSE MIB: provati in regole_libri.py"),
+    ("Corey Rosenbloom (2011), Guida completa al trading (The Complete Trading Course)",
+     "trend con le medie esponenziali a 20 e 50, oscillatore MACD 3/10, impulse buy e bullish cradle: provati in regole_libri.py"),
     ("Marcos López de Prado (2018), Advances in Financial Machine Learning",
      "pesi che danno più importanza ai dati recenti, verifica con intervalli tra addestramento e test"),
 ]

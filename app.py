@@ -284,6 +284,7 @@ def leggero(out, log=print):
     data["rete_robot"] = rete_robot_app(log) or data.get("rete_robot")    # le operazioni della rete per il robot
     data["rete_ita"] = rete_ita_app(log) or data.get("rete_ita")          # la rete delle azioni italiane
     data["sentimento"] = sentimento(log) or data.get("sentimento")
+    data["regole_libri"] = load_json(os.path.join(ROOT, "regole_libri.json")) or data.get("regole_libri")
     data["segnali_fonti"] = fonti_segnali() or data.get("segnali_fonti")
     data["rete_ita_robot"] = rete_ita_robot_app(log) or data.get("rete_ita_robot")
     build(data, out)
@@ -318,6 +319,7 @@ def main(argv=None):
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
+            "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "libri": load_json(os.path.join(ROOT, "libri.json")),
             "giornata": piano_giornata(),
