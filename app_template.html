@@ -2918,7 +2918,24 @@ function liveInfoHTML() {
     <p class="note" style="margin-top:8px">Fonte Yahoo Finance: azioni USA in tempo reale durante la seduta, Borsa Italiana (azioni ed ETF) con 15 minuti di ritardo, crypto e cambio in tempo reale. Le probabilità e i giudizi restano quelli dell'ultimo aggiornamento: il prezzo in tempo reale serve per decidere quando comprare o vendere.</p>
     <p style="margin-top:8px"><button type="button" class="more" id="live-chiudi">Chiudi</button></p>`;
 }
+// sul sito GitHub Pages (un browser qualsiasi, anche il telefono): il robot lo fa il motore nel cloud, che ogni minuto
+// mette il suo stato nel ramo robot-stato del repository pubblico. La pagina lo rilegge ogni minuto: niente Claude, niente token.
+const STATO_GITHUB = 'https://api.github.com/repos/ringhiosaverio-code/Finanza/contents/robot.json?ref=robot-stato';
+const SU_PAGES = /\.github\.io$/.test(location.hostname);
+async function caricaDaGitHub() {
+  try {
+    const r = await fetch(STATO_GITHUB, {cache: 'no-store', headers: {Accept: 'application/vnd.github.raw+json'}});
+    if (!r.ok) return;
+    const v = await r.json();
+    if (v && !v.vuoto && v.conti && (!ROBOT || (v.rev || 0) !== (ROBOT.rev || 0) || (v.registro || []).length !== (ROBOT.registro || []).length)) {
+      ROBOT = robotMigra(v);
+      const nuovi = robotNuovi(ROBOT); if (nuovi.length) avvisoOperazioni(nuovi);
+      aggiornaRobot(); aggiornaTicker();
+    }
+  } catch (e) {}
+}
 async function avviaLive() {
+  if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; caricaDaGitHub(); setInterval(caricaDaGitHub, 60e3); }
   const info = $('#live-info'); if (info) { info.innerHTML = liveInfoHTML(); $('#live-chiudi').addEventListener('click', () => { info.hidden = true; }); }
   if (!window.claude && /^https?:$/.test(location.protocol)) {                    // servita da live.py
     try { const r = await fetch('/quotazioni?s=EURUSD%3DX', {cache: 'no-store'}); if (r.ok && (await r.json()).quote) LIVE.fonte = 'locale'; } catch (e) {}

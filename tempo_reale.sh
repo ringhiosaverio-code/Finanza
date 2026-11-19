@@ -20,6 +20,10 @@ if ! pgrep -f "node robot_motore.js" > /dev/null; then
 else
   echo "motore già acceso"
 fi
+if ! pgrep -f "pubblica_stato.py" > /dev/null; then
+  setsid nohup python3 pubblica_stato.py >> "$LOG" 2>&1 < /dev/null &
+  echo "pubblicazione su GitHub avviata"
+fi
 # il guardiano: ogni minuto riaccende server e motore se si sono spenti (senza bisogno di nessuno)
 if ! pgrep -f "tempo_reale_guardiano" > /dev/null; then
   setsid nohup bash -c 'exec -a tempo_reale_guardiano bash -c "while true; do sleep 60; bash tempo_reale.sh $* > /dev/null 2>&1; done"' _ "$@" >> "$LOG" 2>&1 < /dev/null &
