@@ -484,3 +484,143 @@ class Rigioca(unittest.TestCase):
         M = mondo_casuale(giorni=8, seme=4)
         chiuse, aperte, _ = R.rigioca(modello_che_compra(3), M, M.n - 1440, M.n)
         self.assertEqual((chiuse, aperte), ([], []))
+
+
+def modello_probabile(azione, p_alta=0.7, p_bassa=0.3, soglia=0.6):
+    """Un modello della probabilità a pesi zero: l'orizzonte `azione` (1..) ha probabilità p_alta, gli altri p_bassa."""
+    net = R.Rete([R.N_FEATURE, 4, len(R.ORIZZONTI)], 0)
+    net.W = [np.zeros_like(w) for w in net.W]
+    logit = lambda p: math.log(p / (1 - p))
+    net.b[-1] = np.full(len(R.ORIZZONTI), logit(p_bassa), np.float32)
+    net.b[-1][azione - 1] = logit(p_alta)
+    return R.da_json({"rete": net.a_dizionario(), "media": [0.0] * R.N_FEATURE, "dev": [1.0] * R.N_FEATURE, "tipo": "probabilita",
+                      "soglia": soglia, "quota": 0.01, "fuori": True, "iterazione": 2, "margine": None})
+
+
+class ProbabilitaDiGuadagno(unittest.TestCase):
+    def test_il_gradiente_dell_entropia_incrociata_e_giusto(self):
+        rng = np.random.default_rng(5)
+        net = R.Rete([5, 4, 3], 2)
+        X = rng.standard_normal((16, 5)).astype(np.float32)
+        Y = (rng.random((16, 3)) > 0.5).astype(np.float32)
+        Mk = (rng.random((16, 3)) > 0.2).astype(np.float32)
+        perdita = lambda: float(R._entropia(R.sigmoide(net.avanti(X)), Y, Mk).sum() / Mk.sum())
+        z, att = net.avanti(X, tieni=True)
+        gW, _ = net.indietro(att, (R.sigmoide(z) - Y) * Mk / Mk.sum())
+        for (i, a, b) in ((0, 1, 2), (1, 3, 0), (1, 2, 2)):
+            w0 = float(net.W[i][a, b])
+            net.W[i][a, b] = w0 + 1e-2
+            su = perdita()
+            net.W[i][a, b] = w0 - 1e-2
+            giu = perdita()
+            net.W[i][a, b] = w0
+            self.assertAlmostEqual((su - giu) / 2e-2, float(gW[i][a, b]), delta=2e-3)
+
+    def test_impara_quando_si_vince(self):
+        rng = np.random.default_rng(0)
+        X = rng.standard_normal((4000, 3)).astype(np.float32)
+        Y = (X[:, :1] > 0).astype(np.float32)                                   # si vince quando la prima caratteristica è positiva
+        net = R.Rete([3, 8, 1], 0)
+        R.addestra_probabilita(net, X, Y, np.ones_like(Y), 30, lr=1e-2)
+        P = R.sigmoide(net.avanti(np.array([[2.0, 0, 0], [-2.0, 0, 0]], np.float32)))[:, 0]
+        self.assertGreater(P[0], 0.8)
+        self.assertLess(P[1], 0.2)
+
+    def test_compra_solo_dalla_soglia_l_orizzonte_piu_probabile(self):
+        P = np.array([[[0.2, 0.7, 0.4], [0.5, 0.3, 0.1], [0.65, 0.6, 0.66]]], np.float32)
+        np.testing.assert_array_equal(R.politica_probabilita(P, 0.6), [[2, 0, 3]])
+
+    def test_calibrazione(self):
+        cal = R.calibrazione([0.1, 0.35, 0.36, 0.55, 0.8, 1.0], [-0.01, 0.02, -0.01, 0.0, 0.03, 0.01])
+        per = {f["da"]: f for f in cal}
+        self.assertEqual(per[0.0]["n"], 1)
+        self.assertEqual(per[0.3]["n"], 2)
+        self.assertAlmostEqual(per[0.3]["vinte"], 0.5)
+        self.assertAlmostEqual(per[0.3]["stimata"], 0.355)
+        self.assertEqual(per[0.5]["vinte"], 0.0)                                # un esito di zero non è un guadagno
+        self.assertEqual(per[0.7]["n"], 2)                                      # 1,0 compreso nell'ultima fascia
+        self.assertIsNone(per[0.4]["vinte"])
+        self.assertEqual(sum(f["n"] for f in cal), 6)
+
+    def test_apprende_soglia_e_quota_sul_periodo_di_scelta(self):
+        D = R.Dati(mondo_casuale(giorni=30, seme=11, monete=2))
+        wins = R.finestre(D, giorni_test=4, giorni_val=4, embargo=1, min_addestramento=8, max_finestre=1)
+        w = wins[0]
+        m = R.apprendi_probabilita(D, w["addestramento"], w["scelta"], epoche=2)
+        self.assertEqual(m["tipo"], "probabilita")
+        self.assertEqual(len(m["prove"]), len(R.QUOTE))
+        self.assertIn(m["quota"], R.QUOTE)
+        self.assertTrue(0.0 < m["soglia"] < 1.0)
+        valide = [p for p in m["prove"] if p["n"] >= R.N_MINIMO] or m["prove"]
+        self.assertEqual(m["scelta"]["media"], max(p["media"] for p in valide))
+        self.assertIsInstance(m["fuori"], bool)
+        P = R.probabilita(m, D, *w["test"])
+        self.assertEqual(P.shape, (2, w["test"][1] - w["test"][0], len(R.ORIZZONTI)))
+        self.assertTrue(((P > 0) & (P < 1)).all())
+
+    def test_verifica_a_finestre_e_riassunto(self):
+        D = R.Dati(mondo_casuale(giorni=40, seme=12, monete=2))
+        wins = R.finestre(D, giorni_test=5, giorni_val=4, embargo=1, min_addestramento=8, max_finestre=2)
+        b = R.blocco_probabilita(D, R.valuta_probabilita(D, wins, 0.002))
+        self.assertEqual(len(b["scelte_probabilita"]), 2)
+        self.assertEqual(len(b["per_quota"]), len(R.QUOTE))
+        self.assertEqual(sum(f["n"] for f in b["calibrazione"]), b["tutte"]["n"])
+        self.assertEqual(b["probabilita"]["giorni"], len(b["probabilita"]["conto"]))
+        self.assertTrue(0.0 <= b["tutte"]["vinte"] <= 1.0)
+
+    def test_il_robot_compra_dalla_soglia_con_la_probabilita(self):
+        M = mondo_casuale(giorni=9, seme=3)
+        j = R.ORIZZONTI.index(60) + 1
+        chiuse, aperte, ultimi = R.rigioca(modello_probabile(j), M, M.n - 1440, M.n)
+        self.assertGreater(len(chiuse), 10)
+        for o in chiuse + aperte:
+            self.assertAlmostEqual(o["probabilita"], 0.7, places=4)
+            self.assertNotIn("vantaggio", o)
+            self.assertEqual(o["minuti"], 60)
+        self.assertEqual((R.rigioca(modello_probabile(j, soglia=0.75), M, M.n - 1440, M.n)[:2]), ([], []))
+        self.assertTrue(R.rigioca(modello_probabile(j, soglia=0.75), M, M.n - 1440, M.n, margine=0.65)[0])   # soglia data a mano
+
+    def test_carica_la_probabilita_e_il_diario(self):
+        import json
+        import tempfile
+        m = modello_probabile(3)
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "m.json")
+            self.assertIsNone(R.carica_probabilita(None, p))                     # il file non c'è
+            blocco = {"rete": m["rete"].a_dizionario(), "media": [0.0] * R.N_FEATURE, "dev": [1.0] * R.N_FEATURE, "tipo": "probabilita",
+                      "soglia": 0.61, "quota": 0.02, "fuori": False, "iterazione": 3, "addestrato": "2030-01-01"}
+            with open(p, "w") as fh:
+                json.dump({"modelli": {}, "probabilita": {"0.002": blocco, "0.0005": dict(blocco, soglia=0.55)}}, fh)
+            mod, c = R.carica_probabilita(None, p)
+            self.assertEqual((c, mod["soglia"], mod["tipo"], mod["addestrato"]), (0.002, 0.61, "probabilita", "2030-01-01"))
+            self.assertEqual(R.carica_probabilita(0.0005, p)[0]["soglia"], 0.55)
+            self.assertIsNone(R.carica_probabilita(0.01, p))
+        riga = {"soglia": 0.6, "quota": 0.01, "fuori": True, "scelta": {"n": 30, "vinte": 0.5, "media": 0.001}}
+        st = R.esperienza(None, riga, "2030-01-01", 100)
+        st = R.esperienza(st, dict(riga, soglia=0.7), "2030-01-01", 100)       # lo stesso giorno: si rimpiazza
+        self.assertEqual([r["soglia"] for r in st], [0.7])
+        for g in range(70):
+            st = R.esperienza(st, riga, "2030-02-%02d" % (g % 28 + 1) + str(g), 100)
+        self.assertEqual(len(st), 60)
+
+    def test_aggiornare_solo_il_modello_del_robot(self):
+        import json
+        import tempfile
+        from unittest import mock
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "m.json")
+            with open(p, "w") as fh:
+                json.dump({"costi": {"0.002": {"q": {"n": 0}}}, "modelli": {}}, fh)
+            orig = R.apprendi_probabilita                                          # un'epoca basta per il test
+            with mock.patch.object(R, "carica_mondo", lambda max_giorni=None: mondo_casuale(giorni=45, seme=13, monete=2)), \
+                    mock.patch.object(R, "apprendi_probabilita", lambda D, tr, va, seed=0, log=None: orig(D, tr, va, epoche=1, seed=seed)):
+                ris = R.aggiungi_probabilita(costi=(0.002,), log=lambda m: None, solo_modello=True, percorso=p)
+            with open(p) as fh:
+                scritto = json.load(fh)
+        self.assertEqual(scritto["costi"], {"0.002": {"q": {"n": 0}}})          # la verifica non si tocca
+        self.assertEqual(scritto["probabilita"]["0.002"]["tipo"], "probabilita")
+        self.assertIn("rete", scritto["probabilita"]["0.002"])
+        self.assertEqual(len(scritto["esperienza"]), 1)
+        self.assertEqual(scritto["esperienza"][0]["dati"], 45)
+        self.assertEqual(ris["probabilita"]["0.002"]["soglia"], scritto["probabilita"]["0.002"]["soglia"])
+

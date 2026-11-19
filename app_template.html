@@ -9,7 +9,7 @@
 :root{
   --bg:#f3f5f8;--surface:#ffffff;--surface2:#edf0f5;--ink:#10151d;--ink2:#465062;--muted:#737d8f;--line:#e0e4eb;
   --accent:#2453c9;--accent-ink:#ffffff;--accent-soft:#e7eefc;
-  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#6250d6;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#6250d6;--s6:#cf3f7a;
   --good:#0ca30c;--crit:#d03b3b;--warn:#fab219;--neutral:#c3c2b7;
   --good-ink:#0a7a0a;--crit-ink:#b42c2c;--warn-soft:#fff6de;--good-soft:#e8f6e8;--crit-soft:#fbeaea;
   --band-out:#d3e5fb;--band-in:#8db9ef;--median:#184f95;
@@ -20,13 +20,13 @@
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;
   --bg:#0d1015;--surface:#151920;--surface2:#1c212a;--ink:#eef0f3;--ink2:#b5bcc8;--muted:#818b9a;--line:#262c37;
   --accent:#6f95f2;--accent-ink:#0d1015;--accent-soft:#1b2640;
-  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#9085e9;--neutral:#55575c;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#9085e9;--s6:#e2669a;--neutral:#55575c;
   --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;--good-soft:#14281a;--crit-soft:#301a1a;
   --band-out:#123a6b;--band-in:#1f5fae;--median:#c4dcf8;--shadow:none}}
 :root[data-theme="dark"]{color-scheme:dark;
   --bg:#0d1015;--surface:#151920;--surface2:#1c212a;--ink:#eef0f3;--ink2:#b5bcc8;--muted:#818b9a;--line:#262c37;
   --accent:#6f95f2;--accent-ink:#0d1015;--accent-soft:#1b2640;
-  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#9085e9;--neutral:#55575c;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#9085e9;--s6:#e2669a;--neutral:#55575c;
   --good-ink:#35c435;--crit-ink:#f07272;--warn-soft:#2c2414;--good-soft:#14281a;--crit-soft:#301a1a;
   --band-out:#123a6b;--band-in:#1f5fae;--median:#c4dcf8;--shadow:none}
 *{box-sizing:border-box}
@@ -1514,8 +1514,9 @@ function reteHTML() {
   const Rt = D.rete; if (!Rt || !Rt.costi) return '';
   const chiavi = Object.keys(Rt.costi).sort((a, b) => b - a), k0 = chiavi[0], c0 = Rt.costi[k0], costo0 = Number(k0);
   const ORIZ = Rt.config.orizzonti, orizTxt = m => m < 60 ? m + ' min' : m < 1440 ? (m / 60) + ' h' : (m / 1440) + (m === 1440 ? ' giorno' : ' giorni');
-  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', ribasso: 'Regola: ribasso a 4 ore', momento: 'Regola: rialzo a 1 giorno', sempre_1g: 'Comprare sempre e tenere 1 giorno'};
-  const COL = {q: 'var(--s1)', previsione: 'var(--s5)', ribasso: 'var(--s2)', momento: 'var(--s3)', sempre_1g: 'var(--s4)'};
+  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', ribasso: 'Regola: ribasso a 4 ore', momento: 'Regola: rialzo a 1 giorno', sempre_1g: 'Comprare sempre e tenere 1 giorno'};
+  const COL = {q: 'var(--s1)', previsione: 'var(--s5)', probabilita: 'var(--s6)', ribasso: 'var(--s2)', momento: 'var(--s3)', sempre_1g: 'var(--s4)'};
+  const STRAT = ['q', 'previsione', 'probabilita', 'ribasso', 'momento', 'sempre_1g'].filter(k => c0[k]);
   const q = c0.q, giorni = q.giorni, tot = x => x.totale, ic = x => `${pc(x.ic90[0] * x.giorni, 1)} … ${pc(x.ic90[1] * x.giorni, 1)}`;
   const credibileConto = x => x.n > 0 && x.totale > 0 && x.ic90[0] > 0;                    // conto positivo con l'intervallo al 90 % tutto sopra zero
   const positivo = x => x.n > 0 && x.totale > 0;
@@ -1524,9 +1525,9 @@ function reteHTML() {
   const verdetto = q.n === 0
     ? `La rete è rimasta fuori da tutto, in ognuna delle ${c0.scelte.length} finestre: non ha trovato niente che valga i costi.`
     : `Con costi di ${pc(costo0, 1, false)} per lato, su ${giorni} giorni mai visti in addestramento la rete ha fatto ${q.n} operazioni (${nf(q.al_giorno, 1)} al giorno), in media ${pc(q.media, 2)} ciascuna dopo i costi, e il conto ${pc(q.totale, 1)} (intervallo al 90 %: ${ic(q)}). Nelle ${c0.scelte.length} finestre è rimasta fuori ${fuori} volte, perché nel mese di scelta non vedeva un guadagno credibile.`;
-  const righe = ['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => { const x = c0[k];
+  const righe = STRAT.map(k => { const x = c0[k];
     return `<tr><td class="l" style="white-space:normal"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:${COL[k]}"></span><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.al_giorno, 1)} al giorno</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b><br><span class="note">${ic(x)}</span></td><td>${x.n ? nf(x.sharpe, 2) : '–'}</td><td>${p100(x.esposizione)}</td></tr>`; }).join('');
-  const conti = ['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => ({dati: [0].concat(c0[k].conto.map(v => v * 100)), colore: COL[k], spessore: k === 'q' ? 2.6 : 1.6, tratteggio: k === 'sempre_1g'}));
+  const conti = STRAT.map(k => ({dati: [0].concat(c0[k].conto.map(v => v * 100)), colore: COL[k], spessore: k === 'q' ? 2.6 : 1.6, tratteggio: k === 'sempre_1g'}));
   const cella = x => `<td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b>${credibileConto(x) ? ' ✓' : ''}<br><span class="note">${x.n ? pc(x.media, 2) + ' · ' : ''}${x.n} op. · ${ic(x)}</span></td>`;
   const costiRighe = chiavi.map(k => { const C = Rt.costi[k];
     return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td>${cella(C.q)}${cella(C.previsione)}${cella(C.ribasso)}${cella(C.momento)}</tr>`; }).join('');
@@ -1573,7 +1574,7 @@ function reteHTML() {
       <tbody>${righe}</tbody></table></div>
     <p class="note" style="margin-top:4px">Costi ${pc(costo0, 1, false)} per lato. Il conto somma i guadagni netti di ogni operazione, ognuna con 1/${Rt.dati.crypto.length} del capitale. "Tempo dentro": quanta parte del tempo c'è una posizione aperta.</p>
     <h3 style="margin-top:16px">Il conto, giorno per giorno</h3>${lineaSVG(conti, {unita: ' %', etichetta: 'Conto fuori campione per strategia', x: [[0, 'inizio'], [giorni, 'fine']]})}
-    <div class="note" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">${['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => `<span><span style="display:inline-block;width:12px;height:3px;background:${COL[k]};vertical-align:middle;margin-right:4px"></span>${NOMI[k]}</span>`).join('')}</div>
+    <div class="note" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">${STRAT.map(k => `<span><span style="display:inline-block;width:12px;height:3px;background:${COL[k]};vertical-align:middle;margin-right:4px"></span>${NOMI[k]}</span>`).join('')}</div>
     <h3 style="margin-top:16px">Come ha imparato</h3>
     <p class="note" style="margin-top:2px">Apprendimento per rinforzo (Q-learning su decisioni di durata diversa): il valore di una mossa è il guadagno netto dell'operazione più il valore, scontato, di quando si torna liberi. Il prezzo non dipende dalle nostre operazioni, quindi per ogni istante si sa cosa sarebbe successo con ogni mossa, e l'"esperienza" è la storia riletta a ripetizione: a ogni iterazione la rete riconta il valore delle mosse con la rete dell'iterazione prima e impara di nuovo. A sinistra l'errore di addestramento, che scende (la rete impara); a destra come va la sua politica nel mese di scelta, una linea per finestra e in blu la mediana: non migliora in modo stabile, cioè quello che impara non è un vantaggio che si ripete.</p>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px 16px;margin-top:6px"><div><div class="note">Errore di addestramento, per iterazione (mediana)</div>${lineaSVG(lineeErrore, {h: 170, dec: 2, etichetta: 'Errore di addestramento', x: [[0, '1'], [iter - 1, String(iter)]]})}</div>
@@ -1593,6 +1594,7 @@ function reteHTML() {
     <p class="note" style="margin-top:2px">Prima di decidere, la rete prevede il guadagno di ogni orizzonte. Fuori campione, la correlazione di rango tra la previsione e quello che è successo è vicina a zero a tutte le durate. Esito medio netto per il quinto di previsioni più basse e più alte, e per il 2 % più alto:</p>
     <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Orizzonte</th><th>Correlazione di rango</th><th>quinto più basso</th><th>quinto più alto</th><th>2 % più alto</th></tr></thead><tbody>${infoRighe}</tbody></table></div>
     <h3 style="margin-top:16px">Cosa dice la ricerca</h3><ul class="note" style="margin:4px 0 0;padding-left:18px;display:grid;gap:5px">${ricerca}</ul>
+    ${probHTML(c0, Rt.esperienza, 'crypto')}
     ${reteOpsHTML(D.rete_robot, 'La rete decide ogni minuto sugli scambi di Kraken; il robot rigioca le sue operazioni nel conto "Crypto, rete neurale" e chiude dal vivo quelle aperte.')}
     <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>La rete dal vivo, ogni secondo.</b> Sul tuo computer, nella cartella del progetto: <code>python3 rete_dati.py</code> scarica gli scambi di Kraken, <code>python3 rete.py --studia</code> rifà tutta questa verifica (circa 40 minuti) e <code>python3 rete_live.py</code> fa girare la rete in un conto finto con i prezzi di Kraken ogni secondo, impara ancora ogni giorno dai dati nuovi e mostra, per ogni crypto, il vantaggio di comprare sull'attesa. Nella verifica nessun modello ha passato il cancello, quindi di serie resta fuori e non compra mai; con <code>--margine 0.001</code> la costringi a comprare per vedere come impara e cosa perde (con <code>--costo 0.0005</code> usi il modello addestrato con costi più bassi).</p></div></div>`;
 }
@@ -1873,22 +1875,48 @@ function giocoEventi() {
   $('#g-nuova')?.addEventListener('click', () => { gSt.i = giornoNuovo(); gSt.esito = null; renderGiornata(true); });
   $('#g-reset')?.addEventListener('click', () => { GIOCO = giocoVuoto(); salvaGioco(); renderGiornata(true); });
 }
+/* ---------------- la probabilità di guadagno: la rete sceglie le operazioni che chiudono in guadagno? ---------------- */
+function probHTML(c0, esperienza, unita) {
+  const P = c0 && c0.probabilita, T = c0 && c0.tutte; if (!P || !T) return '';
+  const cal = (c0.calibrazione || []).filter(f => f.n), sc = c0.scelte_probabilita || [], via = sc.filter(s => !s.fuori).length;
+  const meglio = P.n >= 20 && P.vinte > T.vinte + 0.03 && P.media > T.media;
+  const quanti = P.sedute ? `${P.sedute} sedute` : `${P.giorni} giorni`;
+  const fasce = cal.map(f => `<tr><td class="l">${nf(f.da * 100, 0)}–${nf(f.a * 100, 0)} %</td><td>${f.n.toLocaleString('it-IT')}</td><td>${p100(f.stimata)}</td><td class="${f.vinte >= f.stimata - 0.02 ? 'pos' : 'neg'}"><b>${p100(f.vinte)}</b></td><td class="${f.media >= 0 ? 'pos' : 'neg'}">${pc(f.media, 2)}</td></tr>`).join('');
+  const quote = (c0.per_quota || []).map(q => `<tr><td class="l">il meglio ${nf(q.quota * 100, q.quota < 0.01 ? 1 : 0)} %</td><td>${q.n}</td><td>${q.n ? p100(q.vinte) : '–'}</td><td class="${q.media >= 0 ? 'pos' : 'neg'}">${q.n ? pc(q.media, 2) : '–'}</td><td class="${q.totale >= 0 ? 'pos' : 'neg'}">${pc(q.totale, 2)}</td></tr>`).join('');
+  const diario = (esperienza || []).slice(-8).reverse().map(r => `<tr><td class="l">${esc(r.data)}</td><td>${r.dati}</td><td>${p100(r.soglia)}</td><td>${nf(r.quota * 100, r.quota < 0.01 ? 1 : 0)} %</td><td>${r.n}</td><td>${p100(r.vinte)}</td><td class="${r.media >= 0 ? 'pos' : 'neg'}">${pc(r.media, 2)}</td><td>${r.fuori ? 'no' : 'sì'}</td></tr>`).join('');
+  return `<h3 style="margin-top:16px">La rete sceglie le operazioni che chiudono in guadagno?</h3>
+    <p class="note" style="margin-top:2px">Una seconda rete impara da tutte le operazioni possibili del passato, e dal loro esito, la <b>probabilità che un'operazione chiuda in guadagno</b> dopo i costi. È quella che usa il robot: compra solo le occasioni con la probabilità più alta, e la soglia la sceglie la rete sul periodo più recente (quante delle occasioni migliori prendere: quella con la media per operazione più alta). Ogni sera si riaddestra con i dati nuovi.</p>
+    <div class="verdetto ${meglio ? 'v-si' : 'v-no'}" style="margin-top:8px"><div class="vh"><span class="vi" aria-hidden="true">${meglio ? '✓' : '✕'}</span><div><b>${meglio ? 'Sceglie un po’ meglio del caso' : 'Per ora non sa distinguere le operazioni vincenti'}</b><p>Su ${quanti} mai ${P.sedute ? 'viste' : 'visti'} in addestramento, le operazioni scelte così sono state ${P.n}: in guadagno il <b>${P.n ? p100(P.vinte) : '–'}</b>, in media ${P.n ? pc(P.media, 2) : '–'} ciascuna. Tutte le occasioni, senza scegliere: in guadagno il ${p100(T.vinte)}, in media ${pc(T.media, 2)}. La soglia ha avuto il via libera della verifica in ${via} finestre su ${sc.length}.${meglio ? ' Con pochi dati può essere il caso: conta come va nei prossimi mesi.' : ' Il robot la usa lo stesso, perché tu possa vederla imparare.'}</p></div></div></div>
+    <p class="note" style="margin-top:8px"><b>Quello che stima e quello che succede</b> (tutte le occasioni dei periodi mai visti, all'orizzonte che la rete preferisce). Se la rete sapesse scegliere, nelle fasce alte si vincerebbe più spesso.</p>
+    <div class="scroll" style="margin-top:4px"><table><thead><tr><th class="l">Probabilità stimata</th><th>Occasioni</th><th>Stimata in media</th><th>Vinte davvero</th><th>Media</th></tr></thead><tbody>${fasce}</tbody></table></div>
+    <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Prendere solo…</th><th>Operazioni</th><th>In guadagno</th><th>Media</th><th>Conto</th></tr></thead><tbody>${quote}</tbody></table></div>
+    <p class="note" style="margin-top:4px">"Il meglio 1 %": le occasioni con la probabilità stimata più alta, con la soglia presa dal periodo di scelta e una posizione alla volta per ${unita}.</p>
+    ${diario ? `<p class="note" style="margin-top:8px"><b>Diario degli addestramenti</b>: cosa ha scelto la rete ogni volta che ha imparato (nel periodo di scelta, prima del test).</p>
+    <div class="scroll" style="margin-top:4px"><table><thead><tr><th class="l">Data</th><th>${unita === 'titolo' ? 'Sedute' : 'Giorni'} di dati</th><th>Soglia</th><th>Prende il meglio</th><th>Operazioni</th><th>In guadagno</th><th>Media</th><th>Via libera</th></tr></thead><tbody>${diario}</tbody></table></div>` : ''}`;
+}
+
 /* ---------------- le operazioni della rete nel robot (crypto e azioni italiane) ---------------- */
 function reteOpsHTML(RR, etichetta) {
   if (!RR) return '';
   const ora = s => new Date(s).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
-  const aperte = (RR.aperte || []).map(o => `<li><b>${esc(tk(o.sym))}</b> comprata ${ora(o.t)} a ${nf(o.prezzo, dec(o.prezzo))} €, tiene ${durataTesto(o.minuti)} (fino alle ${ora(o.scade)}), protezione ${nf(o.protezione, dec(o.protezione))} €</li>`).join('');
-  const chiuse = (RR.operazioni || []).slice(-8).reverse().map(o => `<li><b>${esc(tk(o.sym))}</b> ${ora(o.t)} → ${ora(o.t_uscita)}: ${nf(o.prezzo, dec(o.prezzo))} → ${nf(o.prezzo_uscita, dec(o.prezzo_uscita))} € <span class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</span> <span class="note">(${o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura della seduta' : 'fine della durata scelta'})</span></li>`).join('');
+  const stima = o => o.probabilita != null ? `, probabilità stimata ${p100(o.probabilita)}` : '';
+  const aperte = (RR.aperte || []).map(o => `<li><b>${esc(tk(o.sym))}</b> comprata ${ora(o.t)} a ${nf(o.prezzo, dec(o.prezzo))} €${stima(o)}, tiene ${durataTesto(o.minuti)} (fino alle ${ora(o.scade)}), protezione ${nf(o.protezione, dec(o.protezione))} €</li>`).join('');
+  const chiuse = (RR.operazioni || []).slice(-8).reverse().map(o => `<li><b>${esc(tk(o.sym))}</b> ${ora(o.t)} → ${ora(o.t_uscita)}: ${nf(o.prezzo, dec(o.prezzo))} → ${nf(o.prezzo_uscita, dec(o.prezzo_uscita))} € <span class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</span> <span class="note">(${o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura della seduta' : 'fine della durata scelta'}${o.probabilita != null ? ', stimata ' + p100(o.probabilita) : ''})</span></li>`).join('');
   const tutte = RR.operazioni || [], media = tutte.length ? tutte.reduce((t, o) => t + o.r, 0) / tutte.length : 0;
+  const vinte = tutte.filter(o => o.r > 0).length, stimate = tutte.filter(o => o.probabilita != null);
+  const regola = RR.soglia != null
+    ? `Il robot compra solo dove la rete stima che l'operazione chiuda in guadagno con probabilità di almeno <b>${p100(RR.soglia)}</b>: è la soglia che ha scelto lei sul periodo più recente (il meglio ${nf(RR.quota * 100, RR.quota < 0.01 ? 1 : 0)} % delle occasioni)${RR.modello && RR.modello.fuori ? ', anche se la verifica non le dà il via libera' : ''}.`
+    : `Il robot compra quando la mossa migliore batte l'attesa di ${pc(RR.margine, 1, false)} (margine imposto: la rete compra anche senza il via libera della verifica, per vederla lavorare).`;
+  const esito = tutte.length ? `Nelle ultime decisioni rigiocate: ${tutte.length} operazioni chiuse, ${vinte} in guadagno (${p100(vinte / tutte.length)}${stimate.length ? `; la rete ne stimava in media il ${p100(stimate.reduce((t, o) => t + o.probabilita, 0) / stimate.length)}` : ''}), in media <b class="${media >= 0 ? 'pos' : 'neg'}">${pc(media, 2)}</b> dopo i costi.` : 'Ancora nessuna operazione chiusa.';
   return `<h3 style="margin-top:16px">Nel robot, adesso</h3>
-    <p class="note" style="margin-top:2px">${etichetta} Il robot compra quando la mossa migliore batte l'attesa di ${pc(RR.margine, 1, false)} (margine imposto: la rete compra anche senza il via libera della verifica, per vederla lavorare). ${tutte.length ? `Nelle ultime decisioni rigiocate: ${tutte.length} operazioni chiuse, in media <b class="${media >= 0 ? 'pos' : 'neg'}">${pc(media, 2)}</b> dopo i costi.` : 'Ancora nessuna operazione chiusa.'} Calcolate alle ${ora(RR.generato)}.</p>
+    <p class="note" style="margin-top:2px">${etichetta} ${regola} ${esito} Calcolate alle ${ora(RR.generato)}.</p>
     ${aperte ? `<p class="note" style="margin-top:6px"><b>Aperte</b></p><ul class="note" style="margin:2px 0 0;padding-left:18px">${aperte}</ul>` : ''}
     ${chiuse ? `<p class="note" style="margin-top:6px"><b>Le ultime chiuse</b></p><ul class="note" style="margin:2px 0 0;padding-left:18px">${chiuse}</ul>` : ''}`;
 }
 function reteItaHTML() {
   const Rt = D.rete_ita, RR = D.rete_ita_robot; if (!Rt || !Rt.costi || !Object.keys(Rt.costi).length) return '';
   const chiavi = Object.keys(Rt.costi).sort((a, b) => b - a), k0 = chiavi[0], c0 = Rt.costi[k0], costo0 = Number(k0), q = c0.q;
-  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', apertura_chiusura: 'Regola: compra alle 9:10, vendi in chiusura', ribasso_1h: "Regola: dopo un'ora in ribasso, tieni un'ora", rialzo_1h: "Regola: dopo un'ora in rialzo, tieni un'ora"};
+  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', apertura_chiusura: 'Regola: compra alle 9:10, vendi in chiusura', ribasso_1h: "Regola: dopo un'ora in ribasso, tieni un'ora", rialzo_1h: "Regola: dopo un'ora in rialzo, tieni un'ora"};
   const buono = q.n > 0 && q.totale > 0 && q.ic90[0] > 0;
   const righe = Object.keys(NOMI).filter(k => c0[k]).map(k => { const x = c0[k];
     return `<tr><td class="l" style="white-space:normal"><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.per_seduta || 0, 1)} a seduta</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 2)}</b><br><span class="note">${pc(x.ic90[0] * x.giorni, 2)} … ${pc(x.ic90[1] * x.giorni, 2)}</span></td></tr>`; }).join('');
@@ -1900,10 +1928,11 @@ function reteItaHTML() {
     <p class="sub" style="margin-top:4px">La stessa rete delle crypto, sui ${Rt.dati.titoli.length} titoli del FTSE MIB: ogni 5 minuti della seduta guarda ogni titolo (rendimenti da 5 minuti a 5 sedute, volatilità, apertura e salto da ieri, posizione nel minimo-massimo di oggi, volumi, ora del giorno, mercato intero) e sceglie se aspettare o comprare e tenere 5, 15, 30 minuti, 1, 2, 4 ore o fino alla chiusura. Tutto si chiude entro le 17:30, con una protezione sotto l'entrata e costi di ${pc(costo0, 1, false)} per lato (per chi compra e vende nello stesso giorno la Tobin tax non si paga). Dati: barre da 5 minuti di Yahoo, ${Rt.dati.sedute} sedute (dal ${esc(Rt.dati.da)} al ${esc(Rt.dati.a)}); Milano arriva con 15 minuti di ritardo.</p>
     <div class="verdetto ${buono ? 'v-si' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${buono ? '✓' : '✕'}</span><div><b>${buono ? 'Guadagna nei dati, con cautela' : q.n ? 'Fuori campione non guadagna' : 'Fuori campione non trova guadagni'}</b><p>${q.n
       ? `Su ${sed} sedute mai viste in addestramento (${c0.scelte.length} finestre) la rete ha fatto ${q.n} operazioni, in media ${pc(q.media, 2)} ciascuna dopo i costi; è rimasta fuori in ${fuori} finestre su ${c0.scelte.length}.`
-      : `Su ${sed} sedute mai viste in addestramento (${c0.scelte.length} finestre) la rete non ha mai comprato: in nessuna finestra ha trovato mosse che battessero l'attesa in modo credibile dopo i costi.`}${regola ? (regola[1].media < 0 ? ` Anche la regola semplice migliore perde: ${NOMI[regola[0]].replace('Regola: ', '')}, ${pc(regola[1].media, 2)} a operazione.` : ` La regola semplice migliore, ${NOMI[regola[0]].replace('Regola: ', '')}, fa ${pc(regola[1].media, 2)} a operazione.`) : ''} ${Rt.dati.sedute} sedute sono poche: ogni numero qui ha un'incertezza grande. Per questo il robot la fa comprare con un margine imposto: così la vedi lavorare, sapendo che la verifica non le dà il via libera.</p></div></div></div>
+      : `Su ${sed} sedute mai viste in addestramento (${c0.scelte.length} finestre) la rete non ha mai comprato: in nessuna finestra ha trovato mosse che battessero l'attesa in modo credibile dopo i costi.`}${regola ? (regola[1].media < 0 ? ` Anche la regola semplice migliore perde: ${NOMI[regola[0]].replace('Regola: ', '')}, ${pc(regola[1].media, 2)} a operazione.` : ` La regola semplice migliore, ${NOMI[regola[0]].replace('Regola: ', '')}, fa ${pc(regola[1].media, 2)} a operazione.`) : ''} ${Rt.dati.sedute} sedute sono poche: ogni numero qui ha un'incertezza grande, e ogni sera se ne aggiunge una (le barre già viste si tengono).</p></div></div></div>
     <div class="scroll" style="margin-top:12px"><table><thead><tr><th class="l">Fuori campione, ${sed} sedute</th><th>Operazioni</th><th>Media per operazione</th><th>In guadagno</th><th>Conto, intervallo al 90 %</th></tr></thead><tbody>${righe}</tbody></table></div>
     <p class="note" style="margin-top:4px">Il conto somma i guadagni netti con 1/${Rt.dati.titoli.length} del capitale per operazione (il robot invece ne usa 1/8, una posizione per titolo e al più 8 insieme).</p>
     <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Costo</th><th>Rinforzo: operazioni</th><th>media</th><th>Previsione: operazioni</th><th>media</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
+    ${probHTML(c0, Rt.esperienza, 'titolo')}
     ${reteOpsHTML(RR, 'La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "Azioni italiane, rete neurale" e le chiude al più tardi in chiusura.')}
     <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 rete_azioni.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;
 }
@@ -2402,7 +2431,7 @@ function robotRete(R, k, adesso) {
         if (Object.values(C.posizioni).some(p => p.sym === o.sym) || C.cassa < quota - 1e-9) continue;   // una per titolo, finché c'è cassa
         C.cassa -= quota;
         C.posizioni[chiave] = {sym: o.sym, t, entrata: o.prezzo, minuti: o.minuti, protezione: o.protezione, scade: isoN(o.scade), qty: quota * (1 - costo) / o.prezzo, speso: quota};
-        evento(R, {t, s: k, sym: o.sym, azione: 'compra', prezzo: r6(o.prezzo), importo: r6(quota), nota: 'rete neurale, tiene ' + durataTesto(o.minuti), fonte: cfg.fonte});
+        evento(R, {t, s: k, sym: o.sym, azione: 'compra', prezzo: r6(o.prezzo), importo: r6(quota), nota: 'rete neurale' + (o.probabilita != null ? ', probabilità stimata ' + p100(o.probabilita) : '') + ', tiene ' + durataTesto(o.minuti), fonte: cfg.fonte});
         cambiato = true;
       }
       if (o.t_uscita) {
@@ -2532,7 +2561,7 @@ function robotAttese() {
   const oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops'), O = D.intraday && D.intraday.ore, vo = O && O.verifica;
   const medie = vo ? O.livelli.map(l => vo[l.id].anno2.media) : [];
   const crypto = vo ? `da ${pc(Math.min(...medie), 2)} a ${pc(Math.max(...medie), 2)} a operazione nel secondo anno, dopo i costi, con ordini che nella realtà potrebbero non eseguirsi sempre al livello (vedi la sezione Crypto)` : 'in perdita dopo i costi';
-  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>azioni in seduta (Oops!)</b> ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione in media negli ultimi anni' : 'in perdita dopo i costi'}; <b>crypto, ordini ogni ora</b> ${crypto}. Le azioni non si comprano di notte: la strategia di notte, che regge con costi bassi, è verificata nella sezione Dai libri e non fa più parte del robot. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
+  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>azioni in seduta (Oops!)</b> ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione in media negli ultimi anni' : 'in perdita dopo i costi'}; <b>crypto, ordini ogni ora</b> ${crypto}; <b>le due reti neurali</b> comprano solo le operazioni che stimano più probabili in guadagno, ma nella verifica su periodi mai visti non hanno ancora saputo distinguerle (vedi le sezioni Crypto e In giornata). Le azioni non si comprano di notte: la strategia di notte, che regge con costi bassi, è verificata nella sezione Dai libri e non fa più parte del robot. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
 }
 const quandoBreve = t => new Date(t).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 function robotHTML() {

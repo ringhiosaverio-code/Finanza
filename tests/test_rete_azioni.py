@@ -267,5 +267,73 @@ class RigiocaAzioni(unittest.TestCase):
                 self.assertIsNone(A.per_app())
 
 
+def modello_probabile_azioni(azione, p_alta=0.7, p_bassa=0.3, soglia=0.6):
+    net = rete.Rete([A.N_FEATURE, 4, H], 0)
+    net.W = [np.zeros_like(w) for w in net.W]
+    logit = lambda p: float(np.log(p / (1 - p)))
+    net.b[-1] = np.full(H, logit(p_bassa), np.float32)
+    net.b[-1][azione - 1] = logit(p_alta)
+    return {"rete": net.a_dizionario(), "media": [0.0] * A.N_FEATURE, "dev": [1.0] * A.N_FEATURE, "tipo": "probabilita",
+            "soglia": soglia, "quota": 0.01, "fuori": True, "iterazione": 2, "addestrato": "2030-01-15"}
+
+
+class Archivio(unittest.TestCase):
+    def test_tiene_le_barre_vecchie_e_aggiorna_quelle_nuove(self):
+        with tempfile.TemporaryDirectory() as t:
+            prima = [(100, 1.0, 1.1, 0.9, 1.05, 10.0), (400, 1.05, 1.2, 1.0, 1.1, 5.0)]
+            self.assertEqual(A.archivia("X.MI", prima, cartella=t), prima)
+            dopo = [(400, 1.05, 1.3, 1.0, 1.25, 9.0), (700, 1.25, 1.3, 1.2, 1.2, 3.0)]        # Yahoo non ha più la barra 100
+            tutte = A.archivia("X.MI", dopo, cartella=t)
+            self.assertEqual([r[0] for r in tutte], [100, 400, 700])
+            self.assertEqual(tutte[1], (400, 1.05, 1.3, 1.0, 1.25, 9.0))       # la barra nuova vince (era ancora in corso)
+            with open(os.path.join(t, "X.MI.npz"), "wb") as fh:                  # archivio rovinato: si riparte dalle barre nuove
+                fh.write(b"rotto")
+            self.assertEqual([r[0] for r in A.archivia("X.MI", dopo, cartella=t)], [400, 700])
+
+
+class RobotConProbabilita(unittest.TestCase):
+    def robot(self, json_modelli, B):
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "m.json")
+            with open(p, "w") as fh:
+                json.dump(json_modelli, fh)
+            with mock.patch.object(A, "MODELLO", p), mock.patch.object(A, "carica", lambda **k: B):
+                return A.robot(log=lambda m: None)
+
+    def test_sceglie_dalla_soglia_imparata(self):
+        B = barre_finte(sedute=7, titoli=2, ultima=50)
+        j = A.ORIZZONTI.index(60) + 1
+        q = modello_che_compra(2)
+        q_json = {"rete": q["rete"].a_dizionario(), "media": [0.0] * A.N_FEATURE, "dev": [1.0] * A.N_FEATURE, "margine": None, "fuori": True}
+        r = self.robot({"modelli": {"0.001": q_json}, "probabilita": {"0.001": modello_probabile_azioni(j)}}, B)
+        self.assertEqual((r["tipo"], r["soglia"], r["quota"], r["margine"]), ("probabilita", 0.6, 0.01, None))
+        self.assertEqual(r["modello"]["addestrato"], "2030-01-15")
+        self.assertGreater(len(r["operazioni"]), 5)
+        for o in r["operazioni"] + r["aperte"]:
+            self.assertAlmostEqual(o["probabilita"], 0.7, places=4)
+            self.assertLessEqual(o["minuti"], 60)
+        r = self.robot({"modelli": {"0.001": q_json}, "probabilita": {"0.001": modello_probabile_azioni(j, soglia=0.8)}}, B)
+        self.assertEqual((r["operazioni"], r["aperte"]), ([], []))                # sotto la soglia non compra
+
+    def test_senza_probabilita_il_q_learning_con_il_margine(self):
+        B = barre_finte(sedute=7, titoli=2, ultima=50)
+        q = modello_che_compra(A.ORIZZONTI.index(30) + 1)
+        r = self.robot({"modelli": {"0.001": {"rete": q["rete"].a_dizionario(), "media": [0.0] * A.N_FEATURE, "dev": [1.0] * A.N_FEATURE,
+                                              "margine": None, "fuori": True}}}, B)
+        self.assertEqual((r["tipo"], r["margine"], r["soglia"]), ("q", A.MARGINE_ROBOT, None))
+        self.assertTrue(all("vantaggio" in o for o in r["operazioni"]))
+
+    def test_per_app_toglie_i_pesi_anche_alla_probabilita(self):
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "m.json")
+            with open(p, "w") as fh:
+                json.dump({"modelli": {}, "probabilita": {"0.001": modello_probabile_azioni(3)}}, fh)
+            with mock.patch.object(A, "MODELLO", p):
+                m = A.per_app()["probabilita"]["0.001"]
+        self.assertNotIn("rete", m)
+        self.assertNotIn("media", m)
+        self.assertEqual(m["soglia"], 0.6)
+
+
 if __name__ == "__main__":
     unittest.main()

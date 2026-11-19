@@ -787,6 +787,184 @@ def decisioni(modello, D, i0, i1):
     return politica(Q, modello["margine"], modello.get("ritmo", 0.0), _oriz(D)), Q
 
 
+# ---------------------------------------------------------------- la probabilità di guadagno: scegliere le operazioni che chiudono in guadagno
+
+QUOTE = (0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2)     # le soglie che si provano: il meglio x % delle occasioni del periodo di scelta
+FASCE = (0.0, 0.3, 0.4, 0.5, 0.6, 0.7, 1.0)            # fasce di probabilità stimata, per vedere se la stima è giusta
+
+
+def sigmoide(z):
+    return (1.0 / (1.0 + np.exp(-np.clip(z, -30.0, 30.0)))).astype(np.float32)
+
+
+def _entropia(p, y, m):
+    return -(y * np.log(p + 1e-7) + (1.0 - y) * np.log(1.0 - p + 1e-7)) * m
+
+
+def addestra_probabilita(rete, X, Y, Mk, epoche, lr=1e-3, wd=1e-4, batch=2048, rng=None):
+    """Entropia incrociata sui soli esiti validi (Mk = 1): l'uscita j della rete è il logit della probabilità che
+    comprando adesso e tenendo l'orizzonte j si chiuda in guadagno dopo i costi. Ritorna l'errore di ogni epoca."""
+    rng = rng or np.random.default_rng(0)
+    ott = Adam(rete, lr, wd)
+    n, perdite = len(X), []
+    for e in range(epoche):
+        ordine = rng.permutation(n)
+        tot, peso = 0.0, 0.0
+        for a in range(0, n, batch):
+            idx = ordine[a:a + batch]
+            z, att = rete.avanti(X[idx], tieni=True)
+            p, y, m = sigmoide(z), Y[idx], Mk[idx]
+            s = max(float(m.sum()), 1.0)
+            tot += float(_entropia(p, y, m).sum())
+            peso += s
+            gW, gb = rete.indietro(att, ((p - y) * m / s).astype(np.float32))
+            ott.passo(gW, gb)
+        perdite.append(tot / max(peso, 1.0))
+    return perdite
+
+
+def _bersagli_probabilita(D, i0, i1):
+    """1 se l'operazione (comprare all'istante, tenere l'orizzonte) chiude in guadagno dopo i costi, 0 se no."""
+    R, OK = D.R[:, i0:i1], D.OK[:, i0:i1]
+    n = R.shape[0] * R.shape[1]
+    return (R > 0).reshape(n, -1).astype(np.float32), OK.reshape(n, -1).astype(np.float32)
+
+
+def probabilita(modello, D, i0, i1):
+    """Le probabilità di chiudere in guadagno, per crypto (o titolo), istante e orizzonte: array (C, istanti, orizzonti)."""
+    X = D.norm(D.X[:, i0:i1], modello["media"], modello["dev"]).reshape(-1, D.X.shape[-1])
+    return sigmoide(modello["rete"].avanti(X)).reshape(D.C, i1 - i0, -1)
+
+
+def politica_probabilita(P, soglia):
+    """Compra dove l'orizzonte con la probabilità più alta arriva alla soglia, e tiene quell'orizzonte."""
+    return np.where(P.max(axis=-1) >= soglia, P.argmax(axis=-1) + 1, 0)
+
+
+def apprendi_probabilita(D, tr, va, epoche=8, nascosti=(64, 32), seed=0, lr=1e-3, wd=1e-4, log=None):
+    """La rete impara, da tutte le operazioni possibili del periodo di addestramento e dal loro esito, quali chiudono in
+    guadagno. Si tiene l'epoca che stima meglio le operazioni del periodo di scelta (mai viste); poi, sullo stesso periodo,
+    si sceglie quante delle occasioni migliori prendere (le soglie di QUOTE): quella con la media per operazione più alta,
+    su almeno N_MINIMO operazioni. Il cancello (credibile) dice se quella scelta era un guadagno credibile; il robot la
+    usa comunque, la verifica a finestre la misura sul periodo dopo."""
+    i0, i1 = tr
+    media, dev = D.statistiche_norm(i0, i1)
+    nf, H = D.X.shape[-1], len(_oriz(D))
+    Xt = D.norm(D.X[:, i0:i1], media, dev).reshape(-1, nf)
+    Yt, Mt = _bersagli_probabilita(D, i0, i1)
+    Xv = D.norm(D.X[:, va[0]:va[1]], media, dev).reshape(-1, nf)
+    Yv, Mv = _bersagli_probabilita(D, *va)
+    rete = Rete([nf, *nascosti, H], seed)
+    base = np.clip((Yt * Mt).sum(axis=0) / np.maximum(Mt.sum(axis=0), 1.0), 1e-4, 1 - 1e-4)
+    rete.b[-1][:] = np.log(base / (1.0 - base)).astype(np.float32)          # si parte dalla frequenza di ogni orizzonte
+    rng = np.random.default_rng(seed)
+    curve, migliore = [], None
+    for e in range(epoche):
+        perdite = addestra_probabilita(rete, Xt, Yt, Mt, 1, lr=lr * (0.8 ** (e // 3)), wd=wd, rng=rng)
+        errore_v = float(_entropia(sigmoide(rete.avanti(Xv)), Yv, Mv).sum() / max(float(Mv.sum()), 1.0))
+        curve.append({"epoca": e + 1, "errore": perdite[-1], "errore_scelta": errore_v})
+        if log:
+            log("   probabilità epoca %2d: errore %.4f · scelta %.4f" % (e + 1, perdite[-1], errore_v))
+        if migliore is None or errore_v < migliore[0]:
+            migliore = (errore_v, e + 1, rete.copia())
+    _, e_best, rete_best = migliore
+    m = {"rete": rete_best, "media": media, "dev": dev, "curve": curve, "iterazione": e_best, "tipo": "probabilita",
+         "base": base.tolist()}
+    P = probabilita(m, D, *va)
+    pm = P.max(axis=-1)
+    prove = []
+    for q in QUOTE:
+        soglia = float(np.quantile(pm, 1.0 - q))
+        s = statistiche(esegui(D, politica_probabilita(P, soglia), *va), D.C, va[1] - va[0], _passo(D), H)
+        prove.append({"quota": q, "soglia": soglia, "n": s["n"], "media": s["media"], "dev": s["dev"], "vinte": s["vinte"],
+                      "somma": s["somma"]})
+    scelta = max([p for p in prove if p["n"] >= N_MINIMO] or prove, key=lambda p: p["media"])
+    m.update({"soglia": scelta["soglia"], "quota": scelta["quota"], "prove": prove, "fuori": not credibile(scelta),
+              "scelta": {k: scelta[k] for k in ("n", "media", "vinte", "somma")}})
+    return m
+
+
+def calibrazione(pp, rr, fasce=FASCE):
+    """Per fasce di probabilità stimata: quante occasioni, la stima media, quante hanno chiuso in guadagno davvero e il
+    guadagno medio. Se la rete sa scegliere, nelle fasce alte si vince di più."""
+    pp, rr = np.asarray(pp, dtype=np.float64), np.asarray(rr, dtype=np.float64)
+    out = []
+    for lo, hi in zip(fasce[:-1], fasce[1:]):
+        m = (pp >= lo) & ((pp < hi) if hi < 1.0 else (pp <= hi))
+        n = int(m.sum())
+        out.append({"da": lo, "a": hi, "n": n, "stimata": float(pp[m].mean()) if n else None,
+                    "vinte": float((rr[m] > 0).mean()) if n else None, "media": float(rr[m].mean()) if n else None})
+    return out
+
+
+def valuta_probabilita(D, wins, costo, log=None, seme=0):
+    """Fuori campione, finestra per finestra: la rete della probabilità di guadagno con la soglia scelta sul periodo di
+    scelta (come la usa il robot), le stesse quote provate sul test, e la calibrazione delle stime su tutte le occasioni."""
+    Dc = D.con_costo(costo)
+    out = {"finestre": [], "strategie": {"probabilita": []}, "scelte": []}
+    per_quota = {q: [] for q in QUOTE}
+    pp, rr = [], []
+    for k, w in enumerate(wins):
+        i0, i1 = w["test"]
+        m = apprendi_probabilita(Dc, w["addestramento"], w["scelta"], seed=seme + k)
+        P = probabilita(m, Dc, i0, i1)
+        T = esegui(Dc, politica_probabilita(P, m["soglia"]), i0, i1)
+        out["strategie"]["probabilita"].append(T)
+        out["finestre"].append({"giorni": w["giorni"], "test": (i0, i1)})
+        out["scelte"].append({"fuori": m["fuori"], "epoca": m["iterazione"], "soglia": m["soglia"], "quota": m["quota"],
+                              "scelta": m["scelta"]})
+        for prova in m["prove"]:
+            per_quota[prova["quota"]].append(esegui(Dc, politica_probabilita(P, prova["soglia"]), i0, i1))
+        j = P.argmax(axis=-1)[..., None]
+        ok = np.take_along_axis(Dc.OK[:, i0:i1], j, axis=-1)[..., 0]
+        pp.append(P.max(axis=-1)[ok])
+        rr.append(np.take_along_axis(Dc.R[:, i0:i1], j, axis=-1)[..., 0][ok])
+        if log:
+            s = statistiche(T, D.C, i1 - i0, _passo(D), len(_oriz(D)))
+            log("   probabilità: soglia %.3f (il meglio %.1f %%)%s · %d operazioni, in guadagno %.0f %%, media %+.3f %%" % (
+                m["soglia"], 100 * m["quota"], "" if not m["fuori"] else " senza via libera", s["n"], 100 * s["vinte"], 100 * s["media"]))
+    for q in QUOTE:
+        out["strategie"]["quota_%g" % q] = per_quota[q]
+    pp, rr = np.concatenate(pp), np.concatenate(rr)
+    out["calibrazione"] = calibrazione(pp, rr)
+    out["tutte"] = {"n": int(len(rr)), "vinte": float((rr > 0).mean()), "media": float(rr.mean()), "stimata": float(pp.mean())}
+    return out
+
+
+def blocco_probabilita(D, ris):
+    """Il riassunto per il JSON (e l'app) di valuta_probabilita."""
+    b = {"probabilita": riassumi(D, ris, "probabilita"), "scelte_probabilita": ris["scelte"],
+         "calibrazione": ris["calibrazione"], "tutte": ris["tutte"], "per_quota": []}
+    for q in QUOTE:
+        st = riassumi(D, ris, "quota_%g" % q)
+        b["per_quota"].append({"quota": q, "n": st["n"], "media": st["media"], "vinte": st["vinte"], "totale": st["totale"]})
+    return b
+
+
+def modello_probabilita(D, costo, seme=0, log=None, giorni_val=30, embargo=2, margine_fine=2.0):
+    """La rete della probabilità che usa il robot: addestrata su tutti i dati tranne l'ultimo periodo, che serve a
+    scegliere l'epoca e la soglia."""
+    fine = D.giorni - margine_fine
+    tr = (D.indice(_avvio(D) / 1440.0), D.indice(fine - giorni_val - 2 * embargo))
+    va = (D.indice(fine - giorni_val - embargo), D.indice(fine - embargo))
+    return apprendi_probabilita(D.con_costo(costo), tr, va, seed=seme, log=log)
+
+
+def json_probabilita(m, data=None):
+    """Il modello della probabilità per il JSON (pesi compresi: li usa il robot)."""
+    return {"tipo": "probabilita", "fuori": m["fuori"], "iterazione": m["iterazione"], "soglia": m["soglia"], "quota": m["quota"],
+            "scelta": m["scelta"], "prove": m["prove"], "base": m["base"], "addestrato": data,
+            "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
+
+
+def esperienza(storia, m, data, n_dati):
+    """Una riga in più nel diario degli addestramenti (gli ultimi 60): cosa ha scelto la rete ogni volta che ha imparato."""
+    riga = {"data": data, "dati": n_dati, "soglia": round(m["soglia"], 4), "quota": m["quota"], "fuori": m["fuori"],
+            "n": m["scelta"]["n"], "vinte": round(m["scelta"]["vinte"], 4), "media": round(m["scelta"]["media"], 6)}
+    storia = [r for r in (storia or []) if r.get("data") != data] + [riga]
+    return storia[-60:]
+
+
 # ---------------------------------------------------------------- riferimenti e verifica a finestre mobili
 
 def az_regola(D, i0, i1, nome):
@@ -1010,7 +1188,8 @@ def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log
                       "slip_protezione": SLIP_STOP, "gamma": GAMMA, "iterazioni": iterazioni, "nascosti": [96, 48],
                       "caratteristiche": NOMI_FEATURE, "t_minima": T_MINIMA, "n_minimo": N_MINIMO},
            "finestre": [{"test_da": data(w["giorni"][0]), "test_a": data(w["giorni"][1]), "giorni": list(w["giorni"])} for w in wins],
-           "incondizionato": incondizionato(D), "costi": {}, "modelli": {}}
+           "incondizionato": incondizionato(D), "costi": {}, "modelli": {}, "probabilita": {}}
+    fine_dati = data(M.n / 1440 - 1)
     log("[rete] dati pronti: %d giorni, %d campioni, %d finestre (%.0f s)" % (ris["dati"]["giorni"], ris["dati"]["campioni"], len(wins), time.time() - t0))
     log("[rete] il muro dei costi, dagli scambi")
     ris["orizzonti_scambi"] = studio_orizzonti()
@@ -1027,7 +1206,12 @@ def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log
             blocco["curve_q"] = [[{k: v for k, v in riga.items() if k in ("iterazione", "errore", "valore_medio", "m0.001", "m0")} for riga in cur]
                                  for cur in r["curve_q"]]
             blocco["curve_previsione"] = r["curve_previsione"]
+        blocco.update(blocco_probabilita(D, valuta_probabilita(D, wins, c, log=log)))     # scegliere le operazioni vincenti
         ris["costi"]["%g" % c] = blocco
+        mp = modello_probabilita(D, c)
+        ris["probabilita"]["%g" % c] = json_probabilita(mp, fine_dati)
+        if c == costi[0]:
+            ris["esperienza"] = esperienza(ris.get("esperienza"), mp, fine_dati, int(M.n / 1440))
         m = modello_finale(D, c, iterazioni=iterazioni)
         ris["modelli"]["%g" % c] = {"tipo": "q", "fuori": m["fuori"], "iterazione": m["iterazione"], "margine": m["margine"],
                                     "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
@@ -1040,13 +1224,63 @@ def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log
     return ris
 
 
+def aggiungi_probabilita(costi=(COSTO, 0.0005), giorni=None, log=print, solo_modello=False, percorso=None):
+    """Aggiorna rete_modello.json senza rifare tutto lo studio: per ogni costo la verifica a finestre della scelta per
+    probabilità di guadagno (salvo solo_modello) e il modello che usa il robot, addestrato con i dati di oggi; più una
+    riga nel diario degli addestramenti. Con solo_modello=True è il riaddestramento di ogni sera (qualche minuto)."""
+    percorso = percorso or MODELLO
+    t0 = time.time()
+    with open(percorso, encoding="utf-8") as fh:
+        ris = json.load(fh)
+    M = carica_mondo(max_giorni=giorni)
+    D = Dati(M)
+    fine_dati = datetime.datetime.fromtimestamp(M.t0 + 60.0 * (M.n - 1), datetime.timezone.utc).date().isoformat()
+    log("[rete] probabilità di guadagno: %d giorni di scambi fino al %s (%.0f s)" % (int(M.n / 1440), fine_dati, time.time() - t0))
+    ris.setdefault("probabilita", {})
+    wins = None if solo_modello else finestre(D)
+    for c in costi:
+        chiave = "%g" % c
+        if wins is not None and chiave in ris.get("costi", {}):
+            log("[rete] verifica a finestre, costo %.2f %% per lato" % (100 * c))
+            ris["costi"][chiave].update(_pulisci(blocco_probabilita(D, valuta_probabilita(D, wins, c, log=log))))
+        m = modello_probabilita(D, c)
+        ris["probabilita"][chiave] = _pulisci(json_probabilita(m, fine_dati))
+        if c == costi[0]:
+            ris["esperienza"] = _pulisci(esperienza(ris.get("esperienza"), m, fine_dati, int(M.n / 1440)))
+        log("[rete] modello del robot a %.2f %%: compra dal %.1f %% stimato (il meglio %.1f %% delle occasioni)%s" % (
+            100 * c, 100 * m["soglia"], 100 * m["quota"], "" if not m["fuori"] else ", senza via libera"))
+        with open(percorso + ".tmp", "w", encoding="utf-8") as fh:            # dopo ogni costo, senza mai lasciare il file a metà
+            json.dump(_pulisci(ris), fh, separators=(",", ":"))
+        os.replace(percorso + ".tmp", percorso)
+    log("[rete] scritto %s (%.0f minuti)" % (os.path.basename(percorso), (time.time() - t0) / 60))
+    return ris
+
+
 # ---------------------------------------------------------------- il modello finale, per chi lo usa dal vivo
 
 def da_json(m):
-    """Un modello scritto da studia(): la rete, le normalizzazioni, il margine (None = resta fuori = infinito)."""
-    return {"rete": Rete.da_dizionario(m["rete"]), "media": np.array(m["media"], dtype=np.float32),
-            "dev": np.array(m["dev"], dtype=np.float32), "margine": float("inf") if m.get("margine") is None else float(m["margine"]),
-            "fuori": bool(m.get("fuori")), "iterazione": m.get("iterazione"), "tipo": m.get("tipo", "q"), "ritmo": 0.0}
+    """Un modello scritto da studia(): la rete, le normalizzazioni, il margine (None = resta fuori = infinito); per il
+    modello della probabilità anche la soglia e la quota."""
+    out = {"rete": Rete.da_dizionario(m["rete"]), "media": np.array(m["media"], dtype=np.float32),
+           "dev": np.array(m["dev"], dtype=np.float32), "margine": float("inf") if m.get("margine") is None else float(m["margine"]),
+           "fuori": bool(m.get("fuori")), "iterazione": m.get("iterazione"), "tipo": m.get("tipo", "q"), "ritmo": 0.0}
+    if out["tipo"] == "probabilita":
+        out.update({"soglia": float(m["soglia"]), "quota": m.get("quota"), "addestrato": m.get("addestrato")})
+    return out
+
+
+def carica_probabilita(costo=None, percorso=MODELLO):
+    """Il modello della probabilità di guadagno per quel costo per lato (il più alto se None), o None se non c'è.
+    Ritorna (modello, costo)."""
+    try:
+        with open(percorso, encoding="utf-8") as fh:
+            r = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    tutti = r.get("probabilita") or {}
+    chiavi = sorted(tutti, key=float, reverse=True)
+    k = (chiavi[0] if chiavi else None) if costo is None else next((x for x in chiavi if abs(float(x) - costo) < 1e-12), None)
+    return (da_json(tutti[k]), float(k)) if k is not None else None
 
 
 def carica_modello(costo=None, percorso=MODELLO):
@@ -1073,6 +1307,23 @@ def valori_a(modello, M, k):
 
 # ---------------------------------------------------------------- le operazioni della rete, minuto per minuto (per il robot)
 
+_VOCE = {"probabilita": "probabilita", "q": "vantaggio", "previsione": "vantaggio", None: "vantaggio"}   # come si chiama il punteggio
+
+
+def scelte_modello(modello, X, margine=None):
+    """Le decisioni di un modello su caratteristiche X (C, istanti, n): (azioni, punteggio). Per il Q-learning il punteggio
+    è il vantaggio di comprare sull'attesa e si compra oltre il margine; per il modello della probabilità è la probabilità
+    di chiudere in guadagno dell'orizzonte migliore e si compra dalla soglia (margine, se dato, la sostituisce)."""
+    C, N = X.shape[:2]
+    Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32).reshape(-1, X.shape[-1])
+    out = modello["rete"].avanti(Xn).reshape(C, N, -1)
+    if modello.get("tipo") == "probabilita":
+        Pr = sigmoide(out)
+        return politica_probabilita(Pr, modello["soglia"] if margine is None else margine), Pr.max(axis=-1)
+    Q = out * ESCALA
+    return politica(Q, modello["margine"] if margine is None else margine), Q[..., 1:].max(axis=-1) - Q[..., 0]
+
+
 def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1):
     """Le operazioni che il modello fa decidendo ogni `ogni` minuti in [k_da, k_a), una posizione alla volta per crypto,
     come nell'addestramento: la decisione al minuto k usa solo le barre prima di k e si entra all'apertura di k; la
@@ -1080,17 +1331,13 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
     l'orizzonte scelto. Le posizioni che a fine dati non sono ancora chiuse tornano tra le 'aperte', con protezione e
     scadenza, perché chi le segue dal vivo possa chiuderle. margine=None: quello del modello.
     Ritorna (operazioni chiuse, aperte, vantaggio dell'ultimo minuto per crypto)."""
-    margine = modello["margine"] if margine is None else margine
     P = Pronto(M)
     K = np.arange(max(k_da, AVVIO), k_a, ogni)
     if len(K) == 0:
         return [], [], {}
     X = caratteristiche(P, K)
     sig = sigma_ora(P, K)
-    Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32)
-    Q = (modello["rete"].avanti(Xn.reshape(-1, X.shape[-1])) * ESCALA).reshape(M.o.shape[0], len(K), -1)
-    az = politica(Q, margine)
-    vantaggio = Q[..., 1:].max(axis=-1) - Q[..., 0]
+    az, vantaggio = scelte_modello(modello, X, margine)
     iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     chiuse, aperte = [], []
     for c, sym in enumerate(M.simboli):
@@ -1105,7 +1352,7 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
             fine = k + h
             tocca = np.flatnonzero(M.l[c, k:min(fine, M.n)] <= stop)
             op = {"sym": sym, "t": iso(k), "prezzo": round(entrata, 8), "minuti": int(h), "protezione": round(stop, 8),
-                  "scade": iso(fine), "vantaggio": round(float(vantaggio[c, i]), 6)}
+                  "scade": iso(fine), _VOCE[modello.get("tipo")]: round(float(vantaggio[c, i]), 6)}
             if len(tocca):
                 kk = k + int(tocca[0])
                 uscita, t_usc, motivo = min(stop, float(M.o[c, kk])) * (1.0 - slip), kk + 1, "protezione"
@@ -1132,12 +1379,20 @@ def main(argv=None):
                     help="addestra e verifica la rete a finestre mobili, per più costi; scrive rete_modello.json")
     ap.add_argument("--sovradattamento", action="store_true",
                     help="aggiunge a rete_modello.json il confronto tra periodo di addestramento e periodo mai visto (qualche minuto)")
-    ap.add_argument("--costi", default="0.002,0.001,0.0005,0.0002", help="costi per lato da provare (con --studia)")
+    ap.add_argument("--probabilita", action="store_true",
+                    help="aggiunge a rete_modello.json la scelta delle operazioni per probabilità di guadagno: verifica a finestre e modello del robot")
+    ap.add_argument("--robot", action="store_true",
+                    help="riaddestra solo il modello della probabilità che usa il robot, con gli scambi fino a ieri (ogni sera, qualche minuto)")
+    ap.add_argument("--costi", default=None, help="costi per lato da provare (di serie 0.002,0.001,0.0005,0.0002 con --studia, 0.002,0.0005 con --probabilita)")
     ap.add_argument("--iterazioni", type=int, default=14)
     ap.add_argument("--giorni", type=int, default=None, help="solo gli ultimi n giorni di dati")
     a = ap.parse_args(argv)
+    costi = tuple(float(x) for x in a.costi.split(",")) if a.costi else None
     if a.studia:
-        studia(a.giorni, tuple(float(x) for x in a.costi.split(",")), a.iterazioni)
+        studia(a.giorni, costi or (COSTO, 0.001, 0.0005, 0.0002), a.iterazioni)
+        return 0
+    if a.probabilita or a.robot:
+        aggiungi_probabilita(costi or ((COSTO,) if a.robot else (COSTO, 0.0005)), a.giorni, solo_modello=a.robot)
         return 0
     if a.sovradattamento:
         with open(MODELLO, encoding="utf-8") as fh:

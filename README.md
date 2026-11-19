@@ -293,13 +293,14 @@ Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10
 - **Crypto, ordini ogni ora** (esercitazione, in media perde): ogni ora mette tre ordini "compra il ribasso" per crypto, ognuno con 1/36 del capitale (12 crypto per 3 profondità); l'ordine vale un'ora, poi si esce alla protezione, all'obiettivo o dopo 24 ore. 24 ore su 24. Nella verifica corretta del 19 novembre 2026 perde in media lo 0,4-0,6 % per operazione (vedi sopra): lo tengo acceso perché le operazioni si vedano lavorare, ma non è una strategia che guadagna. Il piano di 24 ore di prima non c'è più.
 - **Crypto, rete neurale** (esercitazione): le operazioni che la rete neurale di `rete.py` decide ogni minuto sugli scambi
   di Kraken degli ultimi 3 giorni (`rete_live.robot_crypto`), rigiocate nel conto con 1/12 del capitale per posizione, una
-  per crypto. La rete compra quando la mossa migliore batte l'attesa di 0,1 %: è un margine imposto, perché con il suo
-  cancello resterebbe fuori (nella verifica non ha trovato un guadagno credibile). Così fa più operazioni e la vedi
-  lavorare, sapendo che in media non guadagna. Le posizioni aperte si chiudono dal vivo (protezione, fine della durata) o
-  con i dati del prossimo aggiornamento.
+  per crypto. Compra solo dove la rete stima che l'operazione chiuda in guadagno con una probabilità almeno pari alla
+  soglia che ha scelto sul periodo più recente (vedi sotto, "Scegliere le operazioni che chiudono in guadagno"), anche
+  senza il via libera della verifica: così la vedi lavorare e imparare, sapendo che nella verifica non ha ancora saputo
+  distinguere le operazioni vincenti. Ogni operazione mostra la probabilità stimata. Le posizioni aperte si chiudono dal
+  vivo (protezione, fine della durata) o con i dati del prossimo aggiornamento.
 - **Azioni italiane, rete neurale** (esercitazione): lo stesso con la rete di `rete_azioni.py` sui titoli del FTSE MIB,
   decisioni ogni 5 minuti della seduta (barre di Yahoo, 15 minuti di ritardo), 1/8 del capitale per posizione, tutto
-  chiuso al più tardi alle 17:30. Stesso margine imposto, stessa avvertenza: nella verifica resta fuori.
+  chiuso al più tardi alle 17:30. Stessa scelta per probabilità, stessa avvertenza.
 - **Strategie di notte ritirate**: il robot non compra più azioni a borsa chiusa. Le posizioni rimaste da prima si chiudono alla prossima apertura. La verifica di notte resta nei libri.
 
 **Operazioni in diretta.** Il registro in cima alla scheda elenca ogni operazione, tutte o solo azioni o solo crypto, con l'ora (con i secondi per quelle di oggi), il prezzo, l'importo investito o incassato, il risultato e la fonte (in diretta, prezzi ufficiali, candele orarie). Una riga in alto compare in tutte le pagine mentre una sessione è aperta, e ogni operazione nuova avvisa (con notifica del dispositivo, se hai concesso gli avvisi e la pagina è in un'altra scheda). Il registro tiene le ultime 1000 operazioni.
@@ -459,6 +460,32 @@ perde dopo i costi; Fischer e Krauss (2018, *European Journal of Operational Res
 sull'S&P 500 sparisce dal 2010. La verifica degli ordini orari di prima (sezione Crypto intraday) era sbagliata per un errore
 di ordine dentro la candela, corretto il 19 novembre: vedi sopra.
 
+**Scegliere le operazioni che chiudono in guadagno.** Una seconda rete, con gli stessi numeri in ingresso, impara da
+tutte le operazioni possibili del passato e dal loro esito la **probabilità che un'operazione chiuda in guadagno** dopo i
+costi (una probabilità per durata, entropia incrociata). È quella che usa il robot dell'app: compra solo dove la probabilità
+della durata migliore arriva a una soglia che la rete sceglie sul periodo più recente, provando a prendere il meglio 0,2 %,
+0,5 %, 1 %, 2 %, 5 %, 10 % o 20 % delle occasioni e tenendo la quota con la media per operazione più alta (su almeno 20
+operazioni). Verifica a finestre come sopra, costi 0,2 % per lato: le operazioni scelte così sono state 384, in guadagno
+il 37 %, in media -0,62 % (conto -19,5 %); tutte le occasioni, senza scegliere, vincono il
+39 % con una media di -0,51 %. La soglia ha avuto il via libera della verifica in 2 finestre su 6.
+Le stime della rete non distinguono le operazioni vincenti: dove stima il 50 % o più (29786 occasioni) la stima media è il
+54 % e ha vinto davvero il 40 %.
+
+| Prendere solo… | operazioni | in guadagno | media | conto |
+|---|---|---|---|---|
+| il meglio 0,2 % | 145 | 39 % | -0,68 % | -8,4 % |
+| il meglio 0,5 % | 217 | 41 % | -0,71 % | -13,2 % |
+| il meglio 1 % | 267 | 42 % | -0,80 % | -18,3 % |
+| il meglio 2 % | 396 | 42 % | -0,65 % | -23,4 % |
+| il meglio 5 % | 663 | 43 % | -0,49 % | -32,4 % |
+| il meglio 10 % | 878 | 41 % | -0,49 % | -42,7 % |
+| il meglio 20 % | 1099 | 41 % | -0,35 % | -38,3 % |
+
+Il modello del robot (addestrato fino al 2026-11-18) compra dal 64 % di probabilità stimata, il meglio
+1 % delle occasioni, senza il via libera della verifica. Ogni sera alle 18 si riaddestra con gli scambi
+nuovi (`python3 rete_dati.py --giorni 3`, poi `python3 rete.py --robot`) e il diario degli addestramenti (`esperienza` nel
+JSON, e nell'app) tiene cosa ha scelto ogni volta: così si vede se, con più dati, comincia a scegliere meglio.
+
 **Dal vivo.** `python3 rete_live.py` fa girare la rete in un conto finto: prezzi di Kraken ogni secondo, decisione ogni minuto,
 protezione e scadenze ogni secondo, riaddestramento ogni giorno con i dati nuovi (stesso cancello: se non c'è un guadagno
 credibile resta fuori). La pagina (http://127.0.0.1:8766) mostra per ogni crypto il vantaggio di comprare sull'attesa. Di serie non
@@ -470,6 +497,8 @@ python3 rete_dati.py                # gli scambi di Kraken, circa 75 minuti
 python3 rete.py --studia            # addestra e verifica (circa 30 minuti), scrive rete_modello.json
 python3 rete.py --sovradattamento   # aggiunge il confronto tra periodo di addestramento e periodo mai visto
 python3 rete.py --ordini-limite     # gli ordini orari di intraday.py sugli scambi veri
+python3 rete.py --probabilita       # la scelta per probabilità di guadagno: verifica a finestre e modello del robot (circa 30 minuti)
+python3 rete.py --robot             # solo il modello del robot, con gli scambi fino a ieri (ogni sera)
 python3 rete_live.py                # la rete dal vivo
 ```
 
@@ -488,17 +517,41 @@ Yahoo, le sole gratuite a questo passo, quindi solo gli ultimi 60 giorni: 60 sed
 
 | | costi 0,10 % per lato | costi 0,05 % per lato |
 |---|---|---|
-| Rete, apprendimento per rinforzo | resta fuori (0 op.) | 501, -0,14 % a op., conto -1,6 % |
+| Rete, apprendimento per rinforzo | 200, -0,40 % a op., conto -1,9 % | 412, -0,14 % a op., conto -1,3 % |
 | Rete, previsione diretta | resta fuori (0 op.) | resta fuori (0 op.) |
+| Rete, probabilità di guadagno (come il robot) | 363, -0,34 % a op., conto -2,9 % | 114, +0,02 % a op., conto +0,0 % |
 | Regola: compra alle 9:10, vendi in chiusura | 1290, -0,11 % a op., conto -3,3 % | 1290, -0,01 % a op., conto -0,3 % |
-| Regola: dopo un'ora in ribasso, tieni un'ora | 834, -0,17 % a op., conto -3,3 % | 834, -0,07 % a op., conto -1,4 % |
-| Regola: dopo un'ora in rialzo, tieni un'ora | 821, -0,15 % a op., conto -2,8 % | 821, -0,05 % a op., conto -0,9 % |
+| Regola: dopo un'ora in ribasso, tieni un'ora | 829, -0,17 % a op., conto -3,3 % | 829, -0,07 % a op., conto -1,4 % |
+| Regola: dopo un'ora in rialzo, tieni un'ora | 815, -0,14 % a op., conto -2,7 % | 815, -0,04 % a op., conto -0,8 % |
 
-A 0,1 % per lato la rete resta fuori in 3 finestre su 3: non trova mai mosse che battano l'attesa in modo credibile.
-A 0,05 % entra in una finestra e perde. Comprare sempre perde i costi e un po' di più (-0,20 % a 5 minuti,
+A 0,1 % per lato la rete per rinforzo resta fuori in 2 finestre su 3; quando entra perde (200 operazioni, in media -0,40 %).
+A 0,05 % per lato la rete per rinforzo resta fuori in 2 finestre su 3; quando entra perde (412 operazioni, in media -0,14 %). Comprare sempre perde i costi e un po' di più (-0,20 % a 5 minuti,
 -0,29 % tenendo fino alla chiusura), e la correlazione di rango tra la previsione della rete e quello che succede
 va da -0,019 a +0,001: in queste sedute la rete non sa niente del prossimo movimento. 60 sedute sono
 poche (un solo periodo di mercato, nessun anno intero): servirebbero anni di barre da 5 minuti, che gratis non ci sono.
+
+**Scegliere le operazioni che chiudono in guadagno.** Come per le crypto, una seconda rete stima la probabilità che
+ogni operazione chiuda in guadagno dopo i costi, e il robot compra solo dalla soglia che la rete sceglie sulle 2 settimane
+più recenti. Sulle stesse sedute mai viste, a 0,1 % per lato: 363 operazioni scelte, in guadagno il 37 %, in
+media -0,34 % (conto -2,9 %); tutte le occasioni vincono il 35 %, in media -0,22 %. Dove la
+rete stima il 50 % o più (5456 occasioni) vince davvero il 38 %: per ora non sa distinguere le
+operazioni vincenti.
+
+| Prendere solo… | operazioni | in guadagno | media | conto |
+|---|---|---|---|---|
+| il meglio 0,2 % | 74 | 42 % | +0,09 % | +0,2 % |
+| il meglio 0,5 % | 146 | 38 % | -0,10 % | -0,4 % |
+| il meglio 1 % | 252 | 38 % | -0,10 % | -0,6 % |
+| il meglio 2 % | 403 | 37 % | -0,18 % | -1,6 % |
+| il meglio 5 % | 726 | 40 % | -0,18 % | -3,0 % |
+| il meglio 10 % | 1023 | 44 % | -0,17 % | -4,1 % |
+| il meglio 20 % | 1409 | 41 % | -0,20 % | -6,6 % |
+
+Il modello del robot (sedute fino al 2026-11-19) compra dal 54 % stimato, il meglio 10 % delle
+occasioni, senza il via libera della verifica. Ogni sera dei giorni feriali alle 18 `python3 rete_azioni.py --studia` rifà
+verifica e modelli con la seduta del giorno. Yahoo dà le barre da 5 minuti solo degli ultimi 60 giorni: quelle già scaricate
+si tengono in un archivio (`trader/cache/rete_azioni/archivio`), così ogni giorno la rete ha una seduta in più da cui
+imparare (l'archivio vive nella cartella di lavoro: se la si rifà da capo, riparte dagli ultimi 60 giorni).
 
 ```bash
 python3 rete_azioni.py --studia     # scarica le barre, addestra e verifica (circa 2 minuti), scrive rete_azioni_modello.json

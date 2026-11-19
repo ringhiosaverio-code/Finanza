@@ -162,6 +162,51 @@ class MargineImposto(unittest.TestCase):
         self.assertIsNone(L.Stato(L.Agente(Agente().modello(margine=0.001), 0.002, SIMBOLI), 0.002).margine_imposto)
 
 
+class StoriaFinta(L.Storia):
+    """Gli scambi di due crypto finte, senza Kraken."""
+    ADESSO = 1_800_000_000 + 12 * 3600 + 30.0
+
+    def __init__(self, simboli=None, giorni=11):
+        super().__init__(SIMBOLI, giorni=giorni)
+        t0 = float((int(self.ADESSO // 60) // 1440 - giorni + 1) * 86400)
+        for s in SIMBOLI:
+            self.t[s], self.p[s], self.v[s], self.sd[s] = scambi_finti(t0, int(self.ADESSO // 60) - int(t0 // 60))
+
+    def carica(self, log=None):
+        return None
+
+    def mondo(self, adesso=None):
+        return super().mondo(self.ADESSO)
+
+
+class RobotDellApp(unittest.TestCase):
+    def probabile(self, soglia=0.6):
+        net = R.Rete([R.N_FEATURE, 4, len(R.ORIZZONTI)], 0)
+        net.W = [np.zeros_like(w) for w in net.W]
+        net.b[-1] = np.full(len(R.ORIZZONTI), math.log(0.3 / 0.7), np.float32)
+        net.b[-1][R.ORIZZONTI.index(60)] = math.log(0.7 / 0.3)
+        return R.da_json({"rete": net.a_dizionario(), "media": [0.0] * R.N_FEATURE, "dev": [1.0] * R.N_FEATURE, "tipo": "probabilita",
+                          "soglia": soglia, "quota": 0.005, "fuori": True, "iterazione": 2, "addestrato": "2030-01-01"})
+
+    def test_sceglie_la_rete_della_probabilita(self):
+        with mock.patch.object(L, "Storia", StoriaFinta), mock.patch.object(R, "carica_probabilita", lambda c: (self.probabile(), 0.002)):
+            r = L.robot_crypto(giorni=1, log=lambda m: None)
+        self.assertEqual((r["tipo"], r["soglia"], r["quota"], r["margine"], r["costo"]), ("probabilita", 0.6, 0.005, None, 0.002))
+        self.assertGreater(len(r["operazioni"]), 10)
+        self.assertTrue(all(abs(o["probabilita"] - 0.7) < 1e-4 and o["minuti"] == 60 for o in r["operazioni"]))
+        self.assertEqual(set(r["prezzi"]), set(SIMBOLI))
+
+    def test_senza_la_probabilita_il_margine_imposto(self):
+        a = Agente()
+        q = a.modello(margine=float("inf"), buono=240)                       # resta fuori: compra solo con il margine imposto
+        with mock.patch.object(L, "Storia", StoriaFinta), mock.patch.object(R, "carica_probabilita", lambda c: None), \
+                mock.patch.object(R, "carica_modello", lambda c: (q, 0.002)):
+            r = L.robot_crypto(giorni=1, log=lambda m: None)
+        self.assertEqual((r["tipo"], r["margine"], r["soglia"]), ("q", L.MARGINE_ROBOT, None))
+        self.assertTrue(r["operazioni"])
+        self.assertTrue(all("vantaggio" in o for o in r["operazioni"]))
+
+
 class Pagina(unittest.TestCase):
     def test_lo_stato_si_serializza(self):
         import json

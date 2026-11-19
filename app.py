@@ -157,7 +157,7 @@ def rete_per_app():
             r = json.load(fh)
     except (OSError, ValueError):
         return None
-    for m in (r.get("modelli") or {}).values():
+    for m in list((r.get("modelli") or {}).values()) + list((r.get("probabilita") or {}).values()):
         for k in ("rete", "media", "dev"):
             m.pop(k, None)
     return r

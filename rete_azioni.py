@@ -70,8 +70,33 @@ def scarica(sym, max_age=600, intervallo="5m", periodo="60d"):
     with open(path, encoding="utf-8") as fh:
         res = json.load(fh)["chart"]["result"][0]
     q = res["indicators"]["quote"][0]
-    return [(t, o, h, l, c, v or 0) for t, o, h, l, c, v in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"], q["volume"])
-            if None not in (o, h, l, c)]
+    righe = [(t, o, h, l, c, v or 0) for t, o, h, l, c, v in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"], q["volume"])
+             if None not in (o, h, l, c)]
+    return archivia(sym, righe) if intervallo == "5m" else righe
+
+
+def archivia(sym, righe, cartella=None):
+    """Yahoo dà le barre da 5 minuti solo degli ultimi 60 giorni: qui si tengono tutte quelle già viste, così ogni giorno
+    la rete ha una seduta in più da cui imparare. Le barre nuove vincono su quelle vecchie (l'ultima della seduta in
+    corso cambia finché non è chiusa). Ritorna tutte le barre, in ordine."""
+    cartella = cartella or os.path.join(CACHE, "archivio")
+    os.makedirs(cartella, exist_ok=True)
+    path = os.path.join(cartella, "%s.npz" % sym)
+    unite = {}
+    if os.path.exists(path):
+        try:
+            with np.load(path) as z:
+                unite = {int(t): (int(t), float(o), float(h), float(l), float(c), float(v))
+                         for t, o, h, l, c, v in zip(z["t"], z["o"], z["h"], z["l"], z["c"], z["v"])}
+        except (OSError, ValueError, KeyError):                                  # archivio rovinato: si riparte
+            unite = {}
+    unite.update({int(r[0]): (int(r[0]), *map(float, r[1:])) for r in righe})
+    out = [unite[t] for t in sorted(unite)]
+    if out:
+        a = np.array(out, dtype=np.float64)
+        np.savez_compressed(path + ".tmp.npz", t=a[:, 0], o=a[:, 1], h=a[:, 2], l=a[:, 3], c=a[:, 4], v=a[:, 5])
+        os.replace(path + ".tmp.npz", path)
+    return out
 
 
 class Barre:
@@ -265,11 +290,20 @@ def regole(D):
 
 # ---------------------------------------------------------------- studia
 
-FINESTRE = dict(giorni_test=14, giorni_val=14, embargo=1, min_addestramento=14, max_finestre=3, margine_fine=1.0)
+FINESTRE = dict(giorni_test=14, giorni_val=14, embargo=1, min_addestramento=14, max_finestre=8, margine_fine=1.0)
+
+
+def _precedente():
+    try:
+        with open(MODELLO, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
 
 
 def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
     t0 = time.time()
+    prima = _precedente()
     B = carica(max_age=6 * 3600, log=log)
     D = DatiAzioni(B)
     wins = rete.finestre(D, **FINESTRE)
@@ -283,7 +317,7 @@ def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
            "config": {"orizzonti": list(ORIZZONTI), "passo_minuti": BARRA, "costo_per_lato": COSTO, "k_stop": rete.K_STOP,
                       "caratteristiche": list(NOMI_FEATURE), "iterazioni": iterazioni, "t_minima": rete.T_MINIMA, "n_minimo": rete.N_MINIMO},
            "finestre": [{"test_da": data(w["giorni"][0]), "test_a": data(w["giorni"][1]), "giorni": list(w["giorni"])} for w in wins],
-           "incondizionato": rete.incondizionato(D, costi[0]), "costi": {}, "modelli": {}}
+           "incondizionato": rete.incondizionato(D, costi[0]), "costi": {}, "modelli": {}, "probabilita": {}}
     if wins:
         ris["informazione"] = rete.ic_per_orizzonte(D, wins, costo=costi[0])
     for c in costi:
@@ -299,12 +333,22 @@ def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
             if c == costi[0]:
                 blocco["curve_q"] = [[{k: v for k, v in riga.items() if k in ("iterazione", "errore", "valore_medio", "m0.001", "m0")} for riga in cur]
                                      for cur in r["curve_q"]]
+            rp = rete.valuta_probabilita(D, wins, c, log=log)                  # scegliere le operazioni che chiudono in guadagno
+            blocco.update(rete.blocco_probabilita(D, rp))
+            blocco["probabilita"]["per_seduta"] = blocco["probabilita"]["n"] / max(sedute_test, 1)
+            blocco["probabilita"]["sedute"] = sedute_test
             ris["costi"]["%g" % c] = blocco
         m = rete.modello_finale(D, c, iterazioni=iterazioni, giorni_val=FINESTRE["giorni_val"], embargo=FINESTRE["embargo"],
                                 margine_fine=FINESTRE["margine_fine"])
         ris["modelli"]["%g" % c] = {"tipo": "q", "fuori": m["fuori"], "iterazione": m["iterazione"], "margine": m["margine"],
                                     "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
         log("[rete_azioni] modello finale a %.2f %%: %s" % (100 * c, "resta fuori" if m["fuori"] else "margine %g" % m["margine"]))
+        mp = rete.modello_probabilita(D, c, giorni_val=FINESTRE["giorni_val"], embargo=FINESTRE["embargo"], margine_fine=FINESTRE["margine_fine"])
+        ris["probabilita"]["%g" % c] = rete.json_probabilita(mp, B.giorni[-1].isoformat())
+        log("[rete_azioni] probabilità a %.2f %%: compra dal %.1f %% stimato (il meglio %.1f %% delle occasioni)%s" % (
+            100 * c, 100 * mp["soglia"], 100 * mp["quota"], "" if not mp["fuori"] else ", senza via libera"))
+        if c == costi[0]:
+            ris["esperienza"] = rete.esperienza(prima.get("esperienza"), mp, B.giorni[-1].isoformat(), B.S)
     ris["durata_minuti"] = round((time.time() - t0) / 60, 1)
     if salva:
         with open(MODELLO, "w", encoding="utf-8") as fh:
@@ -320,7 +364,7 @@ def per_app():
             r = json.load(fh)
     except (OSError, ValueError):
         return None
-    for m in (r.get("modelli") or {}).values():
+    for m in list((r.get("modelli") or {}).values()) + list((r.get("probabilita") or {}).values()):
         for k in ("rete", "media", "dev"):
             m.pop(k, None)
     return r
@@ -332,19 +376,18 @@ MARGINE_ROBOT = 0.001
 SEDUTE_ROBOT = 3
 
 
-def rigioca(modello, B, margine, sedute=SEDUTE_ROBOT, costo=COSTO):
+def rigioca(modello, B, margine=None, sedute=SEDUTE_ROBOT, costo=COSTO):
     """Le operazioni che la rete fa nelle ultime `sedute` sedute (anche quella in corso), una posizione alla volta per
-    titolo, tutte chiuse entro la seduta. Le posizioni della seduta in corso non ancora chiuse sono 'aperte'."""
+    titolo, tutte chiuse entro la seduta. Le posizioni della seduta in corso non ancora chiuse sono 'aperte'. Con il
+    modello della probabilità compra dalla sua soglia, con il Q-learning dal margine (margine=None: quelli del modello)."""
     G_tutte = decisioni_possibili(B, solo_complete=False)
     ultima_seduta = B.ultima // BARRE
     G = G_tutte[(G_tutte // BARRE) > ultima_seduta - sedute]
     if len(G) == 0:
         return [], [], {}
     X, sig = caratteristiche(B, G)
-    Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32)
-    Q = (modello["rete"].avanti(Xn.reshape(-1, N_FEATURE)) * rete.ESCALA).reshape(B.C, len(G), -1)
-    az = rete.politica(Q, margine, 0.0, ORIZZONTI)
-    vantaggio = Q[..., 1:].max(axis=-1) - Q[..., 0]
+    az, vantaggio = rete.scelte_modello(modello, X, margine)
+    voce = "probabilita" if modello.get("tipo") == "probabilita" else "vantaggio"
     iso = lambda t: datetime.datetime.fromtimestamp(t, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     chiuse, aperte = [], []
     for c, sym in enumerate(B.simboli):
@@ -361,7 +404,7 @@ def rigioca(modello, B, margine, sedute=SEDUTE_ROBOT, costo=COSTO):
             chiusura = B.T[fine_seduta - 1] + 60.0 * BARRA
             scade = B.T[e] if e < fine_seduta else chiusura
             op = {"sym": sym, "t": iso(B.T[g]), "prezzo": round(entrata, 6), "minuti": int(min(h, (e - g) * BARRA)),
-                  "protezione": round(stop, 6), "scade": iso(scade), "vantaggio": round(float(vantaggio[c, i]), 6)}
+                  "protezione": round(stop, 6), "scade": iso(scade), voce: round(float(vantaggio[c, i]), 6)}
             ultima_vera = B.ultima
             tocca = np.flatnonzero(B.l[c, g:min(e, ultima_vera + 1)] <= stop)
             if len(tocca):
@@ -384,20 +427,28 @@ def rigioca(modello, B, margine, sedute=SEDUTE_ROBOT, costo=COSTO):
 
 
 def robot(margine=MARGINE_ROBOT, sedute=SEDUTE_ROBOT, log=print):
-    """Per il robot dell'app: le operazioni della rete nelle ultime sedute, con il margine imposto (la rete compra quando
-    la mossa migliore batte l'attesa di quel margine, anche senza il via libera della verifica)."""
+    """Per il robot dell'app: le operazioni della rete nelle ultime sedute. Se c'è, la rete della probabilità di guadagno
+    sceglie le operazioni (compra dove la probabilità stimata arriva alla soglia imparata, anche senza il via libera della
+    verifica); se no il Q-learning con il margine imposto (compra quando la mossa migliore batte l'attesa di quel margine)."""
     with open(MODELLO, encoding="utf-8") as fh:
         r = json.load(fh)
-    chiave = max(r["modelli"], key=float)
-    modello = rete.da_json(r["modelli"][chiave])
+    sel = r.get("probabilita") or {}
+    if sel:
+        chiave = max(sel, key=float)
+        modello, margine = rete.da_json(sel[chiave]), None
+    else:
+        chiave = max(r["modelli"], key=float)
+        modello = rete.da_json(r["modelli"][chiave])
     costo = float(chiave)
     B = carica(max_age=300, log=lambda m: None)
     chiuse, aperte, vantaggio = rigioca(modello, B, margine, sedute, costo)
     log("[rete_azioni] per il robot: %d operazioni chiuse, %d aperte nelle ultime %d sedute" % (len(chiuse), len(aperte), sedute))
+    prob = modello.get("tipo") == "probabilita"
     return {"generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "costo": costo,
-            "margine": margine, "sedute": sedute, "orizzonti": list(ORIZZONTI), "ultima_barra": datetime.datetime.fromtimestamp(
-                B.T[B.ultima], datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if B.ultima >= 0 else None,
-            "modello": {"fuori": modello["fuori"], "iterazione": modello.get("iterazione")},
+            "tipo": modello.get("tipo"), "margine": None if prob else margine, "soglia": modello.get("soglia") if prob else None,
+            "quota": modello.get("quota") if prob else None, "sedute": sedute, "orizzonti": list(ORIZZONTI),
+            "ultima_barra": datetime.datetime.fromtimestamp(B.T[B.ultima], datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if B.ultima >= 0 else None,
+            "modello": {"fuori": modello["fuori"], "iterazione": modello.get("iterazione"), "addestrato": modello.get("addestrato")},
             "operazioni": chiuse, "aperte": aperte, "vantaggio": vantaggio,
             "prezzi": {sym: round(float(B.c[c, B.ultima]), 6) for c, sym in enumerate(B.simboli)} if B.ultima >= 0 else {}}
 
@@ -413,6 +464,8 @@ def main(argv=None):
         return 0
     if a.oggi:
         r = robot()
+        print("[rete_azioni] %s" % ("compra dal %.1f %% di probabilità stimata di chiudere in guadagno" % (100 * r["soglia"]) if r["soglia"] is not None
+                                     else "compra quando batte l'attesa di %.2f %%" % (100 * r["margine"])))
         for o in r["operazioni"][-15:] + r["aperte"]:
             print("  %s %-9s compra a %.4f per %3d minuti → %s" % (o["t"], o["sym"], o["prezzo"], o["minuti"],
                   ("%s a %.4f: %+.2f %%" % (o["motivo"], o["prezzo_uscita"], 100 * o["r"])) if "r" in o else "ancora aperta"))

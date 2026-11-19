@@ -176,17 +176,24 @@ GIORNI_ROBOT = 3                                           # giorni di decisioni
 
 def robot_crypto(giorni=GIORNI_ROBOT, margine=MARGINE_ROBOT, log=print):
     """Per il robot dell'app: le operazioni che la rete fa decidendo ogni minuto negli ultimi `giorni` giorni, sugli
-    scambi di Kraken fino a adesso, con il margine imposto (senza, la rete resterebbe fuori: nella verifica non ha
-    trovato un guadagno credibile), e le posizioni ancora aperte. Il robot le rigioca nel suo conto finto."""
-    modello, costo = rete.carica_modello(rete.COSTO)
+    scambi di Kraken fino a adesso, e le posizioni ancora aperte. Sceglie la rete della probabilità di guadagno (compra
+    dove la probabilità stimata arriva alla soglia imparata); se il suo modello manca, il Q-learning con il margine
+    imposto (senza, resterebbe fuori: nella verifica non ha trovato un guadagno credibile). Il robot le rigioca nel conto finto."""
+    sel = rete.carica_probabilita(rete.COSTO)              # la rete che sceglie le operazioni per probabilità di guadagno
+    if sel:
+        (modello, costo), usato = sel, None
+    else:                                                  # se manca: il Q-learning con il margine imposto
+        (modello, costo), usato = rete.carica_modello(rete.COSTO), margine
     storia = Storia(giorni=giorni + 8)                     # 7 giorni e un'ora di storia per le caratteristiche, più il resto
     storia.carica(log=lambda m: None)
     M, k = storia.mondo()
-    chiuse, aperte, vantaggio = rete.rigioca(modello, M, k - giorni * 1440, k + 1, margine, costo)
+    chiuse, aperte, vantaggio = rete.rigioca(modello, M, k - giorni * 1440, k + 1, usato, costo)
     log("[rete_live] rete crypto per il robot: %d operazioni chiuse, %d aperte in %d giorni" % (len(chiuse), len(aperte), giorni))
+    prob = modello.get("tipo") == "probabilita"
     return {"generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "costo": costo,
-            "margine": margine, "giorni": giorni, "orizzonti": list(rete.ORIZZONTI),
-            "modello": {"fuori": modello["fuori"], "iterazione": modello.get("iterazione")},
+            "tipo": modello.get("tipo"), "margine": None if prob else margine, "soglia": modello.get("soglia") if prob else None,
+            "quota": modello.get("quota") if prob else None, "giorni": giorni, "orizzonti": list(rete.ORIZZONTI),
+            "modello": {"fuori": modello["fuori"], "iterazione": modello.get("iterazione"), "addestrato": modello.get("addestrato")},
             "operazioni": chiuse, "aperte": aperte, "vantaggio": vantaggio,
             "prezzi": {s: round(float(storia.p[s][-1]), 8) for s in storia.simboli if len(storia.p[s])}}   # l'ultimo scambio
 
