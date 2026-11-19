@@ -34,20 +34,34 @@ import segnali
 import settimana
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
-CACHE = os.path.join(ROOT, "trader", "cache", "rete_azioni")
-MODELLO = os.path.join(ROOT, "rete_azioni_modello.json")
+# lo stesso codice per due borse: Milano (questo modulo) e New York (rete_usa.py, che lo carica con MERCATO_SCELTO="usa")
+MERCATI_RETE = {
+    "italia": dict(nome="rete_azioni", fuso="Europe/Rome", apre=(9, 0), barre=102, giornaliere=(17, 35), costo=0.001,
+                   universo=settimana.MERCATI["italia"]["universo"], modello="rete_azioni_modello.json",
+                   notizie=("borsa_milano", '("Piazza Affari" OR "Borsa di Milano" OR "FTSE MIB") sourcelang:italian')),
+    "usa": dict(nome="rete_usa", fuso="America/New_York", apre=(9, 30), barre=78, giornaliere=(16, 5), costo=0.0005,
+                universo=settimana.MERCATI["usa"]["universo"], modello="rete_usa_modello.json",
+                notizie=("wall_street", '("Wall Street" OR "S&P 500" OR "Nasdaq" OR "Dow Jones") sourcelang:english')),
+}
+MERCATO = globals().get("MERCATO_SCELTO", "italia")
+CFG = MERCATI_RETE[MERCATO]
+NOME = CFG["nome"]
+CACHE = os.path.join(ROOT, "trader", "cache", NOME)
+MODELLO = os.path.join(ROOT, CFG["modello"])
 UA = "Mozilla/5.0 (finanza-rete-azioni)"
-ROMA = ZoneInfo("Europe/Rome")
+ROMA = ZoneInfo(CFG["fuso"])                    # il fuso della borsa (per Milano, Roma)
 BARRA = 5                                       # minuti per barra
-BARRE = 102                                     # barre in una seduta: 09:00-17:30
-APRE = 9 * 60                                   # minuti dalla mezzanotte, ora italiana
+BARRE = CFG["barre"]                            # barre in una seduta: Milano 09:00-17:30 (102), New York 09:30-16:00 (78)
+APRE = CFG["apre"][0] * 60 + CFG["apre"][1]     # minuti dalla mezzanotte, ora della borsa
+ORE_SEDUTA = BARRE * BARRA / 60.0
 PRIMA = 2                                       # si decide dalla terza barra (09:10): servono due barre di oggi
 SEDUTE_STORIA = 5                               # sedute di storia per le caratteristiche
-ORIZZONTI = (5, 15, 30, 60, 120, 240, 510)      # minuti; 510 = fino alla chiusura
-COSTO = 0.001                                   # per lato: commissione e spread
+ORIZZONTI = (5, 15, 30, 60, 120, 240, BARRE * BARRA)   # minuti; l'ultimo = fino alla chiusura (Milano 510)
+CHIUSURA = ORIZZONTI[-1]
+COSTO = CFG["costo"]                            # per lato: commissione e spread
 SLIP = 0.0005                                   # la protezione si esegue un po' peggio del livello
 SIGMA_MIN = 0.0005
-RITARDI = (1, 3, 6, 12, 24, 48, 102, 204, 510)  # in barre: da 5 minuti a 5 sedute
+RITARDI = (1, 3, 6, 12, 24, 48, BARRE, 2 * BARRE, 5 * BARRE)  # in barre: da 5 minuti a 5 sedute
 NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_2h_su_5g", "oggi", "salto", "pos_oggi",
                  "da_ieri", "minuti", "minuti_sin", "minuti_cos", "sett_sin", "sett_cos", "volume_1h", "mercato_1h",
                  "mercato_seduta", "relativo_seduta"]
@@ -122,7 +136,7 @@ class Barre:
         self.simboli, self.giorni = list(simboli), giorni
         S, C = len(giorni), len(simboli)
         pos = {g: k for k, g in enumerate(giorni)}
-        inizio = [datetime.datetime(g.year, g.month, g.day, 9, 0, tzinfo=ROMA).timestamp() for g in giorni]
+        inizio = [datetime.datetime(g.year, g.month, g.day, *CFG["apre"], tzinfo=ROMA).timestamp() for g in giorni]
         self.T = (np.array(inizio)[:, None] + 60.0 * BARRA * np.arange(BARRE)[None, :]).reshape(-1)   # inizio di ogni barra, UTC
         self.t0 = float(datetime.datetime(giorni[0].year, giorni[0].month, giorni[0].day, tzinfo=datetime.timezone.utc).timestamp())
         self.K = (self.T - self.t0) / 60.0                                           # minuti dalla mezzanotte UTC del primo giorno
@@ -151,13 +165,13 @@ class Barre:
 
 
 def carica(simboli=None, max_age=600, log=print):
-    simboli = list(simboli or settimana.MERCATI["italia"]["universo"])
+    simboli = list(simboli or CFG["universo"])
     ok, righe = [], []
     for s in simboli:
         try:
             r = scarica(s, max_age)
         except Exception as e:                                                       # rete o titolo senza barre: si salta
-            log("[rete_azioni] %s saltato: %s" % (s, str(e)[:80]))
+            log("[" + NOME + "] %s saltato: %s" % (s, str(e)[:80]))
             continue
         if len(r) > 500:
             ok.append(s)
@@ -180,13 +194,12 @@ def esterni_azioni(B):
     sc = np.zeros((B.C, B.S, len(segnali.NOMI_SCANNER)), np.float32)
     atr = np.zeros((B.C, B.S), np.float32)
     for c, sym in enumerate(B.simboli):
-        gg, o, h, l, cl = segnali.giornaliere(sym, "Europe/Rome", (17, 35))
+        gg, o, h, l, cl = segnali.giornaliere(sym, CFG["fuso"], CFG["giornaliere"])
         if len(gg):
             tab[c] = segnali.per_giorno(gg, segnali.tabella_giornaliera(o, h, l, cl), giorni)
             atr[c] = segnali.per_giorno(gg, segnali.atr_giornaliero(o, h, l, cl)[:, None], giorni)[:, 0]
             sc[c] = segnali.per_giorno(gg, segnali.tabella_scanner(cl), giorni)
-    notizie = segnali.notizie_per_giorno(segnali.notizie(
-        "borsa_milano", '("Piazza Affari" OR "Borsa di Milano" OR "FTSE MIB") sourcelang:italian', log=lambda m: None), giorni)
+    notizie = segnali.notizie_per_giorno(segnali.notizie(*CFG["notizie"], log=lambda m: None), giorni)
     B._esterni = (tab, atr, notizie, sc)
     return B._esterni
 
@@ -274,7 +287,7 @@ def caratteristiche(B, G):
     r1_seduta = np.where(primo_di_seduta[None, :], 0.0, r1)                      # la volatilità senza i salti della notte
     r2 = _cum(r1_seduta ** 2)
     ult = G - 1
-    sig = np.maximum(np.sqrt(np.maximum((r2[:, G] - r2[:, G - 510]) / 510.0 * 12.0, 0.0)), SIGMA_MIN)
+    sig = np.maximum(np.sqrt(np.maximum((r2[:, G] - r2[:, G - 5 * BARRE]) / (5.0 * BARRE) * 12.0, 0.0)), SIGMA_MIN)
     s2h = np.sqrt(np.maximum((r2[:, G] - r2[:, G - 24]) / 24.0 * 12.0, 0.0))
     cols, z = [], {}
     for L in RITARDI:
@@ -286,22 +299,22 @@ def caratteristiche(B, G):
     apertura = np.log(B.o[:, s0])
     ieri = lc[:, s0 - 1]
     cols.append(np.clip((lc[:, ult] - apertura) / (sig * np.sqrt(np.maximum(minuti, BARRA) / 60.0)), -8, 8))
-    cols.append(np.clip((apertura - ieri) / (sig * math.sqrt(8.5)), -8, 8))
+    cols.append(np.clip((apertura - ieri) / (sig * math.sqrt(ORE_SEDUTA)), -8, 8))
     hs, ls = B.h.reshape(B.C, B.S, BARRE), B.l.reshape(B.C, B.S, BARRE)
     hi = np.maximum.accumulate(hs, axis=2).reshape(B.C, -1)
     lo = np.minimum.accumulate(ls, axis=2).reshape(B.C, -1)
     cols.append((B.c[:, ult] - lo[:, ult]) / np.maximum(hi[:, ult] - lo[:, ult], 1e-12))
-    cols.append(np.clip((lc[:, ult] - ieri) / (sig * math.sqrt(8.5)), -8, 8))
+    cols.append(np.clip((lc[:, ult] - ieri) / (sig * math.sqrt(ORE_SEDUTA)), -8, 8))
     fase = minuti / (BARRE * BARRA)
     giorno = np.array([B.giorni[int(s)].weekday() for s in G // BARRE]) / 7.0 * 2 * np.pi
     for f in (fase, np.sin(2 * np.pi * fase), np.cos(2 * np.pi * fase), np.sin(giorno), np.cos(giorno)):
         cols.append(np.broadcast_to(f, (B.C, len(G))))
     vc = _cum(B.v)
     v12 = vc[:, G] - vc[:, G - 12]
-    v510 = (vc[:, G] - vc[:, G - 510]) / 510.0 * 12.0
-    cols.append(np.log((v12 + 1.0) / (v510 + 1.0)))
-    m12, m102 = z[12].mean(axis=0), z[102].mean(axis=0)
-    cols += [np.broadcast_to(m12, (B.C, len(G))), np.broadcast_to(m102, (B.C, len(G))), z[102] - m102]
+    v5s = (vc[:, G] - vc[:, G - 5 * BARRE]) / (5.0 * BARRE) * 12.0
+    cols.append(np.log((v12 + 1.0) / (v5s + 1.0)))
+    m12, m1s = z[12].mean(axis=0), z[BARRE].mean(axis=0)
+    cols += [np.broadcast_to(m12, (B.C, len(G))), np.broadcast_to(m1s, (B.C, len(G))), z[BARRE] - m1s]
     cols += segnali_azioni(B, G, sig, lc, s0, hi, lo, vc)
     X = np.stack(cols, axis=-1).astype(np.float32)
     assert X.shape[-1] == N_FEATURE, X.shape
@@ -360,7 +373,7 @@ class DatiAzioni(rete.Dati):
 def regole(D):
     """Tre regole semplici fissate prima di guardare, per confronto: compra all'apertura (09:10) e vendi in chiusura;
     compra dopo un'ora in ribasso (sotto -2 volatilità) e tieni un'ora; compra dopo un'ora in rialzo (sopra +2) e tieni un'ora."""
-    ih, ic = ORIZZONTI.index(60), ORIZZONTI.index(510)
+    ih, ic = ORIZZONTI.index(60), ORIZZONTI.index(CHIUSURA)
     z = NOMI_FEATURE.index("rend_12")
 
     def apertura(D, i0, i1):
@@ -378,7 +391,7 @@ def regole(D):
         az[D.X[:, i0:i1, z] > 2.0] = 1 + ih
         return az
     F = NOMI_FEATURE.index
-    ic, i30, i60 = ORIZZONTI.index(510), ORIZZONTI.index(30), ORIZZONTI.index(60)
+    ic, i30, i60 = ORIZZONTI.index(CHIUSURA), ORIZZONTI.index(30), ORIZZONTI.index(60)
 
     def quando(D, i0, i1, condizione, h):
         az = np.zeros((D.C, i1 - i0), dtype=int)
@@ -394,7 +407,7 @@ def regole(D):
 
     def momento_intraday(D, i0, i1):       # Gao, Han, Li e Zhou: alle 17:00, se la prima mezz'ora è salita, tieni fino alla chiusura
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
-        return quando(D, i0, i1, (j == 96) & (X[..., F("prima_mezzora")] > 0.5), ic)
+        return quando(D, i0, i1, (j == BARRE - 6) & (X[..., F("prima_mezzora")] > 0.5), ic)
 
     def buy_on_gap(D, i0, i1):             # Chan: aperto più di un ATR sotto la chiusura di ieri, compra alle 9:10 e vendi in chiusura
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
@@ -402,7 +415,7 @@ def regole(D):
 
     def vwap_ritorno(D, i0, i1):           # Aziz: molto sotto il VWAP di oggi, tieni un'ora
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
-        return quando(D, i0, i1, (X[..., F("vwap_oggi")] < -2.0) & (j < 90), i60)
+        return quando(D, i0, i1, (X[..., F("vwap_oggi")] < -2.0) & (j < BARRE - 12), i60)
 
     def stagione(D, i0, i1):               # Heston, Korajczyk e Sadka: la stessa mezz'ora è salita nelle ultime sedute
         X = D.X[:, i0:i1]
@@ -446,13 +459,14 @@ def _precedente():
         return {}
 
 
-def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
+def studia(costi=None, iterazioni=10, log=print, salva=True):
     t0 = time.time()
+    costi = costi or tuple(sorted({COSTO, 0.0005}, reverse=True))           # il costo della borsa e uno più basso
     prima = _precedente()
     B = carica(max_age=6 * 3600, log=log)
     D = DatiAzioni(B)
     wins = rete.finestre(D, **FINESTRE)
-    log("[rete_azioni] %d titoli, %d sedute (%s … %s), %d campioni, %d finestre" % (
+    log("[" + NOME + "] %d titoli, %d sedute (%s … %s), %d campioni, %d finestre" % (
         B.C, B.S, B.giorni[0], B.giorni[-1], D.C * D.N, len(wins)))
     inizio = datetime.datetime.fromtimestamp(B.t0, datetime.timezone.utc).date()
     data = lambda g: (inizio + datetime.timedelta(days=int(g))).isoformat()
@@ -465,11 +479,11 @@ def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
            "incondizionato": rete.incondizionato(D, costi[0]), "costi": {}, "modelli": {}, "probabilita": {}}
     if wins:
         ris["informazione"] = rete.ic_per_orizzonte(D, wins, costo=costi[0])
-    log("[rete_azioni] quali segnali sono legati a quello che succede dopo: tutte le sedute, ultimo mese, settimana, giorno")
+    log("[" + NOME + "] quali segnali sono legati a quello che succede dopo: tutte le sedute, ultimo mese, settimana, giorno")
     per = periodi_sedute(D)
     ris["segnali"] = rete.studio_segnali(D, NOMI_FEATURE, per, costi[0], per[1][1], FONTI_SEGNALI)
     for c in costi:
-        log("[rete_azioni] costo %.2f %% per lato" % (100 * c))
+        log("[" + NOME + "] costo %.2f %% per lato" % (100 * c))
         if wins:
             r = rete.valuta_costo(D, wins, c, iterazioni=iterazioni, log=log, regole=regole(D))
             blocco = {nome: rete.riassumi(D, r, nome) for nome in r["strategie"]}
@@ -490,10 +504,10 @@ def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
                                 margine_fine=FINESTRE["margine_fine"])
         ris["modelli"]["%g" % c] = {"tipo": "q", "fuori": m["fuori"], "iterazione": m["iterazione"], "margine": m["margine"],
                                     "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
-        log("[rete_azioni] modello finale a %.2f %%: %s" % (100 * c, "resta fuori" if m["fuori"] else "margine %g" % m["margine"]))
+        log("[" + NOME + "] modello finale a %.2f %%: %s" % (100 * c, "resta fuori" if m["fuori"] else "margine %g" % m["margine"]))
         mp = rete.modello_probabilita(D, c, giorni_val=FINESTRE["giorni_val"], embargo=FINESTRE["embargo"], margine_fine=FINESTRE["margine_fine"])
         ris["probabilita"]["%g" % c] = rete.json_probabilita(mp, B.giorni[-1].isoformat())
-        log("[rete_azioni] probabilità a %.2f %%: compra dal %.1f %% stimato (il meglio %.1f %% delle occasioni)%s" % (
+        log("[" + NOME + "] probabilità a %.2f %%: compra dal %.1f %% stimato (il meglio %.1f %% delle occasioni)%s" % (
             100 * c, 100 * mp["soglia"], 100 * mp["quota"], "" if not mp["fuori"] else ", senza via libera"))
         if c == costi[0]:
             ris["esperienza"] = rete.esperienza(prima.get("esperienza"), mp, B.giorni[-1].isoformat(), B.S)
@@ -501,7 +515,7 @@ def studia(costi=(COSTO, 0.0005), iterazioni=10, log=print, salva=True):
     if salva:
         with open(MODELLO, "w", encoding="utf-8") as fh:
             json.dump(rete._pulisci(ris), fh, separators=(",", ":"))
-        log("[rete_azioni] scritto %s (%d KB)" % (os.path.basename(MODELLO), os.path.getsize(MODELLO) // 1024))
+        log("[" + NOME + "] scritto %s (%d KB)" % (os.path.basename(MODELLO), os.path.getsize(MODELLO) // 1024))
     return ris
 
 
@@ -607,7 +621,7 @@ def robot(margine=MARGINE_ROBOT, sedute=SEDUTE_ROBOT, log=print):
     costo = float(chiave)
     B = carica(max_age=300, log=lambda m: None)
     chiuse, aperte, vantaggio = rigioca(modello, B, margine, sedute, costo)
-    log("[rete_azioni] per il robot: %d operazioni chiuse, %d aperte nelle ultime %d sedute" % (len(chiuse), len(aperte), sedute))
+    log("[" + NOME + "] per il robot: %d operazioni chiuse, %d aperte nelle ultime %d sedute" % (len(chiuse), len(aperte), sedute))
     prob = modello.get("tipo") == "probabilita"
     return {"generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "costo": costo,
             "tipo": modello.get("tipo"), "margine": None if prob else margine, "soglia": modello.get("soglia") if prob else None,
@@ -629,7 +643,7 @@ def main(argv=None):
         return 0
     if a.oggi:
         r = robot()
-        print("[rete_azioni] %s" % ("compra dal %.1f %% di probabilità stimata di chiudere in guadagno" % (100 * r["soglia"]) if r["soglia"] is not None
+        print("[" + NOME + "] %s" % ("compra dal %.1f %% di probabilità stimata di chiudere in guadagno" % (100 * r["soglia"]) if r["soglia"] is not None
                                      else "compra quando batte l'attesa di %.2f %%" % (100 * r["margine"])))
         for o in r["operazioni"][-15:] + r["aperte"]:
             print("  %s %-9s compra a %.4f per %3d minuti → %s" % (o["t"], o["sym"], o["prezzo"], o["minuti"],

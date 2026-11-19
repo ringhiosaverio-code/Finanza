@@ -195,6 +195,28 @@ def rete_ita_robot_app(log=print):
         return None
 
 
+def rete_usa_app(log=print):
+    """I risultati della rete neurale per le azioni USA (python3 rete_usa.py --studia) senza i pesi, o None."""
+    try:
+        import rete_usa
+        return rete_usa.per_app()
+    except Exception as e:
+        log("[app] rete delle azioni USA saltata: %s" % str(e)[:160])
+        return None
+
+
+def rete_usa_robot_app(log=print):
+    """Le operazioni della rete neurale sulle azioni USA nelle ultime sedute, per il robot. None se non si può."""
+    try:
+        import rete_usa
+        if not os.path.exists(rete_usa.MODELLO):
+            return None
+        return rete_usa.robot(log=log)
+    except Exception as e:
+        log("[app] rete delle azioni USA per il robot saltata: %s" % str(e)[:160])
+        return None
+
+
 def sentimento(log=print):
     """Il Fear & Greed di oggi e di una settimana fa, e il giorno delle ultime notizie scaricate da GDELT (per l'app)."""
     try:
@@ -287,6 +309,8 @@ def leggero(out, log=print):
     data["regole_libri"] = load_json(os.path.join(ROOT, "regole_libri.json")) or data.get("regole_libri")
     data["segnali_fonti"] = fonti_segnali() or data.get("segnali_fonti")
     data["rete_ita_robot"] = rete_ita_robot_app(log) or data.get("rete_ita_robot")
+    data["rete_usa"] = rete_usa_app(log) or data.get("rete_usa")          # la rete delle azioni USA
+    data["rete_usa_robot"] = rete_usa_robot_app(log) or data.get("rete_usa_robot")
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
@@ -318,6 +342,7 @@ def main(argv=None):
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
+            "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),

@@ -558,6 +558,22 @@ python3 rete_azioni.py --studia     # scarica le barre, addestra e verifica (cir
 python3 rete_azioni.py --oggi       # le operazioni che la rete fa nelle ultime 3 sedute (quelle che il robot rigioca)
 ```
 
+### Ogni ora della seduta, e anche a New York: `rete_usa.py`
+
+La rete vede probabilità più alte all'apertura, quando i titoli si muovono di più: con una soglia sola comprava quasi solo
+alle 9. Ora il robot usa una soglia per ogni ora di ogni seduta (`soglie_per_ora`): la soglia imparata, abbassata fino al
+meglio 2 % delle occasioni di quell'ora. Così compra dall'apertura alla chiusura.
+
+La stessa rete, con lo stesso codice, gira sulle azioni USA (S&P 100, 09:30-16:00 di New York, 78 barre da 5 minuti,
+costi di 0,05 % per lato, notizie su Wall Street): `rete_usa.py` carica `rete_azioni.py` con `MERCATO_SCELTO = "usa"`.
+Nel robot ha il suo conto, "Azioni USA, rete neurale" (in euro: conta il guadagno del titolo in dollari, senza il cambio).
+Si riaddestra ogni sera con le sedute già chiuse.
+
+```bash
+python3 rete_usa.py --studia     # barre da 5 minuti dei titoli USA, addestra e verifica: rete_usa_modello.json
+python3 rete_usa.py --oggi       # le operazioni della rete nelle ultime 3 sedute
+```
+
 ## Le regole della tesi di Sperti e del libro di Rosenbloom: `regole_libri.py`
 
 ```bash

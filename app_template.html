@@ -1955,12 +1955,12 @@ function probHTML(c0, esperienza, unita) {
 }
 
 /* ---------------- le operazioni della rete nel robot (crypto e azioni italiane) ---------------- */
-function reteOpsHTML(RR, etichetta) {
+function reteOpsHTML(RR, etichetta, cur = '€') {
   if (!RR) return '';
   const ora = s => new Date(s).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
   const stima = o => o.probabilita != null ? `, probabilità stimata ${p100(o.probabilita)}` : '';
-  const aperte = (RR.aperte || []).map(o => `<li><b>${esc(tk(o.sym))}</b> comprata ${ora(o.t)} a ${nf(o.prezzo, dec(o.prezzo))} €${stima(o)}, tiene ${durataTesto(o.minuti)} (fino alle ${ora(o.scade)}), protezione ${nf(o.protezione, dec(o.protezione))} €</li>`).join('');
-  const chiuse = (RR.operazioni || []).slice(-8).reverse().map(o => `<li><b>${esc(tk(o.sym))}</b> ${ora(o.t)} → ${ora(o.t_uscita)}: ${nf(o.prezzo, dec(o.prezzo))} → ${nf(o.prezzo_uscita, dec(o.prezzo_uscita))} € <span class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</span> <span class="note">(${o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura della seduta' : 'fine della durata scelta'}${o.probabilita != null ? ', stimata ' + p100(o.probabilita) : ''})</span></li>`).join('');
+  const aperte = (RR.aperte || []).map(o => `<li><b>${esc(tk(o.sym))}</b> comprata ${ora(o.t)} a ${nf(o.prezzo, dec(o.prezzo))} ${cur}${stima(o)}, tiene ${durataTesto(o.minuti)} (fino alle ${ora(o.scade)}), protezione ${nf(o.protezione, dec(o.protezione))} ${cur}</li>`).join('');
+  const chiuse = (RR.operazioni || []).slice(-8).reverse().map(o => `<li><b>${esc(tk(o.sym))}</b> ${ora(o.t)} → ${ora(o.t_uscita)}: ${nf(o.prezzo, dec(o.prezzo))} → ${nf(o.prezzo_uscita, dec(o.prezzo_uscita))} ${cur} <span class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</span> <span class="note">(${o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura della seduta' : 'fine della durata scelta'}${o.probabilita != null ? ', stimata ' + p100(o.probabilita) : ''})</span></li>`).join('');
   const tutte = RR.operazioni || [], media = tutte.length ? tutte.reduce((t, o) => t + o.r, 0) / tutte.length : 0;
   const vinte = tutte.filter(o => o.r > 0).length, stimate = tutte.filter(o => o.probabilita != null);
   const regola = RR.soglia != null
@@ -1972,10 +1972,11 @@ function reteOpsHTML(RR, etichetta) {
     ${aperte ? `<p class="note" style="margin-top:6px"><b>Aperte</b></p><ul class="note" style="margin:2px 0 0;padding-left:18px">${aperte}</ul>` : ''}
     ${chiuse ? `<p class="note" style="margin-top:6px"><b>Le ultime chiuse</b></p><ul class="note" style="margin:2px 0 0;padding-left:18px">${chiuse}</ul>` : ''}`;
 }
-function reteItaHTML() {
-  const Rt = D.rete_ita, RR = D.rete_ita_robot; if (!Rt || !Rt.costi || !Object.keys(Rt.costi).length) return '';
+function reteItaHTML() { return reteAzioniHTML('ita'); }
+function reteAzioniHTML(m) {
+  const usa = m === 'usa', Rt = D['rete_' + m], RR = D['rete_' + m + '_robot']; if (!Rt || !Rt.costi || !Object.keys(Rt.costi).length) return '';
   const chiavi = Object.keys(Rt.costi).sort((a, b) => b - a), k0 = chiavi[0], c0 = Rt.costi[k0], costo0 = Number(k0), q = c0.q;
-  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', orb_in_play: 'Regola ORB sui titoli "in play" (Zarattini e Aziz; Crabel)', momento_intraday: "Regola: prima mezz'ora, poi l'ultima (Gao, Han, Li e Zhou)", buy_on_gap: 'Regola buy-on-gap (Chan)', vwap_ritorno: 'Regola: ritorno al VWAP (Aziz)', stagione: "Regola: la stessa mezz'ora delle sedute prima (Heston e altri)", apertura_chiusura: 'Regola: compra alle 9:10, vendi in chiusura', ribasso_1h: "Regola: dopo un'ora in ribasso, tieni un'ora", rialzo_1h: "Regola: dopo un'ora in rialzo, tieni un'ora"};
+  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', probabilita: 'Rete neurale, probabilità di guadagno (come il robot)', orb_in_play: 'Regola ORB sui titoli "in play" (Zarattini e Aziz; Crabel)', momento_intraday: "Regola: prima mezz'ora, poi l'ultima (Gao, Han, Li e Zhou)", buy_on_gap: 'Regola buy-on-gap (Chan)', vwap_ritorno: 'Regola: ritorno al VWAP (Aziz)', stagione: "Regola: la stessa mezz'ora delle sedute prima (Heston e altri)", apertura_chiusura: `Regola: compra alle ${usa ? '9:40' : '9:10'}, vendi in chiusura`, ribasso_1h: "Regola: dopo un'ora in ribasso, tieni un'ora", rialzo_1h: "Regola: dopo un'ora in rialzo, tieni un'ora"};
   const buono = q.n > 0 && q.totale > 0 && q.ic90[0] > 0;
   const righe = Object.keys(NOMI).filter(k => c0[k]).map(k => { const x = c0[k];
     return `<tr><td class="l" style="white-space:normal"><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.per_seduta || 0, 1)} a seduta</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 2)}</b><br><span class="note">${pc(x.ic90[0] * x.giorni, 2)} … ${pc(x.ic90[1] * x.giorni, 2)}</span></td></tr>`; }).join('');
@@ -1983,8 +1984,8 @@ function reteItaHTML() {
     return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td><td>${a.n}</td><td class="${a.media >= 0 ? 'pos' : 'neg'}">${a.n ? pc(a.media, 2) : '–'}</td><td>${b.n}</td><td class="${b.media >= 0 ? 'pos' : 'neg'}">${b.n ? pc(b.media, 2) : '–'}</td></tr>`; }).join('');
   const fuori = c0.scelte.filter(s => s.q.fuori).length, sed = q.sedute || 0;
   const regola = ['orb_in_play', 'momento_intraday', 'buy_on_gap', 'vwap_ritorno', 'stagione', 'apertura_chiusura', 'ribasso_1h', 'rialzo_1h'].filter(k => c0[k] && c0[k].n).map(k => [k, c0[k]]).sort((a, b) => b[1].media - a[1].media)[0];
-  return `<div class="card" id="rete-ita"><h2>Azioni italiane in giornata con la rete neurale</h2>
-    <p class="sub" style="margin-top:4px">La stessa rete delle crypto, sui ${Rt.dati.titoli.length} titoli del FTSE MIB: ogni 5 minuti della seduta guarda ogni titolo (rendimenti da 5 minuti a 5 sedute, volatilità, apertura e salto da ieri, posizione nel minimo-massimo di oggi, volumi, ora del giorno, mercato intero) e sceglie se aspettare o comprare e tenere 5, 15, 30 minuti, 1, 2, 4 ore o fino alla chiusura. Tutto si chiude entro le 17:30, con una protezione sotto l'entrata e costi di ${pc(costo0, 1, false)} per lato (per chi compra e vende nello stesso giorno la Tobin tax non si paga). Dati: barre da 5 minuti di Yahoo, ${Rt.dati.sedute} sedute (dal ${esc(Rt.dati.da)} al ${esc(Rt.dati.a)}); Milano arriva con 15 minuti di ritardo.</p>
+  return `<div class="card" id="rete-${m}"><h2>${usa ? 'Azioni USA' : 'Azioni italiane'} in giornata con la rete neurale</h2>
+    <p class="sub" style="margin-top:4px">La stessa rete delle crypto, sui ${Rt.dati.titoli.length} titoli ${usa ? "dell'S&amp;P 100 (New York)" : 'del FTSE MIB'}: ogni 5 minuti della seduta guarda ogni titolo (rendimenti da 5 minuti a 5 sedute, volatilità, apertura e salto da ieri, posizione nel minimo-massimo di oggi, volumi, ora del giorno, mercato intero) e sceglie se aspettare o comprare e tenere 5, 15, 30 minuti, 1, 2, 4 ore o fino alla chiusura. Tutto si chiude entro ${usa ? 'le 16:00 di New York (le 22:00 in Italia)' : 'le 17:30'}, con una protezione sotto l'entrata e costi di ${pc(costo0, 2, false)} per lato${usa ? '' : ' (per chi compra e vende nello stesso giorno la Tobin tax non si paga)'}. Compra in ogni ora della seduta: per ogni ora prende le occasioni migliori di quell'ora. Dati: barre da 5 minuti di Yahoo, ${Rt.dati.sedute} sedute (dal ${esc(Rt.dati.da)} al ${esc(Rt.dati.a)})${usa ? '; New York arriva quasi in tempo reale. Il conto del robot è in euro: conta il guadagno del titolo in dollari, senza il cambio.' : '; Milano arriva con 15 minuti di ritardo.'}</p>
     <div class="verdetto ${buono ? 'v-si' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${buono ? '✓' : '✕'}</span><div><b>${buono ? 'Guadagna nei dati, con cautela' : q.n ? 'Fuori campione non guadagna' : 'Fuori campione non trova guadagni'}</b><p>${q.n
       ? `Su ${sed} sedute mai viste in addestramento (${c0.scelte.length} finestre) la rete ha fatto ${q.n} operazioni, in media ${pc(q.media, 2)} ciascuna dopo i costi; è rimasta fuori in ${fuori} finestre su ${c0.scelte.length}.`
       : `Su ${sed} sedute mai viste in addestramento (${c0.scelte.length} finestre) la rete non ha mai comprato: in nessuna finestra ha trovato mosse che battessero l'attesa in modo credibile dopo i costi.`}${regola ? (regola[1].media < 0 ? ` Anche la regola semplice migliore perde: ${NOMI[regola[0]].replace('Regola: ', '')}, ${pc(regola[1].media, 2)} a operazione.` : ` La regola semplice migliore, ${NOMI[regola[0]].replace('Regola: ', '')}, fa ${pc(regola[1].media, 2)} a operazione.`) : ''} ${Rt.dati.sedute} sedute sono poche: ogni numero qui ha un'incertezza grande, e ogni sera se ne aggiunge una (le barre già viste si tengono).</p></div></div></div>
@@ -1992,11 +1993,10 @@ function reteItaHTML() {
     <p class="note" style="margin-top:4px">Il conto somma i guadagni netti con 1/${Rt.dati.titoli.length} del capitale per operazione (il robot invece ne usa 1/8, una posizione per titolo e al più 8 insieme).</p>
     <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Costo</th><th>Rinforzo: operazioni</th><th>media</th><th>Previsione: operazioni</th><th>media</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
     ${segnaliHTML(Rt.segnali, [['tutte', 'Tutte le sedute'], ['mese', 'Ultimo mese'], ['settimana', 'Ultima settimana'], ['giorno', 'Ultima seduta']], 'titolo', Rt.config.orizzonti)}
-    ${fontiHTML()}
-    ${regoleLibriHTML('azioni')}
+    ${usa ? '' : fontiHTML() + regoleLibriHTML('azioni')}
     ${probHTML(c0, Rt.esperienza, 'titolo')}
-    ${reteOpsHTML(RR, 'La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "Azioni italiane, rete neurale" e le chiude al più tardi in chiusura.')}
-    <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 rete_azioni.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;
+    ${reteOpsHTML(RR, `La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "${usa ? 'Azioni USA' : 'Azioni italiane'}, rete neurale" e le chiude al più tardi in chiusura.`, usa ? '$' : '€')}
+    <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 ${usa ? 'rete_usa' : 'rete_azioni'}.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;
 }
 
 function renderGiornata(soloGioco) {
@@ -2019,6 +2019,7 @@ function renderGiornata(soloGioco) {
     <p>${regge.length ? `Regge: ${regge.map(r => esc(r.nome)).join(', ')}.` : `In ${new Date(B.generato).getFullYear() - 2001} anni di azioni USA, italiane ed ETF, comprare all'apertura e vendere in chiusura ha reso in media <b>${pc(ogni.dopo.media, 2)}</b> a operazione dopo i costi (in guadagno il ${p100(ogni.dopo.p_gain)} delle volte). Nessuna delle ${R.length - 1} regole provate è rimasta in guadagno in entrambi i periodi${gap ? `: la migliore fino al ${tagl - 1}, comprare i gap giù all'apertura (${pc(gap.prima.media, 2)}), dal ${tagl} ha perso (${pc(gap.dopo.media, 2)})` : ''}. Lo stesso sulle candele orarie di crypto e azioni USA, anche con le strategie pubblicate di recente (titoli in gioco, zona di rumore).`} L'unica regola breve che regge è <b>di notte</b>, qui sotto, e solo con costi molto bassi. Per guadagnare con i costi normali, i dati dicono di tenere più a lungo, come <a href="#oggi" style="color:var(--accent)">il pacchetto di Oggi</a>.</p></div></div></div>` : ''}
   ${robotHTML()}
   ${reteItaHTML()}
+  ${reteAzioniHTML('usa')}
   ${notteHTML()}
   ${N.usa ? `<div class="card"><h2>Perché in giornata è così difficile</h2>
     <p class="sub" style="margin-top:4px">Le azioni guadagnano soprattutto <b>di notte</b>, tra la chiusura e l'apertura del giorno dopo, quando chi compra e vende in giornata non ha niente in mano. Di giorno il movimento medio è quasi zero, e ogni operazione paga i costi (0,1-0,2 % tra entrata e uscita, più la differenza tra prezzo di acquisto e di vendita).</p>
@@ -2115,6 +2116,7 @@ const STRATEGIE = {
   crypto: {nome: 'Crypto, ordini ogni ora', breve: 'Crypto', stato: 'esercitazione', chip: 'bassa'},
   rete: {nome: 'Crypto, rete neurale', breve: 'Rete crypto', stato: 'esercitazione', chip: 'bassa'},
   rete_ita: {nome: 'Azioni italiane, rete neurale', breve: 'Rete Italia', stato: 'esercitazione', chip: 'bassa'},
+  rete_usa: {nome: 'Azioni USA, rete neurale', breve: 'Rete USA', stato: 'esercitazione', chip: 'bassa'},
   // ritirate: il robot non compra più di notte; restano solo per chiudere le posizioni che hanno ancora
   usa_notte: {nome: 'Azioni USA, di notte (ritirata)', breve: 'USA notte', stato: 'ritirata', chip: 'media', mercato: 'usa', n: 10, ritirata: true},
   ita_notte: {nome: 'Azioni italiane, di notte (ritirata)', breve: 'Italia notte', stato: 'ritirata', chip: 'media', mercato: 'italia', n: 5, ritirata: true},
@@ -2159,8 +2161,9 @@ function oraItaliana(mer, k, d) {
 // le strategie ritirate non comprano più: restano solo per chiudere quello che hanno ancora
 function senzaRitirate(R) { for (const k of Object.keys(STRATEGIE)) if (STRATEGIE[k].ritirata && R.conti[k]) R.conti[k].attiva = false; return R; }
 
+const RETI_NOMI = ['rete', 'rete_ita', 'rete_usa'];
 const contoVuoto = (k, attiva) => k === 'crypto' ? {attiva, cassa: ROBOT_CAPITALE, piani: {}, ops: [], n: 0, vinte: 0}
-  : k === 'rete' || k === 'rete_ita' ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
+  : RETI_NOMI.includes(k) ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
   : k === 'giornata' ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
   : {attiva, capitale: ROBOT_CAPITALE, fatte: {}, aperta: null, ops: [], n: 0, vinte: 0};
 function robotNuovo(inizio, costo, scelte) {
@@ -2174,7 +2177,7 @@ function robotMigra(v) {                                                        
     v.crypto_ripresa = 1;
     if (v.sessione && v.sessione.aperta) v.conti.crypto.attiva = true;
   }
-  if (v && v.versione === 2 && v.conti) for (const k of ['rete', 'rete_ita']) if (!v.conti[k]) v.conti[k] = contoVuoto(k, !!(v.sessione && v.sessione.aperta));
+  if (v && v.versione === 2 && v.conti) for (const k of RETI_NOMI) if (!v.conti[k]) v.conti[k] = contoVuoto(k, !!(v.sessione && v.sessione.aperta));
   if (!v || v.versione === 2) return v && v.conti ? senzaRitirate(v) : v;
   const R = robotNuovo(v.inizio, (v.notte && v.notte.costo) || 0.0002, {});
   if (v.notte) { R.conti.usa_notte = Object.assign(contoVuoto('usa_notte', false), v.notte); delete R.conti.usa_notte.costo; }
@@ -2421,7 +2424,7 @@ function robotCrypto(R, adesso) {
 /* valori, posizioni aperte, simboli da seguire */
 function prezzoOra(sym, riserva) {                                              // dal vivo, se no l'ultimo prezzo dei dati delle reti, se no la chiusura
   const q = LIVE.q[sym]; if (q && q.p) return q.p;
-  for (const RR of [D.rete_robot, D.rete_ita_robot]) if (RR && RR.prezzi && RR.prezzi[sym]) return RR.prezzi[sym];
+  for (const RR of [D.rete_robot, D.rete_ita_robot, D.rete_usa_robot]) if (RR && RR.prezzi && RR.prezzi[sym]) return RR.prezzi[sym];
   return SIM[sym] ? SIM[sym].prezzo : riserva;
 }
 function valoreConto(R, k) {
@@ -2437,7 +2440,7 @@ function posizioniAperte(R) {
   const out = [];
   for (const k of Object.keys(RETI)) for (const p of Object.values((R.conti[k] || {}).posizioni || {})) {
     const fino = new Date(p.scade).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
-    out.push({k, sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `sotto ${nf(p.protezione, dec(p.protezione))} o alle ${fino}`, cur: '€', costo: 2 * RETI[k].costo()});
+    out.push({k, sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `sotto ${nf(p.protezione, dec(p.protezione))} o alle ${fino}`, cur: RETI[k].cur || '€', costo: 2 * RETI[k].costo()});
   }
   for (const k of ['usa_notte', 'ita_notte']) {                                     // strategie ritirate: le posizioni rimaste si chiudono alla prossima apertura
     const A = R.conti[k].aperta, mer = STRATEGIE[k].mercato;
@@ -2470,6 +2473,8 @@ const RETI = {
   rete: {dati: () => D.rete_robot, posizioni: 12, fonte: 'scambi Kraken', costo: () => (D.rete_robot && D.rete_robot.costo) || ROBOT_COSTO_CRYPTO, fine: 'fine della durata scelta', fresco: 10},
   // Milano arriva con 15 minuti di ritardo: un prezzo di 25 minuti fa è ancora l'ultimo
   rete_ita: {dati: () => D.rete_ita_robot, posizioni: 8, fonte: 'barre di 5 minuti', costo: () => (D.rete_ita_robot && D.rete_ita_robot.costo) || 0.001, fine: 'chiusura', fresco: 25},
+  // New York: S&P 100, 09:30-16:00; il conto resta in euro, il guadagno è quello in dollari del titolo
+  rete_usa: {dati: () => D.rete_usa_robot, posizioni: 8, fonte: 'barre di 5 minuti', costo: () => (D.rete_usa_robot && D.rete_usa_robot.costo) || 0.0005, fine: 'chiusura', fresco: 25, cur: '$'},
 };
 const durataTesto = m => m < 60 ? m + ' minuti' : m < 1440 ? (m / 60 === 1 ? '1 ora' : nf(m / 60, m % 60 ? 1 : 0) + ' ore') : (m / 1440 === 1 ? '1 giorno' : nf(m / 1440, 0) + ' giorni');
 // i limiti delle skill trader-risk e trader-budget: ogni posizione grande quanto basta perché la perdita allo stop sia al
@@ -2676,13 +2681,13 @@ function robotHTML() {
       return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(p.sym))}</b> <span class="note">${STRATEGIE[p.k].breve} · dalle ${new Date(p.quando).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'})}</span><br><span class="note">esce ${esc(p.esce)}</span></td><td>${nf(p.entrata, dec(p.entrata))} ${p.cur}</td><td>${nf(p.ora, dec(p.ora))} ${p.cur}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div>
       ${pos.some(p => STRATEGIE[p.k].ritirata) ? '<p class="note" style="margin-top:4px">Le posizioni di notte rimaste da prima di questa versione si chiudono alla prossima apertura: il robot non ne apre di nuove.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
   const tutte = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1);
-  if (!['tutte', 'giornata', 'crypto', 'rete', 'rete_ita'].includes(robotFiltro)) robotFiltro = 'tutte';
+  if (!['tutte', 'giornata', 'crypto', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
   const filtrate = tutte.filter(e => (robotFiltro === 'tutte' || e.s === robotFiltro)       // una sezione per strategia
     && (robotVerso === 'tutte' || (robotVerso === 'entrate' ? e.azione === 'compra' : e.azione === 'vende')));
   const reg = filtrate.slice(0, robotLimite);
   const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome'}) + ', in seduta' : oraDi(e.t);
   const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
-  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['crypto', 'Crypto, ordini ogni ora'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
+  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['crypto', 'Crypto, ordini ogni ora'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
     <div class="seg" style="margin-top:6px" role="group" aria-label="Entrate o uscite">${[['tutte', 'Entrate e uscite'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([f, t]) => `<button type="button" data-v="${f}" aria-pressed="${robotVerso === f}">${t}</button>`).join('')}</div>`;
   const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span></li>`).join('');
   const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>

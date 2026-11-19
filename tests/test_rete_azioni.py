@@ -369,5 +369,25 @@ class SoglieOgniOra(unittest.TestCase):
         self.assertEqual(S[0], 0.8)                                             # dove la soglia imparata basta, resta quella
 
 
+class MercatoUsa(unittest.TestCase):
+    def test_new_york_ha_la_sua_seduta_e_milano_resta_com_era(self):
+        import rete_usa as U
+        self.assertEqual((A.MERCATO, A.BARRE, A.ORIZZONTI[-1], A.COSTO), ("italia", 102, 510, 0.001))
+        self.assertEqual((U.MERCATO, U.BARRE, U.ORIZZONTI[-1], U.COSTO, U.APRE), ("usa", 78, 390, 0.0005, 9 * 60 + 30))
+        self.assertEqual(U.N_FEATURE, A.N_FEATURE)
+        self.assertTrue(U.MODELLO.endswith("rete_usa_modello.json"))
+        self.assertIn("AAPL", U.CFG["universo"])
+        self.assertIs(U.robot.__globals__["BARRE"], 78)                          # le funzioni usano le costanti di New York
+
+    def test_le_barre_di_new_york_partono_alle_9_30(self):
+        import rete_usa as U
+        d = datetime.datetime(2030, 1, 7, 9, 30, tzinfo=U.ROMA)
+        righe = [(d.timestamp() + 300 * k, 10.0, 10.1, 9.9, 10.0, 100.0) for k in range(78)]
+        B = U.Barre(["X"], [righe])
+        self.assertEqual(B.n, 78)
+        self.assertTrue(B.vera.all())
+        self.assertEqual(datetime.datetime.fromtimestamp(B.T[0], U.ROMA).strftime("%H:%M"), "09:30")
+
+
 if __name__ == "__main__":
     unittest.main()
