@@ -3,6 +3,7 @@
 
     python3 app.py                  # scarica i dati, analizza, scrive trader/app.html
     python3 app.py --asof 2025-06-30
+    python3 app.py --leggero        # solo le crypto intraday, dall'ultima app (qualche secondo: per ogni ora)
 
 Schede:
   Consigli USA e Titoli italiani
@@ -128,14 +129,17 @@ def piano_giornata(log=print):
         return None
 
 
-def crypto_intraday(log=print):
+def crypto_intraday(log=print, leggero=None):
     """Ordini crypto rinnovati ogni ora con la loro verifica (intraday.analizza_ore), e i due piani al giorno di
-    prima con le varianti provate, come confronto (intraday.py)."""
+    prima con le varianti provate, come confronto (intraday.py). leggero: i dati dell'ultima app; se ci sono, le
+    varianti e il controllo su Kraken (che non cambiano da un'ora all'altra) si prendono da lì."""
     try:
         r = intraday.analizza(log)
-        r["varianti"] = intraday.varianti(log)
+        r["varianti"] = (leggero or {}).get("varianti") or intraday.varianti(log)
         try:
-            r["ore"] = intraday.analizza_ore(log)
+            r["ore"] = intraday.analizza_ore(log, kraken=not leggero)
+            if leggero and (leggero.get("ore") or {}).get("kraken"):
+                r["ore"]["kraken"] = leggero["ore"]["kraken"]
         except Exception as e:                               # rete o dati: restano i piani di prima
             log("[app] ordini orari saltati: %s" % e)
         return r
@@ -174,12 +178,48 @@ def build(data, out):
     return out
 
 
+INIZIO_DATI = '<script type="application/json" id="data">'
+
+
+def dati_di(path):
+    """I dati incorporati in un'app già generata, o None se il file non c'è o non si legge."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            page = fh.read()
+        a = page.index(INIZIO_DATI) + len(INIZIO_DATI)
+        return json.loads(page[a:page.index("</script>", a)].replace("<\\/", "</"))
+    except (OSError, ValueError):
+        return None
+
+
+def leggero(out, log=print):
+    """Aggiornamento leggero, per il controllo di ogni ora: rifà solo i dati crypto intraday (candele orarie e ordini
+    di adesso) sull'ultima app generata, senza riscaricare i dieci anni di prezzi del resto. Ritorna 0 se ha
+    riscritto l'app, 1 se manca un'app da cui partire o i dati crypto non ci sono (serve allora l'aggiornamento completo)."""
+    data = dati_di(out)
+    if not data:
+        log("[app] manca un'app da cui partire: serve l'aggiornamento completo")
+        return 1
+    nuovo = crypto_intraday(log, leggero=data.get("intraday") or {})
+    if not nuovo or not nuovo.get("ore"):
+        log("[app] dati crypto non disponibili: serve l'aggiornamento completo")
+        return 1
+    data["intraday"] = nuovo
+    build(data, out)
+    log("[app] scritta %s (%d KB), solo crypto aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--asof", help="usa solo i dati fino a questa data (YYYY-MM-DD)")
     ap.add_argument("--out", default=os.path.join(TRADER, "app.html"))
+    ap.add_argument("--leggero", action="store_true",
+                    help="aggiorna solo le crypto intraday dall'ultima app generata (qualche secondo, per ogni ora)")
     a = ap.parse_args(argv)
     os.makedirs(TRADER, exist_ok=True)
+    if a.leggero:
+        return leggero(a.out)
     mercati = {}
     for m in ("usa", "italia", "etf", "bond", "oro"):
         try:

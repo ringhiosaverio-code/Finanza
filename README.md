@@ -47,7 +47,9 @@ python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a qu
 
 Sezioni: Oggi, Il mio portafoglio, Esercitati, Crypto, Cerca un titolo, Altro (Azioni, Funziona?,
 Come funziona, esempio di day trade). L'app si aggiorna da sola nei giorni di borsa alle 18:10 e
-alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York.
+alle 22:10 (ora italiana), dopo la chiusura di Milano e di New York; ogni ora, tutti i giorni, un
+aggiornamento leggero (`python3 app.py --leggero`, pochi secondi) rifà solo le crypto, che non hanno
+orari, e fa lavorare il robot nel cloud.
 
 - **Il mio portafoglio**: scrivi cosa possiedi (quantità, prezzo e data d'acquisto) e ogni giorno
   l'app dice una sola cosa per titolo: **TIENI** fino alla data di vendita (il periodo consigliato
@@ -296,7 +298,7 @@ Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10
 
 **Sessioni.** Inizia sessione (da oggi, o rigiocando l'ultima settimana o le ultime due) e Termina sessione: crypto e azioni in giornata si vendono subito al prezzo di adesso, i piani in attesa si annullano, poi il robot si ferma. Ogni strategia si avvia e si ferma da sola.
 
-In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (prezzi ogni 5 secondi e ordini rifatti a ogni ora piena, `/ordini`), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi, con gli ordini dell'ultimo aggiornamento dell'app). A pagina chiusa il cloud rifà le operazioni alle 18:10 e alle 22:10 con i prezzi ufficiali e le candele orarie (`robot_cloud.js`), senza cambiare quelle già registrate. Per vedere gli ordini crypto rinnovati davvero ogni ora serve quindi `live.py` acceso.
+In diretta solo con la pagina aperta e i prezzi in tempo reale: `python3 live.py` sul computer (prezzi ogni 5 secondi e ordini rifatti a ogni ora piena, `/ordini`), oppure "Prezzi in tempo reale" nell'app desktop di Claude (ogni 30 secondi, con gli ordini dell'ultimo aggiornamento dell'app). A pagina chiusa il cloud rifà le operazioni ogni ora (le crypto, con le candele orarie) e alle 18:10 e alle 22:10 dei giorni feriali (anche le azioni, con i prezzi ufficiali) (`robot_cloud.js`), senza cambiare quelle già registrate e con un avviso per le operazioni nuove. I secondi in mezzo li vede solo `live.py`, acceso sul tuo computer.
 
 Il robot salva a ogni operazione e lo storico ogni 10 minuti. Verifica: rigiocando da inizio novembre 2026, le operazioni in seduta coincidono con il calcolo in Python (stesse liste, stessi risultati); le crypto usano la stessa logica già verificata sulle candele orarie.
 ### I dati di oggi: seduta in corso e chiusura mancante
