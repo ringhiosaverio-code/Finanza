@@ -2778,6 +2778,7 @@ async function prendiBrowser(syms) {
     await LIVE.mcp.callTool(BROWSER, 'navigate', Object.assign({url: SPARK(syms.slice(i, i + 20))}, arg), {cache: false});
     Object.assign(out, daSpark(leggiJSON(await LIVE.mcp.callTool(BROWSER, 'get_page_text', arg, {cache: false}))));
   }
+  nascondiScheda();
   return out;
 }
 const FERMA = ['not_in_manifest', 'server_not_connected', 'cancelled', 'approval_required', 'needs_reauth', 'blocked_by_policy',
@@ -2802,6 +2803,12 @@ async function giroLive() {
   }
   LIVE.occupato = false; mostraLive(); robotGiro();
 }
+// la scheda del browser integrato serve solo a leggere le quotazioni (un testo JSON di Yahoo, illeggibile):
+// appena letta, torna una pagina vuota. Se il browser non lo permette, pazienza: i prezzi arrivano lo stesso.
+function nascondiScheda() {
+  if (!LIVE.mcp || LIVE.tab == null) return;
+  LIVE.mcp.callTool(BROWSER, 'navigate', {tabId: LIVE.tab, url: 'about:blank'}, {cache: false}).catch(() => {});
+}
 async function attivaBrowser() {
   if (!LIVE.mcp || LIVE.occupato) return;
   LIVE.occupato = true; LIVE.errore = null; mostraLive();
@@ -2811,6 +2818,7 @@ async function attivaBrowser() {
     if (LIVE.tab == null) throw {code: 'scheda'};                       // senza una scheda sua non si tocca la tua
     Object.assign(LIVE.q, daSpark(leggiJSON(await LIVE.mcp.callTool(BROWSER, 'get_page_text', {tabId: LIVE.tab}, {cache: false}))));
     LIVE.fonte = 'browser'; LIVE.agg = new Date(); LIVE.ultimo = Date.now();
+    nascondiScheda();
   } catch (e) { LIVE.errore = erroreLive(e); LIVE.fonte = null; }
   LIVE.occupato = false; mostraLive();
 }
@@ -2846,7 +2854,7 @@ function liveInfoHTML() {
   return `<h2>Quotazioni in tempo reale</h2>
     <p class="sub" style="margin-top:4px">Qui vedi i prezzi dell'ultimo aggiornamento dell'app (ogni ora per crypto e reti neurali, alle 18 e alle 22 per le azioni, ora italiana). Per vederli in tempo reale ci sono due modi:</p>
     <ol class="steps" style="margin-top:8px">
-      <li><span><b>Nell'app desktop di Claude</b>, sul computer: in alto compare il pulsante <b>Prezzi in tempo reale</b>. Usa il browser integrato di Claude, in una scheda sua, e aggiorna i prezzi ogni 30 secondi; la prima volta chiede il permesso. Funziona per chi ha creato l'app.</span></li>
+      <li><span><b>Nell'app desktop di Claude</b>, sul computer: in alto compare il pulsante <b>Prezzi in tempo reale</b>. Usa il browser integrato di Claude, in una scheda sua, e aggiorna i prezzi ogni 30 secondi; la prima volta chiede il permesso. In quella scheda per un attimo compare il testo grezzo delle quotazioni di Yahoo (righe tipo "spark", "symbol"): è normale, l'app lo legge e la scheda torna vuota; puoi ridurla o ignorarla, i prezzi li vedi qui. Funziona per chi ha creato l'app.</span></li>
       <li><span><b>Sul tuo computer, con qualsiasi browser</b>: nella cartella del progetto avvia <code>python3 live.py</code>. Si apre questa stessa app con i prezzi ogni 5 secondi. Con <code>python3 live.py --rete</code> la apri anche dal telefono, sulla rete di casa.</span></li>
     </ol>
     <p class="note" style="margin-top:8px">Fonte Yahoo Finance: azioni USA in tempo reale durante la seduta, Borsa Italiana (azioni ed ETF) con 15 minuti di ritardo, crypto e cambio in tempo reale. Le probabilità e i giudizi restano quelli dell'ultimo aggiornamento: il prezzo in tempo reale serve per decidere quando comprare o vendere.</p>
