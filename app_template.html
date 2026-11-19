@@ -2896,7 +2896,7 @@ function nascondiScheda() {
 const MOTORE_COMPITO = 'trig_01D9L2QpeEcNpSxe5CSgzazk', CCR = 'Claude Code Remote';
 async function aggiornaDalMotore() {
   const esito = t => { const e = $('#rb-motore-esito'); if (e) e.textContent = t; };
-  if (SU_PAGES && !window.claude) {                                               // sul sito GitHub: rilegge lo stato del motore, senza Claude
+  if ((SU_PAGES && !window.claude) || DAL_GITHUB) {                              // sul sito GitHub (o su claude.ai se legge GitHub): rilegge lo stato del motore, senza token
     esito('Leggo il motore…'); await caricaDaGitHub(true);
     esito('Aggiornato alle ' + new Date().toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}) + ' (si aggiorna anche da solo ogni minuto).');
     return;
@@ -2967,22 +2967,30 @@ function liveInfoHTML() {
 // mette il suo stato nel ramo robot-stato del repository pubblico. La pagina lo rilegge ogni minuto: niente Claude, niente token.
 const STATO_GITHUB = 'https://api.github.com/repos/ringhiosaverio-code/Finanza/contents/robot.json?ref=robot-stato';
 const SU_PAGES = /\.github\.io$/.test(location.hostname);
+let DAL_GITHUB = false;                                                          // su claude.ai: il robot arriva da GitHub
 const STATO_RAW = 'https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/robot.json';
 async function caricaDaGitHub(fresco) {
   try {
     let r = fresco ? await fetch(STATO_GITHUB, {cache: 'no-store', headers: {Accept: 'application/vnd.github.raw+json'}}).catch(() => null) : null;
     if (!r || !r.ok) r = await fetch(STATO_RAW + '?t=' + Math.floor(Date.now() / 60e3), {cache: 'no-store'});
-    if (!r.ok) return;
+    if (!r.ok) return false;
     const v = await r.json();
     if (v && !v.vuoto && v.conti && (!ROBOT || (v.rev || 0) !== (ROBOT.rev || 0) || (v.registro || []).length !== (ROBOT.registro || []).length)) {
       ROBOT = robotMigra(v);
       const nuovi = robotNuovi(ROBOT); if (nuovi.length) avvisoOperazioni(nuovi);
       aggiornaRobot(); aggiornaTicker();
     }
-  } catch (e) {}
+    return !!(v && v.conti);
+  } catch (e) { return false; }
 }
 async function avviaLive() {
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
+  // su claude.ai: se la pagina può leggere GitHub, segue il motore nel cloud ogni minuto (senza token); se no, il suo archivio
+  if (window.claude && !MOTORE_PAGINA) {
+    const prima = ROBOT;
+    if (await caricaDaGitHub(false)) { SPETTATORE = true; DAL_GITHUB = true; setInterval(() => caricaDaGitHub(false), 60e3); }
+    else ROBOT = prima;
+  }
   const info = $('#live-info'); if (info) { info.innerHTML = liveInfoHTML(); $('#live-chiudi').addEventListener('click', () => { info.hidden = true; }); }
   if (!window.claude && /^https?:$/.test(location.protocol)) {                    // servita da live.py
     try { const r = await fetch('/quotazioni?s=EURUSD%3DX', {cache: 'no-store'}); if (r.ok && (await r.json()).quote) LIVE.fonte = 'locale'; } catch (e) {}
