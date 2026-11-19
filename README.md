@@ -70,8 +70,8 @@ pochi secondi solo la parte crypto dall'ultima app generata.
   solo se qualcuno vende a mercato sotto il suo prezzo: leggero -0,60 %, medio -0,61 %, profondo -0,49 % per
   operazione dopo i costi (0,2 % per lato), negativo in ogni periodo di 60 giorni. Le candele di Yahoo
   corrette danno lo stesso (da -0,5 % a -1,0 %). Il controllo su Kraken di allora usava le stesse candele
-  con la stessa regola: non era indipendente. Il robot non li usa più; restano nella sezione Crypto, con il
-  verdetto "Per ora no" e la spiegazione dell'errore. `python3 intraday.py --ore` rifà la verifica sulle candele;
+  con la stessa regola: non era indipendente. Il robot li esegue lo stesso, come esercitazione; nella sezione Crypto
+  c'è il verdetto "Per ora no" e la spiegazione dell'errore. `python3 intraday.py --ore` rifà la verifica sulle candele;
   `python3 rete_dati.py` scarica gli scambi di Kraken (400 giorni, circa 75 minuti) e `python3 rete.py --ordini-limite`
   la rifà minuto per minuto sugli scambi. I due
   piani al giorno di prima (rottura compresa, media da -0,4 % a -0,5 %) restano come "Come eravamo partiti".
@@ -290,7 +290,7 @@ notturne. `giornata.piano_notte` fa la lista per la prossima chiusura; l'app la 
 Il robot segue gli algoritmi dell'app senza interventi, con un conto finto da 10.000 € per strategia e niente soldi veri. Non invia ordini a nessun broker: le operazioni sono simulate a prezzi reali (Yahoo Finance).
 
 - **Azioni in seduta** (esercitazione, in media perde): sui 14 titoli più scambiati di USA e Milano. Se la seduta apre sotto il minimo di ieri, compra quando il prezzo risale lì e vende in chiusura. Compra e vende solo a borsa aperta, dal lunedì al venerdì (New York 9:30–16:00, Milano 9:00–17:30), mai di notte. Costi: quelli scelti in Commissioni.
-- **Strategie crypto ritirate** (19 novembre 2026): i piani di 24 ore e gli ordini di ogni ora perdono nelle verifiche corrette (vedi sopra). Il robot non apre più ordini crypto: gli ordini in attesa si annullano e le posizioni già aperte si chiudono alla protezione, all'obiettivo o dopo 24 ore.
+- **Crypto, ordini ogni ora** (esercitazione, in media perde): ogni ora mette tre ordini "compra il ribasso" per crypto, ognuno con 1/36 del capitale (12 crypto per 3 profondità); l'ordine vale un'ora, poi si esce alla protezione, all'obiettivo o dopo 24 ore. 24 ore su 24. Nella verifica corretta del 19 novembre 2026 perde in media lo 0,4-0,6 % per operazione (vedi sopra): lo tengo acceso perché le operazioni si vedano lavorare, ma non è una strategia che guadagna. Il piano di 24 ore di prima non c'è più.
 - **Strategie di notte ritirate**: il robot non compra più azioni a borsa chiusa. Le posizioni rimaste da prima si chiudono alla prossima apertura. La verifica di notte resta nei libri.
 
 **Operazioni in diretta.** Il registro in cima alla scheda elenca ogni operazione, tutte o solo azioni o solo crypto, con l'ora (con i secondi per quelle di oggi), il prezzo, l'importo investito o incassato, il risultato e la fonte (in diretta, prezzi ufficiali, candele orarie). Una riga in alto compare in tutte le pagine mentre una sessione è aperta, e ogni operazione nuova avvisa (con notifica del dispositivo, se hai concesso gli avvisi e la pagina è in un'altra scheda). Il registro tiene le ultime 1000 operazioni.

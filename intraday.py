@@ -20,7 +20,7 @@ Il 18 novembre 2026 l'app ha provato ordini rinnovati ogni ora (analizza_ore, pi
 escursioni, validi un'ora, uno alla volta per moneta e profondità. La prima verifica li dava in guadagno, ma contava
 l'obiettivo anche nella candela in cui scatta l'ordine (il massimo può essere venuto prima del minimo): corretto il
 19 novembre, e rifatto minuto per minuto sugli scambi veri di Kraken (rete.py), perdono lo 0,4-0,6 % per operazione.
-Il robot non li usa più. I due piani al giorno (17 e 21 UTC) restano qui come confronto.
+Il robot li usa lo stesso, come esercitazione per vederli lavorare. I due piani al giorno (17 e 21 UTC) restano qui come confronto.
 Solo libreria standard. Non è consulenza finanziaria.
 """
 
