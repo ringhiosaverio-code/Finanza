@@ -341,7 +341,7 @@ def oggi(C, m):
     for j, H in enumerate(ORIZZONTI):
         o = np.argsort(-P[:, j])
         out[str(H)] = [{"sym": C.ultimi[i][0], "categoria": C.ultimi[i][1], "data": C.ultimi[i][2], "prezzo": round(C.ultimi[i][3], 6),
-                        "probabilita": round(float(P[i, j]), 4)} for i in o[:15]]
+                        "probabilita": round(float(P[i, j]), 4)} for i in o]
         out[str(H) + "_media"] = float(P[:, j].mean())
     return out
 
