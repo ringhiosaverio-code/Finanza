@@ -2468,6 +2468,7 @@ function robotCrypto(R, adesso) {
 /* valori, posizioni aperte, simboli da seguire */
 function prezzoOra(sym, riserva) {                                              // dal vivo, se no l'ultimo prezzo dei dati delle reti, se no la chiusura
   const q = LIVE.q[sym]; if (q && q.p) return q.p;
+  if (ROBOT && ROBOT.prezzi && ROBOT.prezzi[sym]) return ROBOT.prezzi[sym].p;     // i prezzi del motore, per chi guarda
   for (const RR of [D.rete_robot, D.rete_ita_robot, D.rete_usa_robot]) if (RR && RR.prezzi && RR.prezzi[sym]) return RR.prezzi[sym];
   return SIM[sym] ? SIM[sym].prezzo : riserva;
 }
@@ -2514,7 +2515,7 @@ function simboliRobot() {
 /* le reti neurali: le decisioni le prende Python (rete.py sulle crypto, rete_azioni.py sulle azioni italiane), il robot le
    rigioca nel suo conto finto e gestisce dal vivo le posizioni aperte (protezione e fine della durata scelta) */
 const RETI = {
-  rete: {dati: () => D.rete_robot, posizioni: 12, fonte: 'scambi Kraken', costo: () => (D.rete_robot && D.rete_robot.costo) || ROBOT_COSTO_CRYPTO, fine: 'fine della durata scelta', fresco: 10},
+  rete: {dati: () => D.rete_robot, posizioni: 20, fonte: 'scambi Kraken', costo: () => (D.rete_robot && D.rete_robot.costo) || ROBOT_COSTO_CRYPTO, fine: 'fine della durata scelta', fresco: 10},
   // Milano arriva con 15 minuti di ritardo: un prezzo di 25 minuti fa è ancora l'ultimo
   rete_ita: {dati: () => D.rete_ita_robot, posizioni: 8, fonte: 'barre di 5 minuti', costo: () => (D.rete_ita_robot && D.rete_ita_robot.costo) || 0.001, fine: 'chiusura', fresco: 25},
   // New York: S&P 100, 09:30-16:00; il conto resta in euro, il guadagno è quello in dollari del titolo
@@ -2522,8 +2523,8 @@ const RETI = {
 };
 const durataTesto = m => m < 60 ? m + ' minuti' : m < 1440 ? (m / 60 === 1 ? '1 ora' : nf(m / 60, m % 60 ? 1 : 0) + ' ore') : (m / 1440 === 1 ? '1 giorno' : nf(m / 1440, 0) + ' giorni');
 // i limiti delle skill trader-risk e trader-budget: ogni posizione grande quanto basta perché la perdita allo stop sia al
-// più lo 0,5 % del capitale; niente acquisti nuovi in un giorno che ha già perso il 2 % o fatto 12 operazioni
-const RISCHIO = {perdita_op: 0.005, perdita_giorno: 0.02, op_giorno: 12};
+// più lo 0,5 % del capitale; niente acquisti nuovi in un giorno che ha già perso il 5 % o fatto 150 operazioni
+const RISCHIO = {perdita_op: 0.005, perdita_giorno: 0.05, op_giorno: 150};   // tante operazioni piccole: ognuna rischia al più lo 0,5 %
 const giornoRischio = (C, d) => { if (!C.rischio || C.rischio.d !== d) C.rischio = {d, pnl: 0, n: 0}; return C.rischio; };
 function reteEsce(R, k, chiave, prezzo, quando, nota, fonte) {
   const C = R.conti[k], p = C.posizioni[chiave]; if (!p) return;
@@ -2595,7 +2596,7 @@ function robotGiro() {
   robotUltimo = Date.now();
   const nuovi = robotNuovi(R);
   if (nuovi.length) avvisoOperazioni(nuovi);
-  if (cambiato || Date.now() - robotSalvataAlle > 10 * 60e3) robotSalva();          // ogni operazione si salva subito, lo storico ogni 10 minuti
+  if (cambiato || Date.now() - robotSalvataAlle > (MOTORE_PAGINA ? 60e3 : 10 * 60e3)) robotSalva();   // ogni operazione subito; il motore ogni minuto (conti e prezzi in diretta)
   aggiornaRobot(); aggiornaTicker();
 }
 function daChiedere(R, adesso) {                                                  // cosa serve a live.py, e solo quando serve
@@ -2663,7 +2664,17 @@ function robotTermina(R, adesso) {
   for (const k of Object.keys(STRATEGIE)) fermaConto(R, k, adesso, 'fine sessione');
   R.sessione = Object.assign({}, R.sessione, {aperta: false, chiusa: adesso.toISOString()});
 }
+function simboliAperti(R) {                                                    // i titoli che il robot ha in mano adesso
+  const out = new Set(), C = (R && R.conti) || {};
+  if (C.giornata) Object.values(C.giornata.posizioni || {}).forEach(p => out.add(p.sym));
+  if (C.crypto) Object.values(C.crypto.piani || {}).forEach(r => { if (r.fase === 'dentro') out.add(r.sym); });
+  for (const k of Object.keys(RETI)) if (C[k]) Object.values(C[k].posizioni || {}).forEach(p => out.add(p.sym));
+  return out;
+}
 function robotSalva() {
+  // i prezzi di adesso delle posizioni aperte: chi guarda da un altro dispositivo vede i conti aggiornati
+  const pr = {}; for (const s of simboliAperti(ROBOT)) { const q = LIVE.q[s]; if (q && q.p) pr[s] = {p: q.p, t: q.t || Math.floor(Date.now() / 1000)}; }
+  ROBOT.prezzi = pr; ROBOT.salvato = new Date().toISOString();
   ROBOT.rev = (ROBOT.rev || 0) + 1; robotSalvataAlle = Date.now(); robotSalvo = true; Store.save('robot', JSON.parse(JSON.stringify(ROBOT))); robotSalvo = false;
   if (LIVE.fonte === 'locale') fetch('/robot', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(ROBOT)}).catch(() => {});
 }

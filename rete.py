@@ -241,6 +241,8 @@ def esterni_crypto(simboli, giorni_iso):
     ng = len(segnali.NOMI_GIORNALIERI)
     for c, sym in enumerate(simboli):
         giorni, o, h, l, cl = segnali.giornaliere(sym, "UTC", (23, 59))
+        if len(giorni) < 60 and sym in rete_dati.COPPIE_ROBOT:                 # Yahoo non la ha: le giornaliere di Kraken
+            giorni, o, h, l, cl = segnali.giornaliere_kraken(rete_dati.COPPIE_ROBOT[sym])
         out[c, :, :ng] = segnali.per_giorno(giorni, segnali.tabella_giornaliera(o, h, l, cl, anno=365, mese=30, settimana=7), giorni_iso)
         out[c, :, ng:ng + 2] = sent
         out[c, :, ng + 2:ng + 4] = notizie
@@ -1559,7 +1561,7 @@ def valori_a(modello, M, k):
 _VOCE = {"probabilita": "probabilita", "q": "vantaggio", "previsione": "vantaggio", None: "vantaggio"}   # come si chiama il punteggio
 
 
-def scelte_modello(modello, X, margine=None):
+def scelte_modello(modello, X, margine=None, orizzonti_ok=None):
     """Le decisioni di un modello su caratteristiche X (C, istanti, n): (azioni, punteggio). Per il Q-learning il punteggio
     è il vantaggio di comprare sull'attesa e si compra oltre il margine; per il modello della probabilità è la probabilità
     di chiudere in guadagno dell'orizzonte migliore e si compra dalla soglia (margine, se dato, la sostituisce)."""
@@ -1569,12 +1571,15 @@ def scelte_modello(modello, X, margine=None):
     out = modello["rete"].avanti(Xn).reshape(C, N, -1)
     if modello.get("tipo") == "probabilita":
         Pr = sigmoide(out)
+        if orizzonti_ok is not None:                                           # solo le durate permesse
+            Pr = np.where(np.asarray(orizzonti_ok)[None, None, :], Pr, 0.0).astype(np.float32)
         return politica_probabilita(Pr, modello["soglia"] if margine is None else margine), Pr.max(axis=-1)
     Q = out * ESCALA
     return politica(Q, modello["margine"] if margine is None else margine), Q[..., 1:].max(axis=-1) - Q[..., 0]
 
 
-def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1, quota_minima=None):
+def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1, quota_minima=None, quota_ora=None,
+            orizzonte_max=None):
     """Le operazioni che il modello fa decidendo ogni `ogni` minuti in [k_da, k_a), una posizione alla volta per crypto,
     come nell'addestramento: la decisione al minuto k usa solo le barre prima di k e si entra all'apertura di k; la
     protezione scatta sui minimi dei minuti (eseguita un po' peggio); si esce all'apertura del minuto in cui finisce
@@ -1587,13 +1592,20 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
         return [], [], {}
     X = caratteristiche(P, K)
     sig = sigma_ora(P, K)
-    az, vantaggio = scelte_modello(modello, X, margine)
+    ok = None if not orizzonte_max or modello.get("tipo") != "probabilita" else np.array([h <= orizzonte_max for h in ORIZZONTI])
+    az, vantaggio = scelte_modello(modello, X, margine, ok)
     if quota_minima and modello.get("tipo") == "probabilita" and margine is None:
         # la soglia imparata può essere così alta che il robot non compra mai: allora prende almeno il meglio
         # `quota_minima` delle occasioni di questi giorni (sempre le più probabili secondo la rete)
-        soglia = min(modello["soglia"], float(np.quantile(vantaggio, 1.0 - quota_minima)))
-        if soglia < modello["soglia"]:
-            az, vantaggio = scelte_modello(modello, X, soglia)
+        # e in ogni ora di ogni giorno il meglio `quota_ora` delle occasioni di quell'ora, così compra a tutte le ore
+        ora = (M.t0 // 60 + K) // 60                                          # l'ora (dall'epoca) di ogni decisione
+        S = np.full(len(K), min(modello["soglia"], float(np.quantile(vantaggio, 1.0 - quota_minima))))
+        if quota_ora:
+            for h in np.unique(ora):
+                m = ora == h
+                S[m] = np.minimum(S[m], float(np.quantile(vantaggio[:, m], 1.0 - quota_ora)))
+        tutte, _ = scelte_modello(modello, X, 0.0, ok)
+        az = np.where(vantaggio >= S[None, :], tutte, 0)
     iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     chiuse, aperte = [], []
     for c, sym in enumerate(M.simboli):

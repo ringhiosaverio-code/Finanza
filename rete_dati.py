@@ -35,6 +35,13 @@ URL = "https://api.kraken.com/0/public/Trades?pair=%s&since=%d"
 COPPIE = {"BTC-EUR": "XBTEUR", "ETH-EUR": "ETHEUR", "SOL-EUR": "SOLEUR", "XRP-EUR": "XRPEUR", "BNB-EUR": "BNBEUR",
           "ADA-EUR": "ADAEUR", "DOGE-EUR": "DOGEEUR", "LTC-EUR": "LTCEUR", "DOT-EUR": "DOTEUR",
           "LINK-EUR": "LINKEUR", "AVAX-EUR": "AVAXEUR", "TRX-EUR": "TRXEUR"}
+# per il robot dal vivo, altre 18 crypto in euro scambiate su Kraken (30 in tutto). L'addestramento resta sulle 12 con
+# più di un anno di scambi; la rete giudica ogni crypto con le stesse caratteristiche, quindi vale anche per queste.
+COPPIE_IN_PIU = {"ATOM-EUR": "ATOMEUR", "UNI-EUR": "UNIEUR", "AAVE-EUR": "AAVEEUR", "XLM-EUR": "XLMEUR", "BCH-EUR": "BCHEUR",
+                 "ALGO-EUR": "ALGOEUR", "NEAR-EUR": "NEAREUR", "FIL-EUR": "FILEUR", "SHIB-EUR": "SHIBEUR", "PEPE-EUR": "PEPEEUR",
+                 "POL-EUR": "POLEUR", "SUI-EUR": "SUIEUR", "INJ-EUR": "INJEUR", "ICP-EUR": "ICPEUR", "HBAR-EUR": "HBAREUR",
+                 "TIA-EUR": "TIAEUR", "RENDER-EUR": "RENDEREUR", "ETC-EUR": "ETCEUR"}
+COPPIE_ROBOT = dict(COPPIE, **COPPIE_IN_PIU)
 GIORNO = 86400
 
 
@@ -100,7 +107,7 @@ def scarica_da(sym, da_s, ritmo=None, cursore=None):
     since = int(cursore) if cursore else int(da_s * 1e9)
     t, p, v, s = [], [], [], []
     while True:
-        scambi, ultimo = chiedi(COPPIE[sym], since, ritmo)
+        scambi, ultimo = chiedi(COPPIE_ROBOT[sym], since, ritmo)
         if not scambi:
             break
         for x in scambi:
@@ -124,7 +131,7 @@ def scarica_giorno(sym, giorno, ritmo, cartella=None):
     fine = inizio + GIORNO
     since, t, p, v, s, m = int((inizio - 1) * 1e9), [], [], [], [], []
     while True:
-        scambi, ultimo = chiedi(COPPIE[sym], since, ritmo)
+        scambi, ultimo = chiedi(COPPIE_ROBOT[sym], since, ritmo)
         if not scambi:
             break
         for x in scambi:

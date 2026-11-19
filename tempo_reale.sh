@@ -25,8 +25,8 @@ if ! pgrep -f "pubblica_stato.py" > /dev/null; then
   echo "pubblicazione su GitHub avviata"
 fi
 if ! pgrep -f "aggiorna_dati_loop" > /dev/null; then
-  setsid nohup bash -c 'exec -a aggiorna_dati_loop bash -c "while true; do python3 app.py --leggero > /dev/null 2>&1; sleep 900; done"' >> "$LOG" 2>&1 < /dev/null &
-  echo "aggiornamento dei dati ogni 15 minuti avviato"
+  setsid nohup bash -c 'exec -a aggiorna_dati_loop bash -c "while true; do python3 app.py --leggero > /dev/null 2>&1; sleep 300; done"' >> "$LOG" 2>&1 < /dev/null &
+  echo "aggiornamento dei dati ogni 5 minuti avviato"
 fi
 # il guardiano: ogni minuto riaccende server e motore se si sono spenti (senza bisogno di nessuno)
 if ! pgrep -f "tempo_reale_guardiano" > /dev/null; then

@@ -67,6 +67,28 @@ def _get(url, timeout=40):
         return r.read().decode("utf-8", "replace")
 
 
+def giornaliere_kraken(coppia, max_age_ore=12):
+    """Le barre giornaliere UTC di Kraken (ultimi 720 giorni) per una coppia: ([giorni ISO], o, h, l, c). Per le crypto
+    che Yahoo non ha (o ha con un altro nome). Vuote se non ci sono."""
+    vuoto = ([], np.zeros(0), np.zeros(0), np.zeros(0), np.zeros(0))
+    path = os.path.join(CACHE, "kraken_giornaliere", coppia + ".json")
+    d = _leggi(path, max_age_ore * 3600)
+    if d is None and not senza_rete():
+        try:
+            res = json.loads(_get("https://api.kraken.com/0/public/OHLC?pair=%s&interval=1440" % coppia))["result"]
+            righe = next(v for k, v in res.items() if k != "last")
+            d = [[datetime.datetime.fromtimestamp(int(r[0]), datetime.timezone.utc).date().isoformat(),
+                  float(r[1]), float(r[2]), float(r[3]), float(r[4])] for r in righe]
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            _scrivi(path, d)
+        except Exception:
+            d = _leggi(path, float("inf")) if os.path.exists(path) else None
+    if not d:
+        return vuoto
+    a = np.array([r[1:] for r in d], dtype=np.float64)
+    return [r[0] for r in d], a[:, 0], a[:, 1], a[:, 2], a[:, 3]
+
+
 # ---------------------------------------------------------------- i mercati che muovono gli altri
 
 # perché la borsa (e le crypto) salgono o scendono: Wall Street guida anche Milano e le crypto (futures), la paura (VIX),
