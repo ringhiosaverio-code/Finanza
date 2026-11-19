@@ -67,6 +67,99 @@ def _get(url, timeout=40):
         return r.read().decode("utf-8", "replace")
 
 
+# ---------------------------------------------------------------- i mercati che muovono gli altri
+
+# perché la borsa (e le crypto) salgono o scendono: Wall Street guida anche Milano e le crypto (futures), la paura (VIX),
+# i tassi USA, il petrolio, l'oro e il cambio (Fama e French; Rapach, Strauss e Zhou sul ruolo guida degli USA; Whaley sul VIX)
+MOTORI = [("es", "ES=F", "futures S&P 500"), ("nq", "NQ=F", "futures Nasdaq"), ("vix", "^VIX", "VIX, la paura"),
+          ("tassi", "^TNX", "tasso USA a 10 anni"), ("petrolio", "CL=F", "petrolio"), ("oro", "GC=F", "oro"),
+          ("eurusd", "EURUSD=X", "euro/dollaro")]
+NOMI_MOTORI = ["%s_%s" % (n, p) for n, _, _ in MOTORI for p in ("1h", "giorno")]
+FONTI_MOTORI = {"%s_%s" % (n, p): "%s, %s (perché il mercato si muove)" % (nome, "ultima ora" if p == "1h" else "ultimo giorno")
+                for n, _, nome in MOTORI for p in ("1h", "giorno")}
+
+
+def serie_mercato(sym, intervallo="1h", max_age=1800):
+    """Le barre di un mercato guida da Yahoo (1h: ultimi 2 anni; 5m: ultimi 60 giorni), tenute in un archivio che cresce:
+    (tempi di chiusura in secondi UTC, log della chiusura), o None."""
+    import numpy as np
+    chiave = (sym, intervallo, CACHE)
+    if chiave in _MEMO and time.time() - _MEMO[chiave][0] < min(max_age, 600):
+        return _MEMO[chiave][1]
+    _MEMO[chiave] = (time.time(), _serie_mercato(sym, intervallo, max_age))
+    return _MEMO[chiave][1]
+
+
+_MEMO = {}
+
+
+def _serie_mercato(sym, intervallo, max_age):
+    import numpy as np
+    cartella = os.path.join(CACHE, "mercati")
+    os.makedirs(cartella, exist_ok=True)
+    path = os.path.join(cartella, "%s-%s.npz" % (sym.replace("^", "_").replace("=", "_"), intervallo))
+    unite = {}
+    if os.path.exists(path):
+        try:
+            with np.load(path) as z:
+                unite = dict(zip(z["t"].tolist(), z["c"].tolist()))
+        except (OSError, ValueError, KeyError):
+            unite = {}
+    vecchio = not os.path.exists(path) or time.time() - os.path.getmtime(path) > max_age
+    if vecchio and not senza_rete():
+        try:
+            periodo = "60d" if intervallo == "5m" else "730d"
+            res = json.loads(_get("https://query2.finance.yahoo.com/v8/finance/chart/%s?range=%s&interval=%s" % (
+                urllib.parse.quote(sym), periodo, intervallo)))["chart"]["result"][0]
+            passo = 300 if intervallo == "5m" else 3600
+            for t, c in zip(res["timestamp"], res["indicators"]["quote"][0]["close"]):
+                if c and c > 0:
+                    unite[float(t + passo)] = float(c)
+            if unite:
+                tt = sorted(unite)
+                np.savez_compressed(path + ".tmp.npz", t=np.array(tt), c=np.array([unite[x] for x in tt]))
+                os.replace(path + ".tmp.npz", path)
+        except Exception:                                                      # Yahoo non risponde: si usa l'archivio
+            pass
+    if len(unite) < 100:
+        return None
+    tt = np.array(sorted(unite))
+    return tt, np.log(np.array([unite[x] for x in tt]))
+
+
+def movimenti(T, serie, barra=300):
+    """Per ogni istante T (secondi UTC): il movimento della serie nell'ultima ora e nelle ultime 24 ore, diviso per quanto
+    si muove di solito (volatilità delle ultime ~50 ore di barre); solo barre già chiuse prima di T, zero se mancano o
+    sono vecchie di più di un giorno. Ritorna (len(T), 2)."""
+    import numpy as np
+    T = np.asarray(T, dtype=np.float64)
+    out = np.zeros((len(T), 2), np.float32)
+    if serie is None:
+        return out
+    tc, lc = serie
+    finestra = max(int(round(50 * 3600 / barra)), 10)
+    r = np.diff(lc, prepend=lc[0])
+    r = np.where(np.diff(tc, prepend=tc[0]) > 3600 * 4, 0.0, r)                # i salti di notte e del fine settimana non contano
+    r2 = np.concatenate([[0.0], np.cumsum(r ** 2)])
+    i = np.searchsorted(tc, T, side="right") - 1                                # l'ultima barra chiusa prima di T
+    ok = (i >= finestra) & (T - tc[np.maximum(i, 0)] < 86400)
+    ii = np.clip(i, finestra, len(tc) - 1)
+    sig = np.sqrt(np.maximum((r2[ii + 1] - r2[ii + 1 - finestra]) / finestra, 1e-12))
+    for j, secondi in enumerate((3600.0, 86400.0)):
+        jj = np.clip(np.searchsorted(tc, tc[ii] - secondi, side="right") - 1, 0, None)
+        z = (lc[ii] - lc[jj]) / (sig * math.sqrt(secondi / barra))
+        out[:, j] = np.where(ok, np.clip(z, -8, 8), 0.0)
+    return out
+
+
+def tabella_motori(T, intervallo="1h", serie=None):
+    """Tutti i mercati guida per gli istanti T: (len(T), len(NOMI_MOTORI)). serie: {nome: (tc, lc) o None} già caricate."""
+    import numpy as np
+    barra = 300 if intervallo == "5m" else 3600
+    serie = serie if serie is not None else {n: serie_mercato(sym, intervallo) for n, sym, _ in MOTORI}
+    return np.concatenate([movimenti(T, serie.get(n), barra) for n, _, _ in MOTORI], axis=1)
+
+
 # ---------------------------------------------------------------- Fear & Greed (alternative.me), dal 2018
 
 def fear_greed(max_age=6 * 3600, log=print):

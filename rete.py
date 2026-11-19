@@ -70,7 +70,10 @@ NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_1h_su_
                 # ...anno, mese, settimana, giorno dalle chiusure giornaliere, sentimento e notizie
                 + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + list(segnali.NOMI_SENTIMENTO) + list(segnali.NOMI_NOTIZIE)
                 # i segnali della skill trader-scanner (in fondo: i modelli di prima usano solo i loro)
-                + list(segnali.NOMI_SCANNER))
+                + list(segnali.NOMI_SCANNER)
+                # perché le crypto salgono o scendono: i mercati che le muovono (futures di Wall Street, VIX, tassi,
+                # petrolio, oro, cambio), dalle barre orarie di Yahoo (in fondo: i modelli di prima usano solo i loro)
+                + list(segnali.NOMI_MOTORI))
 N_FEATURE = len(NOMI_FEATURE)
 N_BASE = NOMI_FEATURE.index("vwap_24h")                             # le prime N_BASE: quelle di prima
 ARCO = ("aspetta",) + tuple(ORIZZONTI)
@@ -341,6 +344,9 @@ def segnali_crypto(P, K, sig, z):
     # anno, mese, settimana, giorno, sentimento e notizie: del giorno prima
     E = P.esterni[:, d, :]
     out += [E[:, :, j] for j in range(E.shape[-1])]
+    # i mercati che muovono le crypto, barre orarie chiuse prima dell'istante di decisione
+    Mo = segnali.tabella_motori(P.t0 + 60.0 * K, "1h")
+    out += [np.broadcast_to(Mo[:, j], (C, len(K))) for j in range(Mo.shape[1])]
     return out
 
 
@@ -1168,6 +1174,7 @@ FONTI_SEGNALI = {
     "g_rsi2": "RSI a 2 giorni (Connors e Raschke)", "g_nr7": "giornata stretta NR7 (Crabel)", "g_range_atr": "escursione di ieri sull'ATR (Crabel)",
     "g_vol_mese": "volatilità del mese (Corsi 2009)", "paura_avidita": "Fear & Greed (alternative.me)", "paura_avidita_7g": "Fear & Greed, variazione in 7 giorni",
     "notizie_volume": "quantità di notizie (GDELT; Tetlock 2007)", "notizie_tono": "tono delle notizie (GDELT; Tetlock 2007)",
+    **segnali.FONTI_MOTORI,
 }
 
 
@@ -1477,6 +1484,9 @@ def aggiungi_probabilita(costi=(COSTO, 0.0005), giorni=None, log=print, solo_mod
     log("[rete] probabilità di guadagno: %d giorni di scambi fino al %s (%.0f s)" % (int(M.n / 1440), fine_dati, time.time() - t0))
     ris.setdefault("probabilita", {})
     wins = None if solo_modello else finestre(D)
+    if not solo_modello:                                                       # quali segnali contano, con quelli nuovi
+        log("[rete] quali segnali sono legati a quello che succede dopo: anno, mese, settimana, giorno")
+        ris["segnali"] = _pulisci(studio_segnali(D, NOMI_FEATURE, periodi_crypto(D), costi[0], D.indice(D.giorni - 2.0 - 30), FONTI_SEGNALI))
     for c in costi:
         chiave = "%g" % c
         if wins is not None and chiave in ris.get("costi", {}):
