@@ -73,7 +73,15 @@ NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_2h_su_
                 # (Chan, buy-on-gap; Lou, Polk e Skouras) e le notizie sulla Borsa di Milano
                 + ["g_" + n for n in segnali.NOMI_GIORNALIERI] + ["salto_atr"] + list(segnali.NOMI_NOTIZIE)
                 # i segnali della skill trader-scanner (in fondo: i modelli di prima usano solo i loro)
-                + list(segnali.NOMI_SCANNER))
+                + list(segnali.NOMI_SCANNER)
+)
+# i mercati che muovono le azioni in giornata: Wall Street guida anche Milano (futures), la paura (VIX), i tassi USA,
+# petrolio, oro e cambio (Fama e French; Kumar e altri sul VIX; Rapach, Strauss e Zhou sul ruolo guida degli USA)
+MOTORI = [("es", "ES=F", "futures S&P 500"), ("nq", "NQ=F", "futures Nasdaq"), ("vix", "^VIX", "VIX, la paura"),
+          ("tassi", "^TNX", "tasso USA a 10 anni"), ("petrolio", "CL=F", "petrolio"), ("oro", "GC=F", "oro"),
+          ("eurusd", "EURUSD=X", "euro/dollaro")]
+NOMI_MOTORI = ["%s_%s" % (n, p) for n, _, _ in MOTORI for p in ("1h", "giorno")]
+NOMI_FEATURE = NOMI_FEATURE + NOMI_MOTORI
 N_FEATURE = len(NOMI_FEATURE)
 N_BASE = NOMI_FEATURE.index("sopra_or")
 BARRE_OR = 3                                    # opening range: i primi 15 minuti
@@ -257,6 +265,50 @@ def segnali_azioni(B, G, sig, lc, s0, hi, lo, vc):
     out.append(np.where(a > 0, np.clip(salto / np.maximum(a, 1e-12), -6, 6), 0.0))
     out += [np.broadcast_to(notizie[s, k], (C, N)) for k in range(notizie.shape[-1])]
     out += [sc[:, s, k] for k in range(sc.shape[-1])]                              # trader-scanner, della seduta prima
+    M = motori(B, G)                                                               # i mercati che muovono la borsa
+    out += [np.broadcast_to(M[:, k], (C, N)) for k in range(M.shape[1])]
+    return out
+
+
+def serie_motore(sym, log=lambda m: None):
+    """Le barre da 5 minuti di un mercato guida (tempi di chiusura, log della chiusura), o None se Yahoo non le dà."""
+    if os.environ.get("FINANZA_SENZA_RETE") == "1":                            # prove senza rete: i mercati guida restano a zero
+        return None
+    try:
+        righe = scarica(sym, max_age=600)
+    except Exception as e:
+        log("[" + NOME + "] %s non disponibile: %s" % (sym, str(e)[:80]))
+        return None
+    if len(righe) < 100:
+        return None
+    a = np.array([(r[0] + 60.0 * BARRA, r[4]) for r in righe if r[4] and r[4] > 0], dtype=np.float64)
+    return a[:, 0], np.log(a[:, 1])
+
+
+def motori(B, G):
+    """Per ogni barra di decisione G: il movimento di ogni mercato guida nell'ultima ora e nelle ultime 24 ore, diviso
+    per quanto si muove di solito (solo barre già chiuse prima di G; zero se il dato manca o è vecchio di un giorno)."""
+    if getattr(B, "_motori", None) is None:
+        B._motori = {n: serie_motore(sym) for n, sym, _ in MOTORI}
+    T = B.T[np.asarray(G)]
+    out = np.zeros((len(T), 2 * len(MOTORI)), np.float32)
+    for k, (n, _, _) in enumerate(MOTORI):
+        sm = B._motori.get(n)
+        if sm is None:
+            continue
+        tc, lc = sm
+        r = np.diff(lc, prepend=lc[0])
+        r = np.where(np.diff(tc, prepend=tc[0]) > 3600 * 4, 0.0, r)            # i salti di notte e del fine settimana non contano nella volatilità
+        r2 = _cum(r ** 2)
+        i = np.searchsorted(tc, T, side="right") - 1                            # l'ultima barra chiusa prima della decisione
+        ok = (i >= 600) & (T - tc[np.maximum(i, 0)] < 86400)
+        ii = np.maximum(i, 600)
+        sig = np.sqrt(np.maximum((r2[ii + 1] - r2[ii + 1 - 600]) / 600.0, 1e-12))   # volatilità a 5 minuti, ultime ~600 barre
+        for j, (passi, finestra) in enumerate(((12, 3600.0), (288, 86400.0))):
+            jj = np.searchsorted(tc, tc[ii] - finestra, side="right") - 1
+            jj = np.clip(jj, 0, None)
+            z = (lc[ii] - lc[jj]) / (sig * math.sqrt(passi))
+            out[:, 2 * k + j] = np.where(ok, np.clip(z, -8, 8), 0.0)
     return out
 
 
@@ -436,6 +488,8 @@ FONTI_SEGNALI = dict(rete.FONTI_SEGNALI, **{
     "g_anno": "momento di un anno (Moskowitz, Ooi e Pedersen 2012)", "g_mese": "momento di un mese (Jegadeesh e Titman)",
     "g_settimana": "inversione di una settimana (Lehmann 1990)", "g_giorno": "ritorno del giorno prima (Jegadeesh 1990)",
     "notizie_volume": "quantità di notizie su Piazza Affari (GDELT; Tetlock 2007)", "notizie_tono": "tono delle notizie su Piazza Affari (GDELT; Tetlock 2007)",
+    **{"%s_%s" % (n, p): "%s, %s (perché la borsa si muove)" % (nome, "ultima ora" if p == "1h" else "ultimo giorno")
+       for n, _, nome in MOTORI for p in ("1h", "giorno")},
     "minuti": "ora della seduta", "oggi": "dall'apertura di oggi", "da_ieri": "dalla chiusura di ieri", "pos_oggi": "posizione nel minimo-massimo di oggi",
 })
 

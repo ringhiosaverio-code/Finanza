@@ -9,6 +9,7 @@ import json
 import os
 import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -387,6 +388,26 @@ class MercatoUsa(unittest.TestCase):
         self.assertEqual(B.n, 78)
         self.assertTrue(B.vera.all())
         self.assertEqual(datetime.datetime.fromtimestamp(B.T[0], U.ROMA).strftime("%H:%M"), "09:30")
+
+
+class MercatiGuida(unittest.TestCase):
+    def test_usano_solo_le_barre_chiuse_prima_della_decisione(self):
+        B = types.SimpleNamespace(T=1.9e9 + 300.0 * np.arange(2000))
+        tc = 1.9e9 - 300.0 * 1000 + 300.0 * np.arange(3000)                      # chiusure delle barre del mercato guida
+        rng = np.random.default_rng(5)
+        lc = np.cumsum(rng.standard_normal(3000) * 0.001)
+        B._motori = {n: None for n, _, _ in A.MOTORI}
+        B._motori["es"] = (tc, lc)
+        G = np.arange(100, 1500, 50)
+        M1 = A.motori(B, G)
+        lc2 = lc.copy()
+        k = np.searchsorted(tc, B.T[G[-1]], side="right")                        # si cambia tutto quello che chiude dopo l'ultima decisione
+        lc2[k:] += 5.0
+        B._motori["es"] = (tc, lc2)
+        np.testing.assert_allclose(A.motori(B, G), M1)
+        self.assertTrue(np.any(M1[:, 0] != 0))
+        self.assertTrue(np.all(M1[:, 2:] == 0))                                   # i mercati senza dati restano a zero
+        self.assertEqual(M1.shape[1], len(A.NOMI_MOTORI))
 
 
 if __name__ == "__main__":
