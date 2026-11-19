@@ -2657,6 +2657,9 @@ function robotAttese() {
 }
 const quandoBreve = t => new Date(t).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 function robotHTML() {
+  if (!ROBOT && SPETTATORE) return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
+    <p class="sub" style="margin-top:4px">Il robot lavora nel cloud; qui leggo le sue operazioni.</p>
+    <p style="margin-top:10px"><button type="button" class="more" id="rb-motore">Aggiorna dal motore</button> <span class="note" id="rb-motore-esito">Leggo il motore…</span></p></div>`;
   if (!ROBOT) return `<div class="card" id="robot"><h2>Il robot: compra e vende da solo (conti finti)</h2>
     <p class="sub" style="margin-top:4px">Segue gli algoritmi dell'app senza che tu faccia niente. Le <b>azioni</b> le compra e le vende solo durante la seduta del loro mercato, mai di notte; le <b>crypto</b> 24 ore su 24, con gli ordini rinnovati ogni ora (esercitazione: nella verifica corretta in media perdono). Ogni strategia ha il suo conto finto da ${eur(ROBOT_CAPITALE)}, così vedi quale guadagna e quale perde. Niente soldi veri.</p>
     ${robotModulo(true)}
@@ -2856,6 +2859,11 @@ function nascondiScheda() {
 const MOTORE_COMPITO = 'trig_01D9L2QpeEcNpSxe5CSgzazk', CCR = 'Claude Code Remote';
 async function aggiornaDalMotore() {
   const esito = t => { const e = $('#rb-motore-esito'); if (e) e.textContent = t; };
+  if (SU_PAGES && !window.claude) {                                               // sul sito GitHub: rilegge lo stato del motore, senza Claude
+    esito('Leggo il motore…'); await caricaDaGitHub(true);
+    esito('Aggiornato alle ' + new Date().toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'}) + ' (si aggiorna anche da solo ogni minuto).');
+    return;
+  }
   esito('Chiedo al cloud…');
   try {
     const mcp = window.claude && claude.use ? await claude.use('mcp') : null;
@@ -2922,9 +2930,11 @@ function liveInfoHTML() {
 // mette il suo stato nel ramo robot-stato del repository pubblico. La pagina lo rilegge ogni minuto: niente Claude, niente token.
 const STATO_GITHUB = 'https://api.github.com/repos/ringhiosaverio-code/Finanza/contents/robot.json?ref=robot-stato';
 const SU_PAGES = /\.github\.io$/.test(location.hostname);
-async function caricaDaGitHub() {
+const STATO_RAW = 'https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/robot.json';
+async function caricaDaGitHub(fresco) {
   try {
-    const r = await fetch(STATO_GITHUB, {cache: 'no-store', headers: {Accept: 'application/vnd.github.raw+json'}});
+    let r = fresco ? await fetch(STATO_GITHUB, {cache: 'no-store', headers: {Accept: 'application/vnd.github.raw+json'}}).catch(() => null) : null;
+    if (!r || !r.ok) r = await fetch(STATO_RAW + '?t=' + Math.floor(Date.now() / 60e3), {cache: 'no-store'});
     if (!r.ok) return;
     const v = await r.json();
     if (v && !v.vuoto && v.conti && (!ROBOT || (v.rev || 0) !== (ROBOT.rev || 0) || (v.registro || []).length !== (ROBOT.registro || []).length)) {
@@ -2935,7 +2945,7 @@ async function caricaDaGitHub() {
   } catch (e) {}
 }
 async function avviaLive() {
-  if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; caricaDaGitHub(); setInterval(caricaDaGitHub, 60e3); }
+  if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
   const info = $('#live-info'); if (info) { info.innerHTML = liveInfoHTML(); $('#live-chiudi').addEventListener('click', () => { info.hidden = true; }); }
   if (!window.claude && /^https?:$/.test(location.protocol)) {                    // servita da live.py
     try { const r = await fetch('/quotazioni?s=EURUSD%3DX', {cache: 'no-store'}); if (r.ok && (await r.json()).quote) LIVE.fonte = 'locale'; } catch (e) {}
