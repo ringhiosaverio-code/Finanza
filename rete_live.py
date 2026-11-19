@@ -3,6 +3,7 @@
 
     python3 rete_live.py                 # apre http://127.0.0.1:8766 nel browser, con i costi dell'app (0,2 % per lato)
     python3 rete_live.py --costo 0.0005  # lo stesso, in un mondo con costi più bassi (il modello è quello addestrato lì)
+    python3 rete_live.py --margine 0.001 # la fa comprare anche se la verifica non le dà il via libera (per vedere come impara)
     python3 rete_live.py --terminale     # solo nel terminale
     python3 rete_live.py --senza-impara  # non riaddestra la rete con i dati nuovi
 
@@ -12,14 +13,16 @@ Cosa fa, e a che ritmo:
   - ogni secondo: il prezzo di tutte e 12 le crypto da Kraken (una richiesta); con quello controlla ogni posizione
     aperta (protezione sotto il prezzo di entrata, scadenza dell'orizzonte scelto) e aggiorna il conto;
   - ogni minuto: riguarda ogni crypto con gli stessi 36 numeri dell'addestramento (rendimenti, volatilità, flusso di
-    acquisti e vendite, ora e giorno: solo passato) e la rete dà un valore netto a ogni mossa (aspettare o comprare e
-    tenere da 1 minuto a 2 giorni). Compra solo se la mossa migliore batte l'attesa del margine scelto in
-    addestramento; i suoi 36 numeri cambiano al più una volta al minuto, quindi decidere più spesso non darebbe
+    acquisti e vendite, ora e giorno: solo passato) e la rete dà un valore a ogni mossa (aspettare o comprare e
+    tenere da 1 minuto a 2 giorni), costi e occasioni future comprese. Compra solo se la mossa migliore batte
+    l'attesa del margine scelto in addestramento; i suoi 36 numeri cambiano al più una volta al minuto, quindi decidere più spesso non darebbe
     informazione in più;
   - ogni giorno: scarica gli scambi nuovi e riaddestra la rete (la scelta sull'ultimo mese, lo stesso cancello della
     verifica: se non c'è un guadagno credibile resta fuori), tenendo il registro delle versioni;
   - gli scambi (e il verso, acquisto o vendita) si leggono a rotazione, una crypto al secondo.
-Con i costi di oggi la rete di solito resta fuori: lo vedi dal valore netto della mossa migliore, sempre sotto l'attesa.
+Con i costi di oggi la rete di solito resta fuori: lo vedi dal vantaggio di comprare sull'attesa, sempre negativo.
+Nella verifica del 19 novembre 2026 nessun modello ha passato il cancello, quindi di serie non compra mai; con --margine
+la costringi a comprare quando la mossa migliore batte l'attesa di quel margine, per vedere cosa farebbe (e cosa perde).
 
 Registro in trader/rete_esperienza.json (decisioni riassunte, operazioni, versioni). La pagina è servita solo su
 127.0.0.1. Solo numpy e la libreria standard. Non è consulenza finanziaria: il conto è finto, nessun ordine parte.
@@ -51,6 +54,14 @@ NOMI = crypto_live.NOMI
 
 def ora_utc(t=None):
     return datetime.datetime.fromtimestamp(time.time() if t is None else t, datetime.timezone.utc).strftime("%H:%M:%S")
+
+
+def con_margine(modello, margine):
+    """Lo stesso modello, ma costretto a comprare quando la mossa migliore batte l'attesa di `margine` (in frazioni),
+    anche se la verifica non gli ha dato il via libera. None: il modello com'è."""
+    if margine is None:
+        return modello
+    return dict(modello, margine=float(margine), fuori=False, imposto=True)
 
 
 # ---------------------------------------------------------------- il conto finto
@@ -218,6 +229,7 @@ class Stato:
     def __init__(self, agente, costo):
         self.lock = threading.Lock()
         self.agente, self.costo = agente, costo
+        self.margine_imposto = agente.modello["margine"] if agente.modello.get("imposto") else None
         self.prezzi, self.aperture, self.errore, self.aggiornato = {}, {}, None, None
         self.versioni = [{"t": time.time(), "fuori": agente.modello["fuori"], "iterazione": agente.modello.get("iterazione"),
                           "margine": None if math.isinf(agente.modello["margine"]) else agente.modello["margine"], "origine": "rete_modello.json"}]
@@ -236,7 +248,7 @@ class Stato:
                 "cassa": conto.cassa, "valore": conto.valore(pr), "capitale": conto.capitale, "decisioni": a.n_decisioni,
                 "eventi": a.eventi[::-1][:40], "versioni": self.versioni[::-1][:20],
                 "modello": {"fuori": a.modello["fuori"], "margine": None if math.isinf(a.modello["margine"]) else a.modello["margine"],
-                            "iterazione": a.modello.get("iterazione")},
+                            "iterazione": a.modello.get("iterazione"), "imposto": bool(a.modello.get("imposto"))},
                 "attivo_da": self.avviato})
 
     def salva(self):
@@ -296,8 +308,9 @@ def impara(stato, costo, ogni_ore, log=print):
             D = rete.Dati(rete.carica_mondo(max_giorni=300))
             m = rete.modello_finale(D, costo)
             with stato.lock:
-                stato.agente.modello = {"rete": m["rete"], "media": m["media"], "dev": m["dev"], "margine": m["margine"],
-                                        "fuori": m["fuori"], "iterazione": m["iterazione"], "tipo": "q", "ritmo": 0.0}
+                stato.agente.modello = con_margine({"rete": m["rete"], "media": m["media"], "dev": m["dev"], "margine": m["margine"],
+                                                    "fuori": m["fuori"], "iterazione": m["iterazione"], "tipo": "q", "ritmo": 0.0},
+                                                   stato.margine_imposto)
                 stato.versioni.append({"t": time.time(), "fuori": m["fuori"], "iterazione": m["iterazione"],
                                        "margine": None if math.isinf(m["margine"]) else m["margine"], "origine": "riaddestrata con i dati nuovi",
                                        "giorni": int(D.giorni)})
@@ -322,14 +335,14 @@ th.l,td.l{text-align:left}.px{font-weight:700}.up{color:var(--good)}.down{color:
 .alert{background:var(--warn);border-radius:12px;padding:10px 14px;margin-top:14px;color:var(--ink2);font-size:14px}.err{color:var(--crit)}
 .ev{display:flex;gap:10px;padding:5px 0;border-bottom:1px solid var(--line);font-size:14px}.ev .t{color:var(--mu);width:70px;flex:none}
 </style></head><body><main>
-<h1>Rete neurale dal vivo</h1><p class="sub">Prezzi in euro da Kraken ogni secondo; la rete decide ogni minuto e gestisce le posizioni ogni secondo; conto finto, nessun ordine parte. Il valore di ogni mossa è netto dei costi.</p>
+<h1>Rete neurale dal vivo</h1><p class="sub">Prezzi in euro da Kraken ogni secondo; la rete decide ogni minuto e gestisce le posizioni ogni secondo; conto finto, nessun ordine parte.</p>
 <div class="bar"><span id="st"><span class="dot"></span>collegamento…</span></div>
 <div class="alert" id="mod"></div>
 <div class="card"><b>Conto</b> <span id="conto" class="note"></span></div>
-<div class="card scroll"><table><thead><tr><th class="l">Crypto</th><th>Prezzo</th><th class="l">Mossa migliore</th><th>Valore netto</th><th>Attesa</th><th>Vantaggio di comprare</th><th class="l">Posizione</th></tr></thead><tbody id="tb"></tbody></table></div>
+<div class="card scroll"><table><thead><tr><th class="l">Crypto</th><th>Prezzo</th><th class="l">Mossa migliore</th><th>Vantaggio di comprare sull'attesa</th><th class="l">Posizione</th></tr></thead><tbody id="tb"></tbody></table></div>
 <div class="card"><b>Operazioni e avvisi</b><div id="evs" class="note" style="margin-top:6px">Ancora niente: la rete aspetta finché la mossa migliore non batte l'attesa del suo margine.</div></div>
 <div class="card"><b>Esperienza: le versioni della rete</b><div id="ver" class="note" style="margin-top:6px"></div></div>
-<p class="note">"Valore netto": quello che la rete si aspetta dalla mossa migliore (comprare e tenere per quella durata) dopo i costi; "Attesa": il valore di aspettare. Si compra solo se la differenza supera il margine imparato in addestramento (se non c'è un margine credibile la rete resta fuori). Non è consulenza finanziaria.</p>
+<p class="note">"Vantaggio di comprare sull'attesa": la differenza tra il valore della mossa migliore (comprare e tenere per quella durata) e quello di aspettare, entrambi calcolati dalla rete con i costi e le occasioni future dentro. Si compra solo se supera il margine imparato in addestramento; se non c'è un margine credibile la rete resta fuori. Non è consulenza finanziaria.</p>
 </main><script>
 const $ = s => document.querySelector(s);
 const nf = (x, d) => Number(x).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
@@ -341,14 +354,14 @@ async function giro() {
   let D; try { D = await (await fetch('/dati', {cache: 'no-store'})).json(); } catch (e) { $('#st').innerHTML = '<span class="dot off"></span><span class="err">il programma non risponde: è ancora acceso?</span>'; return; }
   $('#st').innerHTML = D.errore ? `<span class="dot off"></span><span class="err">${D.errore}</span>` : `<span class="dot"></span>aggiornato alle ${D.aggiornato || '…'} · ${D.decisioni} decisioni`;
   const m = D.modello;
-  $('#mod').innerHTML = `<b>Costi: ${nf(D.costo * 100, 2)} % per lato.</b> ${m.fuori ? 'La rete, nell\'ultimo mese di scelta, non ha visto un guadagno credibile: <b>resta fuori</b>, quindi non compra mai. Guarda lo stesso e ti mostra cosa vale ogni mossa.' : `La rete compra quando la mossa migliore batte l'attesa di ${pc(m.margine)} (iterazione ${m.iterazione}).`}`;
+  $('#mod').innerHTML = `<b>Costi: ${nf(D.costo * 100, 2)} % per lato.</b> ${m.imposto ? `<b>Margine imposto a mano (${pc(m.margine)})</b>: la rete compra anche se la verifica non le ha dato il via libera. Serve a vedere come impara e cosa perde.` : m.fuori ? 'La rete, nell\'ultimo mese di scelta, non ha visto un guadagno credibile: <b>resta fuori</b>, quindi non compra mai. Guarda lo stesso e ti mostra cosa vale ogni mossa.' : `La rete compra quando la mossa migliore batte l'attesa di ${pc(m.margine)} (iterazione ${m.iterazione}).`}`;
   $('#conto').textContent = `· valore ${nf(D.valore, 2)} € su ${nf(D.capitale, 0)} · cassa ${nf(D.cassa, 2)} € · ${D.n_operazioni} operazioni chiuse`;
   $('#tb').innerHTML = Object.keys(D.nomi).map(s => { const x = D.prezzi[s], v = D.vista[s]; if (!x) return '';
     const p = D.posizioni.find(q => q.sym === s);
     const pos = p ? `<span class="tag in">dentro</span> a ${nf(p.entrata, dec(p.entrata))}, ora <b class="${p.ora >= p.entrata ? 'up' : 'down'}">${pc(p.ora / p.entrata - 1)}</b> · protezione ${nf(p.protezione, dec(p.protezione))} · fino alle ${ora(p.scade)}` : '<span class="note">libera</span>';
     return `<tr><td class="l"><b>${D.nomi[s]}</b> <span class="note">${s.replace('-EUR', '')}</span></td><td class="px">${nf(x.prezzo, dec(x.prezzo))} €</td>
       <td class="l">${v ? (v.azione ? `<b>compra e tieni ${durata(v.migliore_minuti)}</b>` : `<span class="note">aspetta (la migliore sarebbe ${durata(v.migliore_minuti)})</span>`) : '…'}</td>
-      <td class="${v && v.valore >= 0 ? 'up' : 'down'}">${v ? pc(v.valore) : ''}</td><td>${v ? pc(v.attesa) : ''}</td><td class="${v && v.vantaggio > 0 ? 'up' : 'down'}">${v ? pc(v.vantaggio) : ''}</td><td class="l">${pos}</td></tr>`; }).join('');
+      <td class="${v && v.vantaggio > 0 ? 'up' : 'down'}">${v ? pc(v.vantaggio) : ''}</td><td class="l">${pos}</td></tr>`; }).join('');
   const E = D.eventi || [];
   if (E.length) $('#evs').innerHTML = E.map(e => `<div class="ev"><span class="t">${ora(e.t)}</span><span><b>${D.nomi[e.sym] || e.sym}</b>: ${e.evento === 'compra' ? `compra a ${nf(e.prezzo, dec(e.prezzo))} € e tiene ${durata(e.minuti)} (protezione ${nf(e.protezione, dec(e.protezione))})` : `vende a ${nf(e.prezzo, dec(e.prezzo))} € per ${e.motivo}: ${pc(e.r)} con i costi`}</span></div>`).join('');
   $('#ver').innerHTML = (D.versioni || []).map(v => `<div>${new Date(v.t * 1000).toLocaleString('it-IT')} · ${v.fuori ? 'resta fuori' : 'compra (iterazione ' + v.iterazione + ', margine ' + pc(v.margine) + ')'} · ${v.origine}${v.giorni ? ', ' + v.giorni + ' giorni di dati' : ''}</div>`).join('');
@@ -389,9 +402,9 @@ def terminale(stato):
             for s, v in sorted(a.vista.items()):
                 x = stato.prezzi.get(s)
                 if x:
-                    righe.append("%-9s %12s  %-22s valore %+6.2f %%  vantaggio %+6.2f %%  %s" % (
+                    righe.append("%-9s %12s  %-22s vantaggio di comprare %+6.2f %%  %s" % (
                         NOMI[s].split()[0], "%.*f" % (5 if x["prezzo"] < 1 else 2, x["prezzo"]),
-                        "COMPRA %d min" % v["migliore_minuti"] if v["azione"] else "aspetta", 100 * v["valore"], 100 * v["vantaggio"],
+                        "COMPRA %d min" % v["migliore_minuti"] if v["azione"] else "aspetta", 100 * v["vantaggio"],
                         "DENTRO" if s in a.conto.posizioni else ""))
             msg = "\033[H\033[J%s · conto %.2f € · %d operazioni · %s\n%s" % (
                 ora_utc(), a.conto.valore({s: v["prezzo"] for s, v in stato.prezzi.items()}), len(a.conto.operazioni),
@@ -402,6 +415,8 @@ def terminale(stato):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--costo", type=float, default=None, help="costo per lato del modello (default: quello più alto, 0,2 %%)")
+    ap.add_argument("--margine", type=float, default=None,
+                    help="costringe la rete a comprare quando la mossa migliore batte l'attesa di questo margine (es. 0.001 = 0,1 %%)")
     ap.add_argument("--porta", type=int, default=8766)
     ap.add_argument("--no-browser", action="store_true")
     ap.add_argument("--terminale", action="store_true")
@@ -413,7 +428,9 @@ def main(argv=None):
     except (OSError, ValueError) as e:
         print("[rete_live] %s" % e)
         return 1
-    print("[rete_live] modello a costi %.2f %% per lato: %s" % (100 * costo, "resta fuori" if modello["fuori"] else "margine %g" % modello["margine"]))
+    modello = con_margine(modello, a.margine)
+    print("[rete_live] modello a costi %.2f %% per lato: %s" % (100 * costo, "resta fuori" if modello["fuori"] else "margine %g%s" % (
+        modello["margine"], " (imposto a mano)" if modello.get("imposto") else "")))
     storia = Storia()
     print("[rete_live] carico gli scambi recenti (scarica quelli che mancano)…")
     storia.carica(log=lambda m: None)

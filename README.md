@@ -377,6 +377,93 @@ con la sola libreria standard di Python:
 La pagina è servita solo su 127.0.0.1. Gli ordini orari, nella verifica corretta, perdono in media
 dopo i costi: è uno strumento per seguire un'idea, non una promessa di guadagno.
 
+## La rete neurale: `rete_dati.py`, `rete.py`, `rete_live.py`
+
+Una rete neurale scritta da zero (solo numpy) che impara a fare operazioni sulle crypto scegliendo da sola quando comprare
+e per quanto tenere, da 1 minuto a 2 giorni, con apprendimento per rinforzo. **Fuori campione, con i costi dell'app
+(0,2 % per lato), non guadagna**: nei mesi in cui non vede niente che valga i costi resta fuori (4
+finestre su 6), e quando si fa convincere perde. Impara bene il passato (in media +1,18 % per operazione nel periodo
+in cui ha imparato) e non lo ripete sul futuro (-0,31 % su periodi mai visti): sovradattamento. Anche con costi più
+bassi la rete non batte due regole semplici di confronto.
+
+**I dati.** `python3 rete_dati.py` scarica ogni scambio delle 12 crypto su Kraken in euro, 401 giorni (dal 2025-10-14 al
+2026-11-18, circa 34 milioni di scambi, 75 minuti): Kraken dà solo le ultime 720 candele, ma conserva ogni scambio. Su Bitcoin
+c'è uno scambio ogni ~5 secondi e solo nel 13 % dei secondi ce n'è almeno uno; sulle altre
+molto meno (Polkadot 1,3 %).
+
+**Perché non ogni secondo.** Un'operazione completa costa 0,4 % tra entrata e uscita. Su Bitcoin la mossa
+tipica del prezzo è 0.0000 % a 1 secondo, 0.021 % a 1 minuto, 0.17 % a 1 ora e 0.92 % a 1 giorno; una mossa
+più grande dei costi c'è lo 0 % delle volte a 1 secondo, lo 0.1 % a 1 minuto, il 20 % a 1 ora e il
+75 % a 1 giorno. Per questo la rete decide ogni minuto (i suoi numeri non cambiano più spesso) e può
+scegliere durate da 1 minuto a 2 giorni; `rete_live.py` guarda comunque i prezzi ogni secondo, per le protezioni e le uscite.
+
+**Come impara.** Ogni quarto d'ora, per ogni crypto, la rete vede 36 numeri che usano solo il passato (rendimenti su 12 scale
+di tempo, volatilità, posizione tra minimo e massimo, flusso di acquisti e vendite a mercato, ora e giorno, mercato intero)
+e dà un valore a ogni mossa: aspettare, o comprare e tenere 1, 5, 15, 30 minuti, 1, 2, 4, 8, 12 ore, 1 o 2 giorni. Ogni
+acquisto ha una protezione (2.5 volatilità orarie x radice delle ore), i costi ci sono tutti e una crypto ha una sola posizione
+alla volta, quindi la rete deve scegliere anche quando aspettare. Due modi di imparare, confrontati: (1) Q-learning su
+decisioni di durata diversa: il valore di una mossa è il guadagno netto più il valore, scontato, di quando si torna liberi;
+il prezzo non dipende dalle nostre operazioni, quindi di ogni istante si sa cosa sarebbe successo con ogni mossa, e
+l'"esperienza" è la storia riletta a ogni iterazione con la rete dell'iterazione prima; (2) previsione diretta del guadagno
+netto di ogni orizzonte. Una sola rete (3 strati) per tutte le crypto, come nell'articolo di Sirignano e Cont (2019).
+
+**Come l'ho verificata.** A finestre mobili (6 test da 30 giorni, l'ultimo è l'ultimo mese): si addestra sul passato, si
+sceglie con il mese dopo, si misura sul mese ancora dopo, mai visto, con 2 giorni di intervallo tra l'uno e l'altro perché
+l'esito di un'operazione guarda avanti fino a 2 giorni. Per comprare, nel mese di scelta il guadagno deve valere almeno
+1.5 errori standard sopra zero su almeno 20 operazioni, altrimenti la rete resta fuori. Nessun numero del test serve a scegliere
+qualcosa. A confronto, due regole semplici fissate prima di guardare (ribasso a 4 ore, rialzo a 1 giorno) e comprare sempre e
+tenere 1 giorno. Il codice ha un test sul futuro: nessuna caratteristica cambia se si cambiano le barre dopo l'istante di
+decisione.
+
+**Risultati fuori campione, 180 giorni, costi 0,2 % per lato.**
+
+| | operazioni | media per operazione | conto |
+|---|---|---|---|
+| Rete, apprendimento per rinforzo | 270 | -0,97 % | -20,8 % |
+| Rete, previsione diretta | 392 | -0,17 % | -5,9 % |
+| Regola: ribasso a 4 ore | 924 | -0,17 % | -12,9 % |
+| Regola: rialzo a 1 giorno | 360 | -0,03 % | -3,1 % |
+| Comprare sempre e tenere 1 giorno | 2211 | -0,45 % | -87,4 % |
+
+Il conto somma i guadagni netti di ogni operazione, ognuna con 1/12 del capitale; gli intervalli al 90 % (a blocchi di 7 giorni) e
+lo Sharpe sono nell'app. La correlazione di rango tra la previsione della rete e quello che succede va da -0,004 a
++0,079 a seconda dell'orizzonte: la rete sa quasi niente di quello che farà il prezzo. Con costi più bassi, riaddestrando da
+capo per ogni livello (✓: conto positivo con l'intervallo al 90 % tutto sopra zero):
+
+| costo | rete, rinforzo | rete, previsione | regola: ribasso a 4 ore | regola: rialzo a 1 giorno |
+|---|---|---|---|---|
+| 0,20 % per lato | -20,8 % (270 op.) | -5,9 % (392 op.) | -12,9 % (924 op.) | -3,1 % (360 op.) |
+| 0,10 % per lato | -15,5 % (474 op.) | -7,4 % (587 op.) | +2,5 % (924 op.) | +2,8 % (360 op.) |
+| 0,05 % per lato | -7,6 % (486 op.) | -13,2 % (819 op.) | +10,2 % ✓ (924 op.) | +5,8 % (360 op.) |
+| 0,02 % per lato | +15,0 % (1322 op.) | -10,4 % (899 op.) | +14,9 % ✓ (924 op.) | +7,5 % (360 op.) |
+
+A 0,05 % per lato o meno la regola semplice "ribasso a 4 ore" guadagna in modo credibile: un vantaggio piccolo (il
+prezzo dopo un calo tende a risalire) c'è, ma solo con costi che un cliente piccolo di solito non ha, e la rete non lo trova
+meglio della regola. In tutti i casi il modello finale (addestrato su tutto tranne l'ultimo mese, scelto sull'ultimo mese)
+resta fuori: nell'ultimo mese non c'era un guadagno credibile.
+
+**Limiti.** 401 giorni sono un solo ciclo di mercato, e questo è stato in gran parte un ribasso; le coppie in euro di Kraken sono
+sottili; non si può vendere allo scoperto; i costi veri di un cliente piccolo su Kraken potrebbero essere più alti dello
+0,2 % per lato (non ho potuto leggere il tariffario). Le conclusioni sono quelle della letteratura: Jaquart, Dann e
+Weinhardt (2021, *Journal of Finance and Data Science*) trovano che a 1-60 minuti i modelli battono il caso ma la strategia
+perde dopo i costi; Fischer e Krauss (2018, *European Journal of Operational Research*) che il vantaggio delle reti LSTM
+sull'S&P 500 sparisce dal 2010. La verifica degli ordini orari di prima (sezione Crypto intraday) era sbagliata per un errore
+di ordine dentro la candela, corretto il 19 novembre: vedi sopra.
+
+**Dal vivo.** `python3 rete_live.py` fa girare la rete in un conto finto: prezzi di Kraken ogni secondo, decisione ogni minuto,
+protezione e scadenze ogni secondo, riaddestramento ogni giorno con i dati nuovi (stesso cancello: se non c'è un guadagno
+credibile resta fuori). La pagina (http://127.0.0.1:8766) mostra per ogni crypto il vantaggio di comprare sull'attesa. Di serie non
+compra mai, perché nessun modello ha passato il cancello; `--margine 0.001` la costringe a comprare per vedere come impara e cosa
+perde, e `--costo 0.0005` usa il modello addestrato con costi più bassi. Il registro è in `trader/rete_esperienza.json`.
+
+```bash
+python3 rete_dati.py                # gli scambi di Kraken, circa 75 minuti
+python3 rete.py --studia            # addestra e verifica (circa 30 minuti), scrive rete_modello.json
+python3 rete.py --sovradattamento   # aggiunge il confronto tra periodo di addestramento e periodo mai visto
+python3 rete.py --ordini-limite     # gli ordini orari di intraday.py sugli scambi veri
+python3 rete_live.py                # la rete dal vivo
+```
+
 ## Test
 
 ```bash

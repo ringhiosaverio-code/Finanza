@@ -147,6 +147,21 @@ class Agente(unittest.TestCase):
         self.assertTrue(any(op["sym"] == "B-EUR" and op["motivo"] == "scadenza" for op in chiuse))
 
 
+class MargineImposto(unittest.TestCase):
+    def test_costringe_a_comprare_un_modello_che_resta_fuori(self):
+        fuori = {"rete": None, "margine": float("inf"), "fuori": True, "iterazione": 14}
+        m = L.con_margine(fuori, 0.001)
+        self.assertEqual((m["margine"], m["fuori"], m["imposto"]), (0.001, False, True))
+        self.assertTrue(fuori["fuori"])                                          # l'originale non cambia
+        self.assertIs(L.con_margine(fuori, None), fuori)
+
+    def test_lo_stato_ricorda_il_margine_imposto_per_il_riaddestramento(self):
+        m = L.con_margine(Agente().modello(margine=float("inf")), 0.002)
+        stato = L.Stato(L.Agente(m, 0.002, SIMBOLI), 0.002)
+        self.assertEqual(stato.margine_imposto, 0.002)
+        self.assertIsNone(L.Stato(L.Agente(Agente().modello(margine=0.001), 0.002, SIMBOLI), 0.002).margine_imposto)
+
+
 class Pagina(unittest.TestCase):
     def test_lo_stato_si_serializza(self):
         import json

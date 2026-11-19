@@ -1517,7 +1517,9 @@ function reteHTML() {
   const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', ribasso: 'Regola: ribasso a 4 ore', momento: 'Regola: rialzo a 1 giorno', sempre_1g: 'Comprare sempre e tenere 1 giorno'};
   const COL = {q: 'var(--s1)', previsione: 'var(--s5)', ribasso: 'var(--s2)', momento: 'var(--s3)', sempre_1g: 'var(--s4)'};
   const q = c0.q, giorni = q.giorni, tot = x => x.totale, ic = x => `${pc(x.ic90[0] * x.giorni, 1)} … ${pc(x.ic90[1] * x.giorni, 1)}`;
-  const buono = q.n > 0 && q.totale > 0 && q.ic90[0] > 0;
+  const credibileConto = x => x.n > 0 && x.totale > 0 && x.ic90[0] > 0;                    // conto positivo con l'intervallo al 90 % tutto sopra zero
+  const positivo = x => x.n > 0 && x.totale > 0;
+  const buono = credibileConto(q);
   const fuori = c0.scelte.filter(s => s.q.fuori).length;
   const verdetto = q.n === 0
     ? `La rete è rimasta fuori da tutto, in ognuna delle ${c0.scelte.length} finestre: non ha trovato niente che valga i costi.`
@@ -1525,14 +1527,16 @@ function reteHTML() {
   const righe = ['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => { const x = c0[k];
     return `<tr><td class="l" style="white-space:normal"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:${COL[k]}"></span><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.al_giorno, 1)} al giorno</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b><br><span class="note">${ic(x)}</span></td><td>${x.n ? nf(x.sharpe, 2) : '–'}</td><td>${p100(x.esposizione)}</td></tr>`; }).join('');
   const conti = ['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => ({dati: [0].concat(c0[k].conto.map(v => v * 100)), colore: COL[k], spessore: k === 'q' ? 2.6 : 1.6, tratteggio: k === 'sempre_1g'}));
-  const costiRighe = chiavi.map(k => { const a = Rt.costi[k].q, b = Rt.costi[k].previsione;
-    return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td><td>${a.n}</td><td class="${a.media >= 0 ? 'pos' : 'neg'}">${a.n ? pc(a.media, 2) : '–'}</td><td class="${a.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(a.totale, 1)}</b></td><td>${b.n}</td><td class="${b.media >= 0 ? 'pos' : 'neg'}">${b.n ? pc(b.media, 2) : '–'}</td><td class="${b.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(b.totale, 1)}</b></td></tr>`; }).join('');
-  const credibileConto = x => x.n > 0 && x.totale > 0 && x.ic90[0] > 0;                    // conto positivo con l'intervallo al 90 % tutto sopra zero
-  const positivo = x => x.n > 0 && x.totale > 0;
+  const cella = x => `<td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b>${credibileConto(x) ? ' ✓' : ''}<br><span class="note">${x.n ? pc(x.media, 2) + ' · ' : ''}${x.n} op. · ${ic(x)}</span></td>`;
+  const costiRighe = chiavi.map(k => { const C = Rt.costi[k];
+    return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td>${cella(C.q)}${cella(C.previsione)}${cella(C.ribasso)}${cella(C.momento)}</tr>`; }).join('');
   const sopraZero = chiavi.filter(k => credibileConto(Rt.costi[k].q) || credibileConto(Rt.costi[k].previsione)), positivi = chiavi.filter(k => positivo(Rt.costi[k].q) || positivo(Rt.costi[k].previsione));
-  const testoCosti = sopraZero.length ? `Con costi di ${pc(Number(sopraZero[sopraZero.length - 1]), 2, false)} per lato o meno la rete trova operazioni che valgono: il conto è positivo con l'intervallo al 90 % tutto sopra zero. Sono costi che un cliente piccolo di solito non ha.`
+  const regolaCredibile = ['ribasso', 'momento'].map(nome => ({nome, k: chiavi.filter(k => credibileConto(Rt.costi[k][nome]))})).filter(x => x.k.length);
+  const testoRegola = regolaCredibile.length ? ` Una regola semplice, "${regolaCredibile[0].nome === 'ribasso' ? 'ribasso a 4 ore' : 'rialzo a 1 giorno'}", guadagna in modo credibile con costi di ${pc(Number(regolaCredibile[0].k[0]), 2, false)} per lato o meno: un vantaggio piccolo c'è, ma solo con costi che un cliente piccolo di solito non ha, e la rete non lo trova meglio della regola.` : '';
+  const testoCosti0 = sopraZero.length ? `Con costi di ${pc(Number(sopraZero[sopraZero.length - 1]), 2, false)} per lato o meno la rete trova operazioni che valgono: il conto è positivo con l'intervallo al 90 % tutto sopra zero. Sono costi che un cliente piccolo di solito non ha.`
     : positivi.length ? `Con costi più bassi il conto della rete diventa positivo (da ${pc(Number(positivi[positivi.length - 1]), 2, false)} per lato o meno) ma l'intervallo al 90 % comprende lo zero: non si distingue dal caso.`
     : 'Neanche con i costi più bassi provati la rete trova un vantaggio che si distingua dal caso.';
+  const testoCosti = testoCosti0 + testoRegola;
   // la curva di apprendimento: per ogni finestra il guadagno medio nel mese di scelta, a ogni iterazione
   const cur = c0.curve_q || [], iter = cur[0] ? cur[0].length : 0;
   const mediana = a => { const v = a.filter(x => x != null).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
@@ -1579,7 +1583,8 @@ function reteHTML() {
     ${sovraHTML}
     <h3 style="margin-top:16px">Se i costi fossero più bassi</h3>
     <p class="note" style="margin-top:2px">Stessa rete, riaddestrata da capo per ogni livello di costo (la commissione e lo spread di ogni operazione, per lato). ${testoCosti}</p>
-    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Costo</th><th>Rinforzo: operazioni</th><th>media</th><th>conto</th><th>Previsione: operazioni</th><th>media</th><th>conto</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Costo</th><th>Rete, rinforzo</th><th>Rete, previsione</th><th>Regola: ribasso a 4 ore</th><th>Regola: rialzo a 1 giorno</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Conto sui ${giorni} giorni di test; sotto, media per operazione, operazioni e intervallo al 90 %. ✓: conto positivo con l'intervallo tutto sopra zero.</p>
     <h3 style="margin-top:16px">Perché non ogni secondo</h3>
     <p class="note" style="margin-top:2px">Dagli scambi veri di Kraken, ultimi ${OS.crypto[muroCrypto[0]].giorni} giorni. Un'operazione completa costa ${pc(2 * OS.costo_per_lato, 1, false)} tra entrata e uscita: il prezzo deve muoversi di più. Su Bitcoin c'è almeno uno scambio solo nel ${nf(OS.crypto['BTC-EUR'].secondi_con_scambi * 100, 0)} % dei secondi (circa ${nf(OS.crypto['BTC-EUR'].scambi_ora, 0)} scambi all'ora), su Polkadot nel ${nf(OS.crypto['DOT-EUR'].secondi_con_scambi * 100, 1)} %: per la maggior parte dei secondi il prezzo non cambia affatto.</p>
     <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Orizzonte</th>${muroCrypto.map(s => `<th>${esc(s.replace('-EUR', ''))}: mossa tipica</th><th>più dei costi</th><th>rialzo oltre i costi</th>`).join('')}</tr></thead><tbody>${muro}</tbody></table></div>
@@ -1588,7 +1593,7 @@ function reteHTML() {
     <p class="note" style="margin-top:2px">Prima di decidere, la rete prevede il guadagno di ogni orizzonte. Fuori campione, la correlazione di rango tra la previsione e quello che è successo è vicina a zero a tutte le durate. Esito medio netto per il quinto di previsioni più basse e più alte, e per il 2 % più alto:</p>
     <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Orizzonte</th><th>Correlazione di rango</th><th>quinto più basso</th><th>quinto più alto</th><th>2 % più alto</th></tr></thead><tbody>${infoRighe}</tbody></table></div>
     <h3 style="margin-top:16px">Cosa dice la ricerca</h3><ul class="note" style="margin:4px 0 0;padding-left:18px;display:grid;gap:5px">${ricerca}</ul>
-    <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>La rete dal vivo, ogni secondo.</b> Sul tuo computer, nella cartella del progetto: <code>python3 rete_dati.py</code> scarica gli scambi di Kraken, <code>python3 rete.py --studia</code> rifà tutta questa verifica (circa 40 minuti) e <code>python3 rete_live.py</code> fa girare la rete in un conto finto con i prezzi di Kraken ogni secondo, impara ancora ogni giorno dai dati nuovi e mostra, per ogni crypto, il valore netto della mossa migliore. Con i costi di oggi sceglie quasi sempre di aspettare; con <code>--costo 0.0005</code> vedi cosa farebbe in un mondo con costi più bassi.</p></div></div>`;
+    <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>La rete dal vivo, ogni secondo.</b> Sul tuo computer, nella cartella del progetto: <code>python3 rete_dati.py</code> scarica gli scambi di Kraken, <code>python3 rete.py --studia</code> rifà tutta questa verifica (circa 40 minuti) e <code>python3 rete_live.py</code> fa girare la rete in un conto finto con i prezzi di Kraken ogni secondo, impara ancora ogni giorno dai dati nuovi e mostra, per ogni crypto, il vantaggio di comprare sull'attesa. Nella verifica nessun modello ha passato il cancello, quindi di serie resta fuori e non compra mai; con <code>--margine 0.001</code> la costringi a comprare per vedere come impara e cosa perde (con <code>--costo 0.0005</code> usi il modello addestrato con costi più bassi).</p></div></div>`;
 }
 
 function ordiniOreHTML() {
