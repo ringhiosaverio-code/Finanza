@@ -1412,13 +1412,14 @@ function renderCrypto() {
     .sort((a, b) => b.h.scenari.prudente.p_gain - a.h.scenari.prudente.p_gain);
   const btc = SIM['BTC-EUR'], w = SIM['SWDA.MI'];
   v.innerHTML = `
-  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-lungo">medio e lungo termine</button> e <button type="button" class="linkb" data-vai="crypto-ore">gli ordini di ogni ora</button>.</p></div>
+  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-lungo">medio e lungo termine</button>, <button type="button" class="linkb" data-vai="crypto-rete">la rete neurale</button> e <button type="button" class="linkb" data-vai="crypto-ore">gli ordini di ogni ora</button>.</p></div>
   ${btc && w ? `<div class="alert" role="note"><div class="ic">!</div><p><b>Molto più rischiose di azioni ed ETF.</b> Bitcoin oscilla del ${pc(btc.volatilita, 0, false)} in un anno, un ETF sul mondo intero (SWDA) del ${pc(w.volatilita, 0, false)}. Nella sua storia Bitcoin ha perso fino al ${pc(-btc.calo_massimo, 0, false)} dal picco. Una crypto non è un'azienda: non ha utili né dividendi, il prezzo dipende solo da domanda e offerta. Se le compri, solo con soldi che puoi permetterti di perdere.</p></div>` : ''}
   <div class="scroll card"><table>
     <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno alla durata</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
       return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b> <span class="note">a ${esc(h.orizzonte)}</span></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
   ${cryptoLungoHTML()}
+  ${reteHTML()}
   ${ordiniOreHTML()}
   <details style="margin-top:12px"><summary><b>Come eravamo partiti</b>: due piani al giorno, ognuno valido 24 ore</summary>${intradayHTML()}</details>
   <p class="note">Tocca una riga della prima tabella per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
@@ -1495,6 +1496,101 @@ function variantiHTML(Va) {
 
 /* ---------------- crypto intraday: le prossime 24 ore ---------------- */
 /* ---------------- crypto intraday: ordini rinnovati ogni ora ---------------- */
+/* ---------------- crypto: la rete neurale (rete.py, rete_dati.py, rete_live.py) ---------------- */
+function lineaSVG(serie, o = {}) {                                                // linee su un asse con lo zero: serie = [{dati, colore, spessore, tratteggio}]
+  const W = 640, H = o.h || 210, ml = 48, mr = 10, mt = 12, mb = 20, wx = W - ml - mr, hy = H - mt - mb;
+  const val = serie.flatMap(s => s.dati.filter(v => v != null && isFinite(v)));
+  if (!val.length) return '';
+  let lo = Math.min(0, ...val), hi = Math.max(0, ...val); if (hi - lo < 1e-9) { lo -= 1; hi += 1; }
+  const pad = (hi - lo) * 0.06; lo -= pad; hi += pad;
+  const n = Math.max(...serie.map(s => s.dati.length));
+  const X = i => ml + (n <= 1 ? 0 : i / (n - 1)) * wx, Y = v => mt + (1 - (v - lo) / (hi - lo)) * hy;
+  const scala = [lo + pad, 0, hi - pad].map(v => `<line x1="${ml}" x2="${W - mr}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--line)"/><text x="${ml - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" font-size="11" style="fill:var(--muted)">${nf(v, o.dec == null ? 1 : o.dec)}${o.unita || ''}</text>`).join('');
+  const righe = serie.map(s => `<polyline fill="none" stroke-linejoin="round" stroke-linecap="round" style="stroke:${s.colore}" stroke-width="${s.spessore || 2}"${s.tratteggio ? ' stroke-dasharray="4 3"' : ''} points="${s.dati.map((v, i) => v == null || !isFinite(v) ? '' : X(i).toFixed(1) + ',' + Y(v).toFixed(1)).filter(Boolean).join(' ')}"/>`).join('');
+  const etichette = (o.x || []).map(([i, t]) => `<text x="${X(i).toFixed(1)}" y="${H - 4}" text-anchor="middle" font-size="11" style="fill:var(--muted)">${esc(t)}</text>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="${esc(o.etichetta || 'Grafico')}">${scala}${righe}${etichette}</svg>`;
+}
+function reteHTML() {
+  const Rt = D.rete; if (!Rt || !Rt.costi) return '';
+  const chiavi = Object.keys(Rt.costi).sort((a, b) => b - a), k0 = chiavi[0], c0 = Rt.costi[k0], costo0 = Number(k0);
+  const ORIZ = Rt.config.orizzonti, orizTxt = m => m < 60 ? m + ' min' : m < 1440 ? (m / 60) + ' h' : (m / 1440) + (m === 1440 ? ' giorno' : ' giorni');
+  const NOMI = {q: 'Rete neurale, apprendimento per rinforzo', previsione: 'Rete neurale, previsione diretta', ribasso: 'Regola: ribasso a 4 ore', momento: 'Regola: rialzo a 1 giorno', sempre_1g: 'Comprare sempre e tenere 1 giorno'};
+  const COL = {q: 'var(--s1)', previsione: 'var(--s5)', ribasso: 'var(--s2)', momento: 'var(--s3)', sempre_1g: 'var(--s4)'};
+  const q = c0.q, giorni = q.giorni, tot = x => x.totale, ic = x => `${pc(x.ic90[0] * x.giorni, 1)} … ${pc(x.ic90[1] * x.giorni, 1)}`;
+  const buono = q.n > 0 && q.totale > 0 && q.ic90[0] > 0;
+  const fuori = c0.scelte.filter(s => s.q.fuori).length;
+  const verdetto = q.n === 0
+    ? `La rete è rimasta fuori da tutto, in ognuna delle ${c0.scelte.length} finestre: non ha trovato niente che valga i costi.`
+    : `Con costi di ${pc(costo0, 1, false)} per lato, su ${giorni} giorni mai visti in addestramento la rete ha fatto ${q.n} operazioni (${nf(q.al_giorno, 1)} al giorno), in media ${pc(q.media, 2)} ciascuna dopo i costi, e il conto ${pc(q.totale, 1)} (intervallo al 90 %: ${ic(q)}). Nelle ${c0.scelte.length} finestre è rimasta fuori ${fuori} volte, perché nel mese di scelta non vedeva un guadagno credibile.`;
+  const righe = ['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => { const x = c0[k];
+    return `<tr><td class="l" style="white-space:normal"><span style="display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px;background:${COL[k]}"></span><b>${NOMI[k]}</b></td><td>${x.n}<br><span class="note">${nf(x.al_giorno, 1)} al giorno</span></td><td class="${x.media >= 0 ? 'pos' : 'neg'}">${x.n ? pc(x.media, 2) : '–'}</td><td>${x.n ? p100(x.vinte) : '–'}</td><td class="${x.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(x.totale, 1)}</b><br><span class="note">${ic(x)}</span></td><td>${x.n ? nf(x.sharpe, 2) : '–'}</td><td>${p100(x.esposizione)}</td></tr>`; }).join('');
+  const conti = ['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => ({dati: [0].concat(c0[k].conto.map(v => v * 100)), colore: COL[k], spessore: k === 'q' ? 2.6 : 1.6, tratteggio: k === 'sempre_1g'}));
+  const costiRighe = chiavi.map(k => { const a = Rt.costi[k].q, b = Rt.costi[k].previsione;
+    return `<tr><td class="l"><b>${pc(Number(k), 2, false)}</b> per lato</td><td>${a.n}</td><td class="${a.media >= 0 ? 'pos' : 'neg'}">${a.n ? pc(a.media, 2) : '–'}</td><td class="${a.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(a.totale, 1)}</b></td><td>${b.n}</td><td class="${b.media >= 0 ? 'pos' : 'neg'}">${b.n ? pc(b.media, 2) : '–'}</td><td class="${b.totale >= 0 ? 'pos' : 'neg'}"><b>${pc(b.totale, 1)}</b></td></tr>`; }).join('');
+  const credibileConto = x => x.n > 0 && x.totale > 0 && x.ic90[0] > 0;                    // conto positivo con l'intervallo al 90 % tutto sopra zero
+  const positivo = x => x.n > 0 && x.totale > 0;
+  const sopraZero = chiavi.filter(k => credibileConto(Rt.costi[k].q) || credibileConto(Rt.costi[k].previsione)), positivi = chiavi.filter(k => positivo(Rt.costi[k].q) || positivo(Rt.costi[k].previsione));
+  const testoCosti = sopraZero.length ? `Con costi di ${pc(Number(sopraZero[sopraZero.length - 1]), 2, false)} per lato o meno la rete trova operazioni che valgono: il conto è positivo con l'intervallo al 90 % tutto sopra zero. Sono costi che un cliente piccolo di solito non ha.`
+    : positivi.length ? `Con costi più bassi il conto della rete diventa positivo (da ${pc(Number(positivi[positivi.length - 1]), 2, false)} per lato o meno) ma l'intervallo al 90 % comprende lo zero: non si distingue dal caso.`
+    : 'Neanche con i costi più bassi provati la rete trova un vantaggio che si distingua dal caso.';
+  // la curva di apprendimento: per ogni finestra il guadagno medio nel mese di scelta, a ogni iterazione
+  const cur = c0.curve_q || [], iter = cur[0] ? cur[0].length : 0;
+  const mediana = a => { const v = a.filter(x => x != null).sort((x, y) => x - y); return v.length ? v[Math.floor(v.length / 2)] : null; };
+  const scelta = cur.map(w => w.map(r => r['m0.001'] && r['m0.001'].n >= 10 ? r['m0.001'].media * 100 : null));
+  const errore = cur.map(w => w.map(r => r.errore));
+  const lineeScelta = scelta.map(w => ({dati: w, colore: 'var(--neutral)', spessore: 1.2})).concat([{dati: Array.from({length: iter}, (_, i) => mediana(scelta.map(w => w[i])), 0), colore: 'var(--s1)', spessore: 2.6}]);
+  const lineeErrore = [{dati: Array.from({length: iter}, (_, i) => mediana(errore.map(w => w[i]))), colore: 'var(--s5)', spessore: 2.6}];
+  const finestre = c0.scelte.map((s, i) => { const w = Rt.finestre[i], p = q.per_finestra[i];
+    return `<tr><td class="l">${esc(w.test_da)} … ${esc(w.test_a)}</td><td class="l">${s.q.fuori ? 'resta fuori (niente di credibile nel mese di scelta)' : `compra (iterazione ${s.q.iterazione}, margine ${pc(s.q.margine, 2, false)})`}</td><td>${p.n}</td><td class="${p.media >= 0 ? 'pos' : 'neg'}">${p.n ? pc(p.media, 2) : '–'}</td></tr>`; }).join('');
+  const sov = Rt.sovradattamento, sovraHTML = !sov ? '' : `<h3 style="margin-top:16px">Quello che impara dura?</h3>
+    <p class="note" style="margin-top:2px">La stessa rete, dopo tutte le iterazioni e con un margine fisso dello 0,1 %, nel periodo in cui ha imparato e in quello mai visto. Se impara il passato ma non il futuro, nel primo guadagna e nel secondo no: si chiama sovradattamento.</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Finestra (test)</th><th>Periodo di addestramento: operazioni</th><th>media</th><th>Periodo mai visto: operazioni</th><th>media</th></tr></thead><tbody>${sov.map((x, i) => `<tr><td class="l">${esc(Rt.finestre[i].test_da)} … ${esc(Rt.finestre[i].test_a)}</td><td>${x.addestramento.n}</td><td class="${x.addestramento.media >= 0 ? 'pos' : 'neg'}">${x.addestramento.n ? pc(x.addestramento.media, 2) : '–'}</td><td>${x.test.n}</td><td class="${x.test.media >= 0 ? 'pos' : 'neg'}">${x.test.n ? pc(x.test.media, 2) : '–'}</td></tr>`).join('')}</tbody></table></div>`;
+  const istogramma = q.n ? ORIZ.map((m, i) => ({m, n: q.orizzonti[i] || 0})).filter(x => x.n).map(x => `${orizTxt(x.m)}: ${x.n}`).join(' · ') : '';
+  // il muro dei costi
+  const OS = Rt.orizzonti_scambi, secTxt = h => h < 60 ? h + ' s' : h < 3600 ? (h / 60) + ' min' : h < 86400 ? (h / 3600) + ' h' : (h / 86400) + ' g';
+  const muroCrypto = ['BTC-EUR', 'DOT-EUR'].filter(s => OS.crypto[s]);
+  const muro = OS.orizzonti.map((h, i) => `<tr><td class="l">${secTxt(h)}</td>${muroCrypto.map(s => { const r = OS.crypto[s].per_orizzonte[i];
+    return `<td>${r.mediana < 0.00005 ? '0' : pc(r.mediana, r.mediana < 0.001 ? 3 : 2, false)}</td><td>${nf(r.oltre * 100, r.oltre < 0.1 ? 2 : 0)} %</td><td>${nf(r.rialzo_oltre * 100, r.rialzo_oltre < 0.1 ? 2 : 0)} %</td>`; }).join('')}</tr>`).join('');
+  const ricerca = [
+    ['Jaquart, Dann e Weinhardt (2021), <i>Journal of Finance and Data Science</i> 7:45-66', 'Bitcoin a 1-60 minuti: tutti i modelli battono il caso e la previsibilità cresce con l\'orizzonte, ma la strategia che ne esce guadagna prima dei costi e perde dopo, perché tiene le posizioni troppo poco.'],
+    ['Fischer e Krauss (2018), <i>European Journal of Operational Research</i> 270(2):654-669', 'Reti LSTM sull\'S&amp;P 500: fino al 2009 battono il mercato, dal 2010 il vantaggio sparisce e dopo i costi il guadagno oscilla intorno a zero.'],
+    ['Zhang, Zohren e Roberts (2020), <i>Journal of Financial Data Science</i>', 'Apprendimento per rinforzo (DQN, policy gradient, A2C) su 50 future molto liquidi, 2011-2019: profitti positivi nonostante costi alti. Mercati e costi molto diversi da quelli di un cliente in euro su Kraken.'],
+    ['Sirignano e Cont (2019), <i>Quantitative Finance</i> 19(9):1449-1459', 'Un solo modello addestrato su molti titoli prevede bene anche titoli mai visti: è il motivo per cui qui un\'unica rete guarda tutte e 12 le crypto.'],
+    ['Moody e Saffell (2001), <i>IEEE Transactions on Neural Networks</i> 12(4):875-889', 'Apprendimento per rinforzo "diretto" per fare trading, con i costi dentro l\'obiettivo.'],
+    ['Bailey, Borwein, López de Prado e Zhu, <i>The Probability of Backtest Overfitting</i>, <i>Journal of Computational Finance</i> 20(4); López de Prado (2018), <i>Advances in Financial Machine Learning</i>, Wiley', 'Con molte prove si trova sempre una strategia che "funziona" per caso. Per questo qui si verifica solo su periodi mai visti, con un intervallo di 2 giorni tra addestramento e test, e senza scegliere niente guardando il test.'],
+  ].map(([a, b]) => `<li><b>${a}</b>: ${b}</li>`).join('');
+  const info = Rt.informazione, infoRighe = ORIZ.map((m, i) => `<tr><td class="l">${orizTxt(m)}</td><td class="${info.medio[i] >= 0 ? '' : 'neg'}">${nf(info.medio[i], 3)}</td><td class="neg">${pc(info.quinti[i][0], 2)}</td><td class="neg">${pc(info.quinti[i][4], 2)}</td><td class="neg">${pc(info.quinti[i][5], 2)}</td></tr>`).join('');
+  return `<div class="card" id="crypto-rete"><h2>Una rete neurale che impara a fare trading sulle crypto</h2>
+    <p class="sub" style="margin-top:4px">Una rete neurale scritta da zero (solo numpy), addestrata sugli scambi veri di ${Rt.dati.crypto.length} crypto in euro su Kraken, ${Rt.dati.giorni} giorni, dal ${esc(Rt.dati.da)} al ${esc(Rt.dati.a)}. Ogni quarto d'ora guarda ogni crypto con ${Rt.config.caratteristiche.length} numeri che usano solo il passato (rendimenti su 12 scale di tempo, volatilità, posizione tra minimo e massimo, flusso di acquisti e vendite, ora e giorno) e dà un valore a ogni mossa: aspettare, oppure comprare e tenere ${ORIZ.map(orizTxt).join(', ')}. Ogni acquisto ha una protezione, i costi ci sono tutti, e una crypto ha una sola posizione alla volta: quindi la rete deve scegliere anche <b>quando aspettare</b>.</p>
+    <div class="verdetto ${buono ? 'v-si' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${buono ? '✓' : '✕'}</span><div><b>${buono ? 'Guadagna nei dati, con cautela' : 'Per ora no: non trova un vantaggio che regga i costi'}</b><p>${verdetto}</p></div></div>
+      <details><summary>Perché è una prova onesta, e i suoi limiti</summary><p class="note" style="margin-top:6px">La verifica cammina nel tempo: si addestra sul passato, si sceglie con il mese dopo, si misura sul mese ancora dopo, mai visto (${c0.scelte.length} finestre da 30 giorni, con 2 giorni di intervallo tra l'una e l'altra perché l'esito di un'operazione guarda avanti fino a 2 giorni). Nessun numero del test serve a scegliere qualcosa; per comprare, nel mese di scelta il guadagno deve valere almeno ${Rt.config.t_minima} errori standard sopra zero su almeno ${Rt.config.n_minimo} operazioni, altrimenti la rete resta fuori. Limiti: ${Rt.dati.giorni} giorni sono un solo ciclo di mercato, e questo è stato in gran parte un ribasso; le coppie in euro di Kraken sono sottili; non si può vendere allo scoperto; i costi veri di un cliente piccolo (commissioni e spread) potrebbero essere più alti del ${pc(costo0, 1, false)} per lato usato qui. Non è consulenza finanziaria.</p></details></div>
+    <div class="scroll" style="margin-top:12px"><table>
+      <thead><tr><th class="l">Fuori campione, ${giorni} giorni</th><th>Operazioni</th><th>Media per operazione</th><th>In guadagno</th><th>Conto, intervallo al 90 %</th><th>Sharpe</th><th>Tempo dentro</th></tr></thead>
+      <tbody>${righe}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Costi ${pc(costo0, 1, false)} per lato. Il conto somma i guadagni netti di ogni operazione, ognuna con 1/${Rt.dati.crypto.length} del capitale. "Tempo dentro": quanta parte del tempo c'è una posizione aperta.</p>
+    <h3 style="margin-top:16px">Il conto, giorno per giorno</h3>${lineaSVG(conti, {unita: ' %', etichetta: 'Conto fuori campione per strategia', x: [[0, 'inizio'], [giorni, 'fine']]})}
+    <div class="note" style="display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px">${['q', 'previsione', 'ribasso', 'momento', 'sempre_1g'].map(k => `<span><span style="display:inline-block;width:12px;height:3px;background:${COL[k]};vertical-align:middle;margin-right:4px"></span>${NOMI[k]}</span>`).join('')}</div>
+    <h3 style="margin-top:16px">Come ha imparato</h3>
+    <p class="note" style="margin-top:2px">Apprendimento per rinforzo (Q-learning su decisioni di durata diversa): il valore di una mossa è il guadagno netto dell'operazione più il valore, scontato, di quando si torna liberi. Il prezzo non dipende dalle nostre operazioni, quindi per ogni istante si sa cosa sarebbe successo con ogni mossa, e l'"esperienza" è la storia riletta a ripetizione: a ogni iterazione la rete riconta il valore delle mosse con la rete dell'iterazione prima e impara di nuovo. A sinistra l'errore di addestramento, che scende (la rete impara); a destra come va la sua politica nel mese di scelta, una linea per finestra e in blu la mediana: non migliora in modo stabile, cioè quello che impara non è un vantaggio che si ripete.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px 16px;margin-top:6px"><div><div class="note">Errore di addestramento, per iterazione (mediana)</div>${lineaSVG(lineeErrore, {h: 170, dec: 2, etichetta: 'Errore di addestramento', x: [[0, '1'], [iter - 1, String(iter)]]})}</div>
+      <div><div class="note">Guadagno medio per operazione nel mese di scelta (%)</div>${lineaSVG(lineeScelta, {h: 170, dec: 2, etichetta: 'Guadagno nel mese di scelta', x: [[0, '1'], [iter - 1, String(iter)]]})}</div></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Finestra (test)</th><th class="l">Cosa ha deciso</th><th>Operazioni</th><th>Media</th></tr></thead><tbody>${finestre}</tbody></table></div>
+    ${istogramma ? `<p class="note" style="margin-top:6px">Durate scelte nelle operazioni di test: ${istogramma}.</p>` : ''}
+    ${sovraHTML}
+    <h3 style="margin-top:16px">Se i costi fossero più bassi</h3>
+    <p class="note" style="margin-top:2px">Stessa rete, riaddestrata da capo per ogni livello di costo (la commissione e lo spread di ogni operazione, per lato). ${testoCosti}</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Costo</th><th>Rinforzo: operazioni</th><th>media</th><th>conto</th><th>Previsione: operazioni</th><th>media</th><th>conto</th></tr></thead><tbody>${costiRighe}</tbody></table></div>
+    <h3 style="margin-top:16px">Perché non ogni secondo</h3>
+    <p class="note" style="margin-top:2px">Dagli scambi veri di Kraken, ultimi ${OS.crypto[muroCrypto[0]].giorni} giorni. Un'operazione completa costa ${pc(2 * OS.costo_per_lato, 1, false)} tra entrata e uscita: il prezzo deve muoversi di più. Su Bitcoin c'è almeno uno scambio solo nel ${nf(OS.crypto['BTC-EUR'].secondi_con_scambi * 100, 0)} % dei secondi (circa ${nf(OS.crypto['BTC-EUR'].scambi_ora, 0)} scambi all'ora), su Polkadot nel ${nf(OS.crypto['DOT-EUR'].secondi_con_scambi * 100, 1)} %: per la maggior parte dei secondi il prezzo non cambia affatto.</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Orizzonte</th>${muroCrypto.map(s => `<th>${esc(s.replace('-EUR', ''))}: mossa tipica</th><th>più dei costi</th><th>rialzo oltre i costi</th>`).join('')}</tr></thead><tbody>${muro}</tbody></table></div>
+    <p class="note" style="margin-top:4px">"Mossa tipica": mediana del valore assoluto della variazione. "Più dei costi": quante volte la mossa, in un verso o nell'altro, supera il costo di un'operazione completa. "Rialzo oltre i costi": quante volte un acquisto avrebbe guadagnato. A un secondo non c'è quasi mai una mossa che valga qualcosa; servono ore.</p>
+    <h3 style="margin-top:16px">Cosa sa la rete</h3>
+    <p class="note" style="margin-top:2px">Prima di decidere, la rete prevede il guadagno di ogni orizzonte. Fuori campione, la correlazione di rango tra la previsione e quello che è successo è vicina a zero a tutte le durate. Esito medio netto per il quinto di previsioni più basse e più alte, e per il 2 % più alto:</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Orizzonte</th><th>Correlazione di rango</th><th>quinto più basso</th><th>quinto più alto</th><th>2 % più alto</th></tr></thead><tbody>${infoRighe}</tbody></table></div>
+    <h3 style="margin-top:16px">Cosa dice la ricerca</h3><ul class="note" style="margin:4px 0 0;padding-left:18px;display:grid;gap:5px">${ricerca}</ul>
+    <div class="alert" role="note" style="margin-top:12px"><div class="ic" aria-hidden="true">↻</div><p><b>La rete dal vivo, ogni secondo.</b> Sul tuo computer, nella cartella del progetto: <code>python3 rete_dati.py</code> scarica gli scambi di Kraken, <code>python3 rete.py --studia</code> rifà tutta questa verifica (circa 40 minuti) e <code>python3 rete_live.py</code> fa girare la rete in un conto finto con i prezzi di Kraken ogni secondo, impara ancora ogni giorno dai dati nuovi e mostra, per ogni crypto, il valore netto della mossa migliore. Con i costi di oggi sceglie quasi sempre di aspettare; con <code>--costo 0.0005</code> vedi cosa farebbe in un mondo con costi più bassi.</p></div></div>`;
+}
+
 function ordiniOreHTML() {
   const O = D.intraday && D.intraday.ore; if (!O || !O.crypto) return '';
   const V = O.verifica, K = O.kraken, L = O.livelli, f = x => nf(x, dec(x));

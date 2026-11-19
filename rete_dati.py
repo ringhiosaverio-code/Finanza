@@ -93,6 +93,27 @@ def chiedi(coppia, since_ns, ritmo, tentativi=8):
     raise RuntimeError("Kraken %s: %s" % (coppia, err))
 
 
+def scarica_da(sym, da_s, ritmo=None, cursore=None):
+    """Gli scambi dopo `da_s` (secondi UTC), anche del giorno ancora a metà, fino a adesso: serve a chi segue il mercato dal
+    vivo. Se si passa il `cursore` di una chiamata prima, riparte da lì. Ritorna (t, p, v, s, cursore): array e dove riprendere."""
+    ritmo = ritmo or Ritmo()
+    since = int(cursore) if cursore else int(da_s * 1e9)
+    t, p, v, s = [], [], [], []
+    while True:
+        scambi, ultimo = chiedi(COPPIE[sym], since, ritmo)
+        if not scambi:
+            break
+        for x in scambi:
+            if x[2] > da_s:
+                t.append(x[2]); p.append(float(x[0])); v.append(float(x[1])); s.append(1 if x[3] == "b" else -1)
+        if len(scambi) < 1000 or ultimo <= since:
+            since = max(since, ultimo)
+            break
+        since = ultimo
+    return (np.array(t, dtype=np.float64), np.array(p, dtype=np.float64), np.array(v, dtype=np.float64),
+            np.array(s, dtype=np.int8), since)
+
+
 def percorso(sym, giorno):
     return os.path.join(CACHE, sym, "%s.npz" % giorno)
 

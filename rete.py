@@ -1,8 +1,11 @@
 #!/usr/bin/env python3
 """Una rete neurale che impara a fare operazioni sulle crypto, con orizzonti da un minuto a due giorni.
 
+    python3 rete_dati.py                     # prima: gli scambi di Kraken, 400 giorni (circa 75 minuti)
+    python3 rete.py --studia                 # addestra e verifica la rete a finestre mobili, per più costi (circa 30 minuti)
+    python3 rete.py --sovradattamento        # aggiunge: quello che impara nel passato dura nel futuro? (qualche minuto)
     python3 rete.py --ordini-limite          # gli ordini orari di intraday.py, rigiocati minuto per minuto sugli scambi veri
-    (in sviluppo: --studia, --costi, --oggi)  # addestra e verifica la rete, costi per orizzonte, cosa farebbe adesso
+    python3 rete_live.py                     # la rete dal vivo, in un conto finto
 
 Dati: ogni scambio delle 12 crypto su Kraken, in euro (rete_dati.py), ricostruito in barre da un minuto.
 La rete vede, a ogni quarto d'ora e per ogni crypto, 36 numeri che usano solo il passato (rendimenti su 12
@@ -19,7 +22,10 @@ Come impara, in due modi che si confrontano:
     successo con ogni mossa: l'"esperienza" è la storia riletta a ripetizione, un giro per iterazione;
   - previsione diretta: la rete prevede il guadagno netto di ogni orizzonte e si compra dove supera una soglia.
 Si verifica a finestre mobili (cammina nel tempo): si addestra sul passato, si sceglie con il mese successivo,
-si misura sul mese dopo, mai visto. Nessun numero della verifica serve a scegliere qualcosa.
+si misura sul mese dopo, mai visto. Nessun numero della verifica serve a scegliere qualcosa. Per comprare, nel mese di
+scelta il guadagno deve essere credibile (almeno 1,5 errori standard sopra zero su 20 operazioni): se no la rete resta fuori.
+
+Risultato (rete_modello.json, riassunto nell'app e nel README): con i costi dell'app la rete non guadagna fuori campione.
 
 Solo numpy (la rete e il suo addestramento sono scritti qui, niente framework). Non è consulenza finanziaria.
 """
@@ -357,6 +363,58 @@ def prova_ordini_limite(M, livelli=(1.5, 2.0, 3.0), costo=COSTO, slip=SLIP_STOP,
     return out
 
 
+# ---------------------------------------------------------------- ordini limite appresi: gli esiti di ogni ordine
+
+PROFONDITA = (1.0, 1.75, 2.5)          # quanto sotto il prezzo si mette l'ordine di acquisto, in volatilità orarie
+TENUTA_LIMITE = 1440                   # minuti al massimo in posizione dopo l'esecuzione
+
+
+def etichette_limite(M, K, sig, profondita=PROFONDITA, costo=COSTO, slip=SLIP_STOP, stop_sig=3.0, validita=60,
+                     tenuta=TENUTA_LIMITE):
+    """Per ogni crypto, istante K e profondità d: com'è andato un ordine di acquisto fermo a L = prezzo - d x sigma,
+    valido `validita` minuti da K. Si esegue solo se uno scambio a mercato di VENDITA avviene sotto L; poi obiettivo
+    il prezzo di partenza (solo se uno scambio a mercato di ACQUISTO avviene sopra, da un minuto dopo l'entrata),
+    protezione stop_sig x sigma sotto l'entrata (conta già nel minuto dell'entrata, eseguita un po' peggio) e uscita
+    a mercato dopo `tenuta` minuti. Ritorna: guadagno netto (0 se non si esegue), minuti fino a essere liberi (se non
+    si esegue, la validità), se si è eseguito, e dove c'è il futuro per saperlo."""
+    K = np.asarray(K)
+    C, N, D = M.o.shape[0], len(K), len(profondita)
+    Y = np.zeros((C, N, D), np.float32)
+    LK = np.full((C, N, D), float(validita), np.float32)
+    FILL = np.zeros((C, N, D), bool)
+    OK = np.zeros((C, N, D), bool)
+    for c in range(C):
+        ls, hb, low, o, cl = M.ls[c], M.hb[c], M.l[c], M.o[c], M.c[c]
+        okk = K + validita + tenuta + 1 <= M.n - 1
+        Wls = sliding_window_view(ls, validita)
+        for d, prof in enumerate(profondita):
+            OK[c, :, d] = okk
+            p0 = cl[K - 1]
+            L = p0 * (1.0 - prof * sig[c])
+            for i in np.flatnonzero(okk):
+                k = K[i]
+                tocca = Wls[k] < L[i]
+                if not tocca.any():
+                    continue
+                mf = k + int(tocca.argmax())
+                S = L[i] * (1.0 - stop_sig * sig[c, i])
+                fine = mf + tenuta
+                fermo = low[mf:fine + 1] <= S
+                preso = hb[mf + 1:fine + 1] > p0[i]
+                ts = int(fermo.argmax()) if fermo.any() else 10 ** 9
+                tt = int(preso.argmax()) + 1 if preso.any() else 10 ** 9
+                if ts <= tt and ts < 10 ** 9:
+                    uscita, durata = min(S, o[mf + ts]) * (1.0 - slip), ts + 1
+                elif tt < 10 ** 9:
+                    uscita, durata = p0[i], tt + 1
+                else:
+                    uscita, durata = o[fine], fine - mf + 1
+                Y[c, i, d] = (1.0 - costo) ** 2 * uscita / L[i] - 1.0
+                LK[c, i, d] = (mf - k) + durata
+                FILL[c, i, d] = True
+    return Y, LK, FILL, OK
+
+
 # ---------------------------------------------------------------- la rete (un perceptron a tre strati, in numpy)
 
 class Rete:
@@ -388,6 +446,9 @@ class Rete:
             if i > 0:
                 d = d @ self.W[i].T
         return gW, gb
+
+    def copy(self):
+        return self.copia()
 
     def copia(self):
         r = Rete(self.dims)
@@ -485,12 +546,12 @@ def simula(az, R, LK, FE, OK, passo=PASSO):
 def statistiche(T, n_crypto, n_istanti, passo=PASSO):
     """Riassunto di un insieme di operazioni (l'output di simula) su n_istanti decisioni per crypto."""
     if len(T) == 0:
-        return {"n": 0, "media": 0.0, "vinte": 0.0, "mediana": 0.0, "p10": 0.0, "somma": 0.0, "minuti": 0.0,
+        return {"n": 0, "media": 0.0, "dev": 0.0, "vinte": 0.0, "mediana": 0.0, "p10": 0.0, "somma": 0.0, "minuti": 0.0,
                 "esposizione": 0.0, "al_giorno": 0.0, "protezione": 0.0, "orizzonti": [0] * len(ORIZZONTI)}
     r = T[:, 3]
     giorni = n_istanti * passo / 1440.0
     hist = np.bincount(T[:, 2].astype(int), minlength=len(ORIZZONTI)).tolist()
-    return {"n": int(len(T)), "media": float(r.mean()), "vinte": float((r > 0).mean()), "mediana": float(np.median(r)),
+    return {"n": int(len(T)), "media": float(r.mean()), "dev": float(r.std()), "vinte": float((r > 0).mean()), "mediana": float(np.median(r)),
             "p10": float(np.percentile(r, 10)), "somma": float(r.sum()), "minuti": float(T[:, 4].mean()),
             "esposizione": float(T[:, 4].sum() / (n_crypto * n_istanti * passo)), "al_giorno": float(len(T) / giorni),
             "protezione": float(T[:, 5].mean()), "orizzonti": hist}
@@ -535,6 +596,15 @@ class Dati:
         self.R, self.LK, self.FE, self.OK = etichette(M, self.K, self.sig, costo)
         self.C, self.N = self.X.shape[:2]
         self.giorni = M.n / 1440.0
+
+    def con_costo(self, costo):
+        """Gli stessi dati con un altro costo per lato: l'esito è (1-c)^2 x (rapporto dei prezzi) - 1, quindi si rifà
+        senza ripassare i prezzi."""
+        d = object.__new__(Dati)
+        d.__dict__.update(self.__dict__)
+        d.costo = costo
+        d.R = np.where(self.OK, ((1.0 + self.R) / (1.0 - self.costo) ** 2) * (1.0 - costo) ** 2 - 1.0, 0.0).astype(np.float32)
+        return d
 
     def indice(self, giorno):
         """Il primo istante di decisione dal giorno (con decimali) contato dall'inizio dei dati."""
@@ -612,6 +682,13 @@ def _valuta(D, rete, media, dev, i0, i1, margini, ritmi=(0.0,)):
 
 
 MARGINI = (0.0, 0.0005, 0.001, 0.002, 0.004)
+T_MINIMA = 1.5          # per comprare, nel periodo di scelta il guadagno medio deve valere almeno 1,5 errori standard sopra zero
+N_MINIMO = 20           # e basarsi su almeno 20 operazioni
+
+
+def credibile(s):
+    """Il risultato di un periodo di scelta: abbastanza operazioni e un guadagno netto medio positivo e non dovuto al caso."""
+    return s["n"] >= N_MINIMO and s["media"] > 0 and s["media"] / (s["dev"] / math.sqrt(s["n"]) + 1e-12) >= T_MINIMA
 
 
 def apprendi_q(D, tr, va, iterazioni=14, epoche=3, nascosti=(96, 48), seed=0, lr=1e-3, wd=1e-4, gamma=GAMMA,
@@ -636,26 +713,24 @@ def apprendi_q(D, tr, va, iterazioni=14, epoche=3, nascosti=(96, 48), seed=0, lr
             _, ris = _valuta(D, rete, media, dev, *va, margini=MARGINI)
             for m in MARGINI:
                 s = ris[(m, 0.0)][1]
-                riga["m%g" % m] = {"n": s["n"], "media": s["media"], "somma": s["somma"], "orizzonti": s["orizzonti"],
-                                   "minuti": s["minuti"]}
+                riga["m%g" % m] = {"n": s["n"], "media": s["media"], "dev": s["dev"], "somma": s["somma"],
+                                   "orizzonti": s["orizzonti"], "minuti": s["minuti"]}
         curve.append(riga)
         if log:
             s = riga.get("m0.001", {})
             log("   Q iter %2d: errore %.4f · V medio %+.4f · scelta (margine 0,1 %%): %d operazioni, media %+.3f %%" % (
                 it + 1, perdite[-1], riga["valore_medio"], s.get("n", 0), 100 * s.get("media", 0.0)))
-        if valuta and riga["m0.001"]["n"] >= 10 and (migliore is None or riga["m0.001"]["somma"] > migliore[0]):
-            migliore = (riga["m0.001"]["somma"], it + 1, rete.copia())
-    if migliore is None:
-        migliore = (0.0, iterazioni, rete.copia())
-    _, it_best, rete_best = migliore
-    margine, punti = 0.001, -1e9
-    if valuta:
-        for m in MARGINI:                                              # il margine, scelto nel periodo di scelta
-            s = curve[it_best - 1]["m%g" % m]
-            if s["n"] >= 10 and s["somma"] > punti:
-                margine, punti = m, s["somma"]
+        if valuta:                                                      # il migliore (iterazione, margine) del periodo di scelta, se credibile
+            for m in MARGINI:
+                c = riga["m%g" % m]
+                if credibile(c) and (migliore is None or c["somma"] > migliore[0]):
+                    migliore = (c["somma"], it + 1, rete.copia(), m)
+    if migliore is None:                                                # niente di credibile: la rete resta fuori
+        return {"rete": rete.copia(), "media": media, "dev": dev, "curve": curve, "iterazione": iterazioni,
+                "margine": float("inf"), "tipo": "q", "fuori": True}
+    _, it_best, rete_best, margine = migliore
     return {"rete": rete_best, "media": media, "dev": dev, "curve": curve, "iterazione": it_best, "margine": margine,
-            "tipo": "q"}
+            "tipo": "q", "fuori": False}
 
 
 def apprendi_previsione(D, tr, va, epoche=14, nascosti=(96, 48), seed=0, lr=1e-3, wd=1e-4, log=None):
@@ -682,9 +757,13 @@ def apprendi_previsione(D, tr, va, epoche=14, nascosti=(96, 48), seed=0, lr=1e-3
     _, e_best, rete_best = migliore
     margini, ritmi = (0.0, 0.001, 0.002, 0.004), (0.0, 0.0003, 0.0006, 0.001)
     _, ris = _valuta(D, rete_best, media, dev, *va, margini=margini, ritmi=ritmi)
-    scelta = max(((s["somma"], m, r) for (m, r), (T, s) in ris.items() if s["n"] >= 10), default=(0, 0.002, 0.0))
+    cand = [(s["somma"], m, r) for (m, r), (T, s) in ris.items() if credibile(s)]
+    if not cand:
+        return {"rete": rete_best, "media": media, "dev": dev, "curve": curve, "iterazione": e_best,
+                "margine": float("inf"), "ritmo": 0.0, "tipo": "previsione", "fuori": True}
+    scelta = max(cand)
     return {"rete": rete_best, "media": media, "dev": dev, "curve": curve, "iterazione": e_best, "margine": scelta[1],
-            "ritmo": scelta[2], "tipo": "previsione"}
+            "ritmo": scelta[2], "tipo": "previsione", "fuori": False}
 
 
 def decisioni(modello, D, i0, i1):
@@ -694,14 +773,309 @@ def decisioni(modello, D, i0, i1):
     return politica(Q, modello["margine"], modello.get("ritmo", 0.0)), Q
 
 
+# ---------------------------------------------------------------- riferimenti e verifica a finestre mobili
+
+def az_regola(D, i0, i1, nome):
+    """Tre regole semplici fissate prima di guardare i risultati, per confronto: un ribasso a 4 ore (rendimento a 4 ore
+    sotto -2 volatilità: compra e tieni 4 ore), un rialzo a 1 giorno (sopra +1,5: compra e tieni un giorno) e comprare
+    sempre e tenere un giorno."""
+    X = D.X[:, i0:i1]
+    az = np.zeros(X.shape[:2], dtype=int)
+    if nome == "ribasso":
+        az[X[:, :, NOMI_FEATURE.index("rend_240")] < -2.0] = 1 + ORIZZONTI.index(240)
+    elif nome == "momento":
+        az[X[:, :, NOMI_FEATURE.index("rend_1440")] > 1.5] = 1 + ORIZZONTI.index(1440)
+    elif nome == "sempre_1g":
+        az[:] = 1 + ORIZZONTI.index(1440)
+    else:
+        raise ValueError(nome)
+    return az
+
+
+def esegui(D, az, i0, i1):
+    return simula(az, D.R[:, i0:i1], D.LK[:, i0:i1], D.FE[:, i0:i1], D.OK[:, i0:i1])
+
+
+def _giorni(D, i0, i1):
+    """I giorni (interi, dall'inizio dei dati) coperti da [i0, i1)."""
+    return int(D.K[i0] // 1440), int(D.K[i1 - 1] // 1440) + 1
+
+
+def valuta_costo(D, wins, costo, iterazioni=14, epoche=3, log=None, seme=0):
+    """Tutte le finestre mobili per un costo: addestra le due reti, le prova sul test, mette a confronto le regole.
+    Ritorna per ogni strategia le operazioni di test di ogni finestra e le curve di apprendimento."""
+    Dc = D.con_costo(costo)
+    out = {"finestre": [], "strategie": {k: [] for k in ("q", "previsione", "ribasso", "momento", "sempre_1g")},
+           "curve_q": [], "curve_previsione": [], "scelte": []}
+    for k, w in enumerate(wins):
+        i0, i1 = w["test"]
+        if log:
+            log(" finestra %d/%d: test giorni %s, addestramento %d giorni" % (k + 1, len(wins), w["giorni"], (D.K[w["addestramento"][1] - 1] - D.K[w["addestramento"][0]]) // 1440))
+        mq = apprendi_q(Dc, w["addestramento"], w["scelta"], iterazioni=iterazioni, epoche=epoche, seed=seme + k)
+        mp = apprendi_previsione(Dc, w["addestramento"], w["scelta"], seed=seme + k)
+        az_q, _ = decisioni(mq, Dc, i0, i1)
+        az_p, _ = decisioni(mp, Dc, i0, i1)
+        T = {"q": esegui(Dc, az_q, i0, i1), "previsione": esegui(Dc, az_p, i0, i1)}
+        for nome in ("ribasso", "momento", "sempre_1g"):
+            T[nome] = esegui(Dc, az_regola(Dc, i0, i1, nome), i0, i1)
+        for nome, t in T.items():
+            out["strategie"][nome].append(t)
+        out["finestre"].append({"giorni": w["giorni"], "test": (i0, i1)})
+        out["curve_q"].append(mq["curve"])
+        out["curve_previsione"].append(mp["curve"])
+        out["scelte"].append({"q": {"fuori": mq["fuori"], "iterazione": mq["iterazione"], "margine": mq["margine"]},
+                              "previsione": {"fuori": mp["fuori"], "epoca": mp["iterazione"], "margine": mp["margine"]}})
+        if log:
+            st = {nome: statistiche(t, D.C, i1 - i0) for nome, t in T.items()}
+            log("   Q: %s · %d operazioni, media %+.3f %% | previsione: %s · %d op., media %+.3f %% | ribasso %+.3f %% (%d) · momento %+.3f %% (%d) · sempre 1g %+.3f %%" % (
+                "FUORI" if mq["fuori"] else "dentro it.%d marg.%g" % (mq["iterazione"], mq["margine"]), st["q"]["n"], 100 * st["q"]["media"],
+                "FUORI" if mp["fuori"] else "dentro", st["previsione"]["n"], 100 * st["previsione"]["media"],
+                100 * st["ribasso"]["media"], st["ribasso"]["n"], 100 * st["momento"]["media"], st["momento"]["n"], 100 * st["sempre_1g"]["media"]))
+    return out
+
+
+def riassumi(D, ris, strategia):
+    """Le operazioni di test di tutte le finestre messe insieme: statistiche, serie giornaliera, curva del conto."""
+    tutte, giornaliera, per_finestra = [], [], []
+    for T, w in zip(ris["strategie"][strategia], ris["finestre"]):
+        i0, i1 = w["test"]
+        g0, g1 = _giorni(D, i0, i1)
+        serie = serie_giornaliera(T, D.K[i0:i1], D.M.t0, D.C, g0 + int(D.M.t0 // 86400), g1 + int(D.M.t0 // 86400))
+        giornaliera.append(serie)
+        per_finestra.append(statistiche(T, D.C, i1 - i0))
+        if len(T):
+            tutte.append(T)
+    T = np.concatenate(tutte) if tutte else np.zeros((0, 6))
+    g = np.concatenate(giornaliera) if giornaliera else np.zeros(0)
+    n_istanti = sum(w["test"][1] - w["test"][0] for w in ris["finestre"])
+    st = statistiche(T, D.C, n_istanti)
+    st.update({"giorni": int(len(g)), "totale": float(g.sum()), "sharpe": float(g.mean() / g.std() * math.sqrt(365)) if g.std() > 0 else 0.0,
+               "ic90": bootstrap_blocchi(g), "conto": np.round(np.cumsum(g), 5).tolist(), "per_finestra": per_finestra})
+    return st
+
+
+def ic_per_orizzonte(D, wins, costo=COSTO, seme=0):
+    """Fuori campione: la correlazione di rango tra la previsione diretta e l'esito, per ogni orizzonte e finestra,
+    e l'esito medio per quinti della previsione (messi insieme tutte le finestre)."""
+    Dc = D.con_costo(costo)
+    ic, acc = [], [([], []) for _ in ORIZZONTI]
+    rango = lambda x: np.argsort(np.argsort(x)) / max(len(x) - 1, 1)
+    for k, w in enumerate(wins):
+        mp = apprendi_previsione(Dc, w["addestramento"], w["scelta"], epoche=3, seed=seme + k)
+        i0, i1 = w["test"]
+        X = Dc.norm(Dc.X[:, i0:i1], mp["media"], mp["dev"]).reshape(-1, N_FEATURE)
+        Q = mp["rete"].avanti(X) * ESCALA
+        Rt, Ok = Dc.R[:, i0:i1].reshape(-1, len(ORIZZONTI)), Dc.OK[:, i0:i1].reshape(-1, len(ORIZZONTI))
+        riga = []
+        for j in range(len(ORIZZONTI)):
+            m = Ok[:, j]
+            riga.append(float(np.corrcoef(rango(Q[m, 1 + j]), rango(Rt[m, j]))[0, 1]))
+            acc[j][0].append(Q[m, 1 + j])
+            acc[j][1].append(Rt[m, j])
+        ic.append(riga)
+    quinti = []
+    for q, r in acc:
+        q, r = np.concatenate(q), np.concatenate(r)
+        o, n = np.argsort(q), len(q)
+        quinti.append([float(r[o[a * n // 5:(a + 1) * n // 5]].mean()) for a in range(5)] + [float(r[o[int(n * 0.98):]].mean())])
+    return {"orizzonti": list(ORIZZONTI), "per_finestra": ic, "medio": np.mean(ic, axis=0).tolist(), "quinti": quinti}
+
+
+def sovradattamento(D, wins, costo=COSTO, iterazioni=14, margine=0.001, seme=0, log=None):
+    """Quello che la rete ha imparato dura? Per ogni finestra: la stessa rete (dopo tutte le iterazioni, margine fisso)
+    sul periodo in cui ha imparato e su quello mai visto. Se impara il passato ma non il futuro, nel primo guadagna e nel
+    secondo no: è sovradattamento. Ritorna, per ogni finestra, le statistiche di addestramento e di test."""
+    Dc = D.con_costo(costo)
+    out = []
+    for k, w in enumerate(wins):
+        m = apprendi_q(Dc, w["addestramento"], w["scelta"], iterazioni=iterazioni, seed=seme + k, valuta=False)
+        riga = {}
+        for nome, (i0, i1) in (("addestramento", w["addestramento"]), ("test", w["test"])):
+            X = Dc.norm(Dc.X[:, i0:i1], m["media"], m["dev"]).reshape(-1, N_FEATURE)
+            Q = (m["rete"].avanti(X) * ESCALA).reshape(Dc.C, i1 - i0, -1)
+            T = esegui(Dc, politica(Q, margine), i0, i1)
+            riga[nome] = statistiche(T, Dc.C, i1 - i0)
+        out.append(riga)
+        if log:
+            log("   finestra %d: addestramento %d operazioni, media %+.3f %% · test %d operazioni, media %+.3f %%" % (
+                k + 1, riga["addestramento"]["n"], 100 * riga["addestramento"]["media"], riga["test"]["n"], 100 * riga["test"]["media"]))
+    return out
+
+
+def incondizionato(D, costo=COSTO):
+    """Comprando a ogni quarto d'ora e tenendo h minuti: esito netto medio e quante volte si guadagna, per orizzonte."""
+    Dc = D.con_costo(costo)
+    out = []
+    for j, h in enumerate(ORIZZONTI):
+        m = Dc.OK[:, :, j]
+        r = Dc.R[:, :, j][m]
+        out.append({"orizzonte": h, "media": float(r.mean()), "vinte": float((r > 0).mean()), "dev": float(r.std()),
+                    "protezione": float(Dc.FE[:, :, j][m].mean())})
+    return out
+
+
+# ---------------------------------------------------------------- il muro dei costi, per orizzonte, dagli scambi
+
+ORIZZONTI_SECONDI = (1, 5, 15, 60, 300, 900, 3600, 14400, 86400, 172800)
+
+
+def studio_orizzonti(simboli=("BTC-EUR", "ETH-EUR", "SOL-EUR", "XRP-EUR", "DOGE-EUR", "DOT-EUR"), giorni=60, costo=COSTO):
+    """Quanto si muove il prezzo in euro, dagli scambi veri di Kraken, a ogni orizzonte da 1 secondo a 2 giorni, e
+    quante volte la mossa batte i costi di un'operazione completa (2 x costo): per ogni crypto, la mossa tipica
+    (mediana del valore assoluto), la quota di mosse più grandi dei costi (in un verso o nell'altro) e la quota di
+    rialzi più grandi dei costi (quelle in cui un acquisto avrebbe guadagnato). Include la quota di secondi in cui c'è
+    stato almeno uno scambio: dove il prezzo non cambia, non c'è niente da fare."""
+    muro = 2 * costo
+    out = {"orizzonti": list(ORIZZONTI_SECONDI), "costo_per_lato": costo, "crypto": {}}
+    for sym in simboli:
+        g = giorni_continui(sym)[-giorni:]
+        t, p, v, sd = carica_scambi(sym, g)
+        durata = t[-1] - t[0]
+        secondi = np.unique(np.floor(t).astype(np.int64))
+        righe = []
+        for h in ORIZZONTI_SECONDI:
+            passo = max(5.0, h / 4.0)
+            x = np.arange(t[0], t[-1] - h, passo)
+            if len(x) > 1_500_000:
+                x = x[:: int(math.ceil(len(x) / 1_500_000))]
+            p0 = p[np.searchsorted(t, x, side="right") - 1]
+            p1 = p[np.searchsorted(t, x + h, side="right") - 1]
+            r = np.log(p1 / p0)
+            righe.append({"mediana": float(np.median(np.abs(r))), "oltre": float((np.abs(r) > muro).mean()),
+                          "rialzo_oltre": float((r > muro).mean()), "n": int(len(r))})
+        out["crypto"][sym] = {"scambi_ora": float(len(t) / durata * 3600), "secondi_con_scambi": float(len(secondi) / durata),
+                              "giorni": len(g), "per_orizzonte": righe}
+    return out
+
+
+# ---------------------------------------------------------------- tutto insieme: studia
+
+def _pulisci(x):
+    """Per il JSON: numpy -> numeri, infinito -> None."""
+    if isinstance(x, dict):
+        return {str(k): _pulisci(v) for k, v in x.items()}
+    if isinstance(x, (list, tuple)):
+        return [_pulisci(v) for v in x]
+    if isinstance(x, (np.floating, float)):
+        return None if (math.isinf(x) or math.isnan(x)) else float(x)
+    if isinstance(x, np.integer):
+        return int(x)
+    if isinstance(x, np.ndarray):
+        return _pulisci(x.tolist())
+    return x
+
+
+def modello_finale(D, costo, iterazioni=14, seme=0, log=None):
+    """La rete che si usa davvero: addestrata su tutti i dati tranne l'ultimo mese, che serve a scegliere (iterazione e
+    margine) con lo stesso cancello della verifica. Se nell'ultimo mese non c'è un guadagno credibile resta fuori."""
+    fine = D.giorni - 2.0
+    tr = (D.indice(AVVIO / 1440.0), D.indice(fine - 34))
+    va = (D.indice(fine - 32), D.indice(fine - 2))
+    m = apprendi_q(D.con_costo(costo), tr, va, iterazioni=iterazioni, seed=seme, log=log)
+    return m
+
+
+def studia(giorni=None, costi=(COSTO, 0.001, 0.0005, 0.0002), iterazioni=14, log=print, salva=True):
+    t0 = time.time()
+    M = carica_mondo(max_giorni=giorni)
+    D = Dati(M)
+    wins = finestre(D)
+    inizio = datetime.datetime.fromtimestamp(M.t0, datetime.timezone.utc).date()
+    data = lambda g: (inizio + datetime.timedelta(days=int(g))).isoformat()
+    ris = {"creato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+           "dati": {"da": data(0), "a": data(M.n / 1440 - 1), "giorni": int(M.n / 1440), "crypto": M.simboli,
+                    "scambi": "Kraken, in euro", "campioni": int(D.C * D.N)},
+           "config": {"orizzonti": list(ORIZZONTI), "passo_minuti": PASSO, "costo_per_lato": COSTO, "k_stop": K_STOP,
+                      "slip_protezione": SLIP_STOP, "gamma": GAMMA, "iterazioni": iterazioni, "nascosti": [96, 48],
+                      "caratteristiche": NOMI_FEATURE, "t_minima": T_MINIMA, "n_minimo": N_MINIMO},
+           "finestre": [{"test_da": data(w["giorni"][0]), "test_a": data(w["giorni"][1]), "giorni": list(w["giorni"])} for w in wins],
+           "incondizionato": incondizionato(D), "costi": {}, "modelli": {}}
+    log("[rete] dati pronti: %d giorni, %d campioni, %d finestre (%.0f s)" % (ris["dati"]["giorni"], ris["dati"]["campioni"], len(wins), time.time() - t0))
+    log("[rete] il muro dei costi, dagli scambi")
+    ris["orizzonti_scambi"] = studio_orizzonti()
+    log("[rete] informazione fuori campione della previsione, per orizzonte")
+    ris["informazione"] = ic_per_orizzonte(D, wins)
+    log("[rete] sovradattamento: periodo di addestramento contro periodo mai visto")
+    ris["sovradattamento"] = sovradattamento(D, wins, costi[0], iterazioni, log=log)
+    for c in costi:
+        log("[rete] costo %.2f %% per lato" % (100 * c))
+        r = valuta_costo(D, wins, c, iterazioni=iterazioni, log=log)
+        blocco = {nome: riassumi(D, r, nome) for nome in r["strategie"]}
+        blocco["scelte"] = r["scelte"]
+        if c == costi[0]:                                      # le curve di apprendimento: una per finestra, a costo pieno
+            blocco["curve_q"] = [[{k: v for k, v in riga.items() if k in ("iterazione", "errore", "valore_medio", "m0.001", "m0")} for riga in cur]
+                                 for cur in r["curve_q"]]
+            blocco["curve_previsione"] = r["curve_previsione"]
+        ris["costi"]["%g" % c] = blocco
+        m = modello_finale(D, c, iterazioni=iterazioni)
+        ris["modelli"]["%g" % c] = {"tipo": "q", "fuori": m["fuori"], "iterazione": m["iterazione"], "margine": m["margine"],
+                                    "media": m["media"].tolist(), "dev": m["dev"].tolist(), "rete": m["rete"].a_dizionario(5)}
+        log("[rete] modello finale a %.2f %%: %s" % (100 * c, "resta fuori" if m["fuori"] else "iterazione %d, margine %g" % (m["iterazione"], m["margine"])))
+        ris["durata_minuti"] = round((time.time() - t0) / 60, 1)
+        if salva:                                              # dopo ogni costo: un errore più avanti non butta via il lavoro fatto
+            with open(MODELLO, "w", encoding="utf-8") as fh:
+                json.dump(_pulisci(ris), fh, separators=(",", ":"))
+            log("[rete] scritto %s (%d KB, %.0f minuti)" % (os.path.basename(MODELLO), os.path.getsize(MODELLO) // 1024, (time.time() - t0) / 60))
+    return ris
+
+
+# ---------------------------------------------------------------- il modello finale, per chi lo usa dal vivo
+
+def da_json(m):
+    """Un modello scritto da studia(): la rete, le normalizzazioni, il margine (None = resta fuori = infinito)."""
+    return {"rete": Rete.da_dizionario(m["rete"]), "media": np.array(m["media"], dtype=np.float32),
+            "dev": np.array(m["dev"], dtype=np.float32), "margine": float("inf") if m.get("margine") is None else float(m["margine"]),
+            "fuori": bool(m.get("fuori")), "iterazione": m.get("iterazione"), "tipo": m.get("tipo", "q"), "ritmo": 0.0}
+
+
+def carica_modello(costo=None, percorso=MODELLO):
+    """Il modello finale di rete_modello.json per quel costo per lato (il più alto se None). Ritorna (modello, costo)."""
+    with open(percorso, encoding="utf-8") as fh:
+        r = json.load(fh)
+    chiavi = sorted((k for k in r.get("modelli", {})), key=float, reverse=True)
+    if not chiavi:
+        raise ValueError("rete_modello.json non ha modelli: python3 rete.py --studia")
+    k = chiavi[0] if costo is None else next((x for x in chiavi if abs(float(x) - costo) < 1e-12), None)
+    if k is None:
+        raise ValueError("nessun modello per il costo %g: ci sono %s" % (costo, ", ".join(chiavi)))
+    return da_json(r["modelli"][k]), float(k)
+
+
+def valori_a(modello, M, k):
+    """I valori che il modello dà a ogni mossa adesso, per ogni crypto: array (crypto, 1 + orizzonti), in frazioni.
+    k è il minuto (indice) in cui si decide: contano solo le barre prima di k."""
+    P = Pronto(M)
+    X = caratteristiche(P, np.array([k]))[:, 0, :]
+    Xn = np.clip((X - modello["media"]) / modello["dev"], -6.0, 6.0).astype(np.float32)
+    return modello["rete"].avanti(Xn) * ESCALA, sigma_ora(P, np.array([k]))[:, 0]
+
+
 # ---------------------------------------------------------------- a riga di comando
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--ordini-limite", action="store_true",
                     help="gli ordini orari di intraday.py rigiocati sugli scambi veri (servono i dati di rete_dati.py)")
+    ap.add_argument("--studia", action="store_true",
+                    help="addestra e verifica la rete a finestre mobili, per più costi; scrive rete_modello.json")
+    ap.add_argument("--sovradattamento", action="store_true",
+                    help="aggiunge a rete_modello.json il confronto tra periodo di addestramento e periodo mai visto (qualche minuto)")
+    ap.add_argument("--costi", default="0.002,0.001,0.0005,0.0002", help="costi per lato da provare (con --studia)")
+    ap.add_argument("--iterazioni", type=int, default=14)
     ap.add_argument("--giorni", type=int, default=None, help="solo gli ultimi n giorni di dati")
     a = ap.parse_args(argv)
+    if a.studia:
+        studia(a.giorni, tuple(float(x) for x in a.costi.split(",")), a.iterazioni)
+        return 0
+    if a.sovradattamento:
+        with open(MODELLO, encoding="utf-8") as fh:
+            ris = json.load(fh)
+        D = Dati(carica_mondo(max_giorni=a.giorni))
+        ris["sovradattamento"] = _pulisci(sovradattamento(D, finestre(D), max(float(k) for k in ris["costi"]), a.iterazioni, log=print))
+        with open(MODELLO, "w", encoding="utf-8") as fh:
+            json.dump(ris, fh, separators=(",", ":"))
+        print("[rete] aggiunto il sovradattamento a %s" % os.path.basename(MODELLO))
+        return 0
     if a.ordini_limite:
         M = carica_mondo(max_giorni=a.giorni)
         print("ORDINI LIMITE ORARI SUGLI SCAMBI VERI: %d giorni, %d crypto, costi %.1f %% per lato" % (M.n / 1440, len(M.simboli), 100 * COSTO))

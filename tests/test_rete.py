@@ -292,5 +292,141 @@ class OrdiniLimite(unittest.TestCase):
         self.assertAlmostEqual(r["media"], (1 - R.COSTO) ** 2 * uscita / 98.5 - 1, places=9)
 
 
+class Costi(unittest.TestCase):
+    def test_cambiare_il_costo_dopo_equivale_a_rifare_le_etichette(self):
+        M = mondo_casuale(giorni=12, seme=4)
+        D = R.Dati(M, costo=0.002)
+        r2 = R.etichette(M, D.K, D.sig, costo=0.0005)[0]
+        np.testing.assert_allclose(D.con_costo(0.0005).R, r2, atol=2e-6)
+        np.testing.assert_allclose(D.con_costo(0.002).R, D.R, atol=2e-6)       # lo stesso costo: niente cambia
+        self.assertEqual(D.con_costo(0.0005).costo, 0.0005)
+        self.assertEqual(D.costo, 0.002)                                       # l'originale non si tocca
+
+
+class Cancello(unittest.TestCase):
+    def test_si_compra_solo_se_il_guadagno_e_credibile(self):
+        s = lambda n, media, dev: {"n": n, "media": media, "dev": dev}
+        self.assertFalse(R.credibile(s(10, 0.01, 0.01)))                       # poche operazioni
+        self.assertFalse(R.credibile(s(100, -0.001, 0.01)))                    # in perdita
+        self.assertFalse(R.credibile(s(25, 0.001, 0.02)))                      # positivo ma dentro il rumore (t = 0,25)
+        self.assertTrue(R.credibile(s(100, 0.004, 0.02)))                      # t = 2
+
+
+class ModelloFinale(unittest.TestCase):
+    def test_dal_json_al_modello_e_ai_valori(self):
+        net = R.Rete([R.N_FEATURE, 6, 1 + len(R.ORIZZONTI)], 3)
+        m = R.da_json({"rete": net.a_dizionario(7), "media": [0.0] * R.N_FEATURE, "dev": [1.0] * R.N_FEATURE, "margine": None,
+                       "fuori": True, "iterazione": 4})
+        self.assertTrue(math.isinf(m["margine"]))
+        self.assertTrue(m["fuori"])
+        M = mondo_casuale(giorni=12, seme=2)
+        k = int(R.griglia(M.n)[3])
+        Q, sig = R.valori_a(m, M, k)
+        self.assertEqual(Q.shape, (2, 1 + len(R.ORIZZONTI)))
+        X = R.caratteristiche(R.Pronto(M), np.array([k]))[:, 0, :]
+        np.testing.assert_allclose(Q, net.avanti(np.clip(X, -6, 6)) * R.ESCALA, atol=1e-5)
+        self.assertTrue(np.all(sig >= R.SIGMA_MIN))
+        self.assertTrue(np.all(R.politica(Q[None], m["margine"])[0] == 0))     # margine infinito: aspetta sempre
+
+    def test_il_modello_per_un_costo_che_non_c_e(self):
+        import json
+        import tempfile
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "m.json")
+            net = R.Rete([R.N_FEATURE, 4, 1 + len(R.ORIZZONTI)], 1)
+            blocco = {"rete": net.a_dizionario(), "media": [0.0] * R.N_FEATURE, "dev": [1.0] * R.N_FEATURE, "margine": 0.001, "fuori": False}
+            with open(p, "w") as fh:
+                json.dump({"modelli": {"0.002": blocco, "0.0005": blocco}}, fh)
+            self.assertEqual(R.carica_modello(None, p)[1], 0.002)               # il più alto
+            self.assertEqual(R.carica_modello(0.0005, p)[1], 0.0005)
+            with self.assertRaises(ValueError):
+                R.carica_modello(0.01, p)
+
+
+class Studio(unittest.TestCase):
+    """Tutto il percorso su dati finti e piccoli (poche iterazioni): addestramento, verifica a finestre, riassunto, modello."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.D = R.Dati(mondo_casuale(giorni=44, seme=7, monete=2))
+        cls.wins = R.finestre(cls.D, giorni_test=6, giorni_val=5, embargo=1, min_addestramento=8, max_finestre=2)
+
+    def test_finestre_in_ordine_e_senza_sovrapposizioni(self):
+        self.assertEqual(len(self.wins), 2)
+        for w in self.wins:
+            self.assertLessEqual(w["addestramento"][1], w["scelta"][0])
+            self.assertLessEqual(w["scelta"][1], w["test"][0])
+        self.assertLessEqual(self.wins[0]["test"][1], self.wins[1]["test"][0])
+
+    def test_valuta_costo_e_riassumi(self):
+        ris = R.valuta_costo(self.D, self.wins, 0.002, iterazioni=2, epoche=1)
+        self.assertEqual(set(ris["strategie"]), {"q", "previsione", "ribasso", "momento", "sempre_1g"})
+        for nome in ris["strategie"]:
+            self.assertEqual(len(ris["strategie"][nome]), 2)
+            st = R.riassumi(self.D, ris, nome)
+            self.assertEqual(st["giorni"], len(st["conto"]))
+            self.assertAlmostEqual(st["conto"][-1] if st["conto"] else 0.0, st["totale"], places=3)
+        self.assertEqual(len(ris["curve_q"]), 2)
+        self.assertEqual(len(ris["curve_q"][0]), 2)
+
+    def test_comprare_sempre_costa_i_costi_e_resta_fuori_non_costa_niente(self):
+        ris = R.valuta_costo(self.D, self.wins, 0.002, iterazioni=1, epoche=1)
+        sempre = R.riassumi(self.D, ris, "sempre_1g")
+        self.assertGreater(sempre["n"], 0)
+        self.assertGreater(sempre["esposizione"], 0.9)                           # sempre dentro
+        for nome in ("q", "previsione"):
+            st = R.riassumi(self.D, ris, nome)
+            if st["n"] == 0:
+                self.assertEqual(st["totale"], 0.0)
+
+    def test_modello_finale(self):
+        D = R.Dati(mondo_casuale(giorni=60, seme=8, monete=2))
+        m = R.modello_finale(D, 0.002, iterazioni=2)
+        self.assertIn("fuori", m)
+        self.assertEqual(m["rete"].dims[-1], 1 + len(R.ORIZZONTI))
+        if m["fuori"]:
+            self.assertTrue(math.isinf(m["margine"]))
+
+    def test_sovradattamento_ha_addestramento_e_test_per_ogni_finestra(self):
+        o = R.sovradattamento(self.D, self.wins, iterazioni=1)
+        self.assertEqual(len(o), len(self.wins))
+        for riga in o:
+            self.assertEqual(set(riga), {"addestramento", "test"})
+            self.assertGreaterEqual(riga["addestramento"]["n"], riga["test"]["n"] * 0)     # nessun errore, anche senza operazioni
+
+    def test_il_json_non_contiene_infiniti(self):
+        import json
+        pulito = R._pulisci({"margine": float("inf"), "n": np.int64(3), "x": np.array([1.0, np.nan]), "t": (1, 2.5)})
+        self.assertEqual(json.loads(json.dumps(pulito)), {"margine": None, "n": 3, "x": [1.0, None], "t": [1, 2.5]})
+
+    def test_incondizionato_e_informazione(self):
+        inc = R.incondizionato(self.D)
+        self.assertEqual([x["orizzonte"] for x in inc], list(R.ORIZZONTI))
+        info = R.ic_per_orizzonte(self.D, self.wins)
+        self.assertEqual(len(info["medio"]), len(R.ORIZZONTI))
+        self.assertEqual(len(info["quinti"][0]), 6)
+
+
+class MuroDeiCosti(unittest.TestCase):
+    def test_le_mosse_crescono_con_l_orizzonte_e_i_secondi_senza_scambi_si_contano(self):
+        rng = np.random.default_rng(0)
+        t = np.cumsum(rng.exponential(5.0, 40000)) + 1_700_000_000.0           # uno scambio ogni 5 secondi circa
+        p = 100 * np.exp(np.cumsum(rng.standard_normal(len(t)) * 0.0004))
+        dati = (t, p, np.ones(len(t)), np.ones(len(t), np.int8))
+        orig_g, orig_c = R.giorni_continui, R.carica_scambi
+        R.giorni_continui, R.carica_scambi = (lambda sym: ["2030-01-01"]), (lambda sym, g: dati)
+        try:
+            o = R.studio_orizzonti(simboli=("X-EUR",), giorni=1)
+        finally:
+            R.giorni_continui, R.carica_scambi = orig_g, orig_c
+        x = o["crypto"]["X-EUR"]
+        med = [r["mediana"] for r in x["per_orizzonte"]]
+        self.assertEqual(med, sorted(med))                                     # più tempo, più mossa
+        self.assertLess(x["secondi_con_scambi"], 0.3)                          # uno scambio ogni ~5 s: la maggior parte dei secondi è vuota
+        self.assertAlmostEqual(x["scambi_ora"], 3600 / 5.0, delta=60)
+        self.assertEqual(o["orizzonti"][0], 1)
+        self.assertEqual(x["per_orizzonte"][0]["oltre"], 0.0)                  # a un secondo non c'è una mossa che valga 0,4 %
+
+
 if __name__ == "__main__":
     unittest.main()

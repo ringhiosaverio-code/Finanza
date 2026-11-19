@@ -380,7 +380,7 @@ dopo i costi: è uno strumento per seguire un'idea, non una promessa di guadagno
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo e live, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete e rete_live, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

@@ -45,6 +45,19 @@ class Leggero(unittest.TestCase):
             self.assertEqual(d["mercati"], dati()["mercati"])                     # il resto è com'era
             self.assertEqual(d["aggiornato"], "2030-01-01 18:10")
 
+    def test_l_aggiornamento_leggero_porta_anche_i_risultati_nuovi_della_rete(self):
+        nuovo = {"crypto": {}, "ore": {"crypto": {}, "kraken": None}}
+        with tempfile.TemporaryDirectory() as t:
+            out = os.path.join(t, "app.html")
+            app.build(dati(rete={"costi": {"0.002": "vecchi"}}), out)
+            with mock.patch.object(app, "crypto_intraday", return_value=nuovo), \
+                    mock.patch.object(app, "rete_per_app", return_value={"costi": {"0.002": "nuovi"}}):
+                self.assertEqual(app.leggero(out, log=lambda x: None), 0)
+            self.assertEqual(app.dati_di(out)["rete"], {"costi": {"0.002": "nuovi"}})
+            with mock.patch.object(app, "crypto_intraday", return_value=nuovo), mock.patch.object(app, "rete_per_app", return_value=None):
+                self.assertEqual(app.leggero(out, log=lambda x: None), 0)         # senza file nuovo restano quelli di prima
+            self.assertEqual(app.dati_di(out)["rete"], {"costi": {"0.002": "nuovi"}})
+
     def test_se_le_crypto_non_arrivano_l_app_resta_com_era(self):
         with tempfile.TemporaryDirectory() as t:
             out = os.path.join(t, "app.html")
@@ -73,6 +86,22 @@ class Leggero(unittest.TestCase):
         self.assertEqual(r["varianti"], {"v": 1})
         self.assertEqual(r["ore"]["kraken"], {"giorni": 30})
         self.assertFalse(ore.call_args[1]["kraken"])                              # niente controllo su Kraken ogni ora
+
+
+class ReteNellApp(unittest.TestCase):
+    def test_i_pesi_non_finiscono_nell_app(self):
+        import json
+        with tempfile.TemporaryDirectory() as t:
+            with open(os.path.join(t, "rete_modello.json"), "w", encoding="utf-8") as fh:
+                json.dump({"costi": {"0.002": {}}, "modelli": {"0.002": {"fuori": True, "iterazione": 3, "rete": {"W": [[1]]},
+                                                                           "media": [0.0], "dev": [1.0]}}}, fh)
+            with mock.patch.object(app, "ROOT", t):
+                r = app.rete_per_app()
+        self.assertEqual(r["modelli"]["0.002"], {"fuori": True, "iterazione": 3})
+
+    def test_senza_risultati_non_c_e_la_sezione(self):
+        with tempfile.TemporaryDirectory() as t, mock.patch.object(app, "ROOT", t):
+            self.assertIsNone(app.rete_per_app())
 
 
 if __name__ == "__main__":

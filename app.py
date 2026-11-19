@@ -149,6 +149,20 @@ def crypto_intraday(log=print, leggero=None):
         return None
 
 
+def rete_per_app():
+    """I risultati della rete neurale (python3 rete.py --studia, in rete_modello.json) senza i pesi: servono alla
+    sezione Crypto dell'app. None se non sono mai stati calcolati."""
+    try:
+        with open(os.path.join(ROOT, "rete_modello.json"), encoding="utf-8") as fh:
+            r = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    for m in (r.get("modelli") or {}).values():
+        for k in ("rete", "media", "dev"):
+            m.pop(k, None)
+    return r
+
+
 def calendari():
     """I giorni di borsa dal 2024 al 2027 (NYSE e Borsa Italiana): servono all'app per contare la data
     di vendita di un titolo comprato in un giorno qualsiasi."""
@@ -206,6 +220,7 @@ def leggero(out, log=print):
         log("[app] dati crypto non disponibili: serve l'aggiornamento completo")
         return 1
     data["intraday"] = nuovo
+    data["rete"] = rete_per_app() or data.get("rete")                     # i risultati della rete, se sono stati rifatti
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
@@ -235,7 +250,7 @@ def main(argv=None):
         print("[app] nessun mercato disponibile")
         return 1
     data = {"mercati": mercati, "daytrade": day_trade(), "simula": simulazioni(mercati),
-            "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(),
+            "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
             "libri": load_json(os.path.join(ROOT, "libri.json")),
             "giornata": piano_giornata(),
