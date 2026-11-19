@@ -285,6 +285,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 }
 @media (max-width:420px){.opts.h .opt .d{display:none}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+.perche{margin:3px 0 4px;padding:6px 8px;border-left:3px solid var(--crit-ink);background:color-mix(in srgb,var(--crit-ink) 7%,transparent);border-radius:4px;line-height:1.45}
 </style>
 
 <header class="top">
@@ -1982,12 +1983,12 @@ function probHTML(c0, esperienza, unita) {
 }
 
 /* ---------------- le operazioni della rete nel robot (crypto e azioni italiane) ---------------- */
-function reteOpsHTML(RR, etichetta, cur = '€') {
+function reteOpsHTML(RR, etichetta, cur = '€', k = 'rete') {
   if (!RR) return '';
   const ora = s => new Date(s).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
   const stima = o => o.probabilita != null ? `, probabilità stimata ${p100(o.probabilita)}` : '';
   const aperte = (RR.aperte || []).map(o => `<li><b>${esc(tk(o.sym))}</b> comprata ${ora(o.t)} a ${nf(o.prezzo, dec(o.prezzo))} ${cur}${stima(o)}, tiene ${durataTesto(o.minuti)} (fino alle ${ora(o.scade)}), protezione ${nf(o.protezione, dec(o.protezione))} ${cur}</li>`).join('');
-  const chiuse = (RR.operazioni || []).slice(-8).reverse().map(o => `<li><b>${esc(tk(o.sym))}</b> ${ora(o.t)} → ${ora(o.t_uscita)}: ${nf(o.prezzo, dec(o.prezzo))} → ${nf(o.prezzo_uscita, dec(o.prezzo_uscita))} ${cur} <span class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</span> <span class="note">(${o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura della seduta' : 'fine della durata scelta'}${o.probabilita != null ? ', stimata ' + p100(o.probabilita) : ''})</span></li>`).join('');
+  const chiuse = (RR.operazioni || []).slice(-8).reverse().map(o => `<li><b>${esc(tk(o.sym))}</b> ${ora(o.t)} → ${ora(o.t_uscita)}: ${nf(o.prezzo, dec(o.prezzo))} → ${nf(o.prezzo_uscita, dec(o.prezzo_uscita))} ${cur} <span class="${o.r >= 0 ? 'pos' : 'neg'}">${pc(o.r, 2)}</span> <span class="note">(${o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura della seduta' : 'fine della durata scelta'}${o.probabilita != null ? ', stimata ' + p100(o.probabilita) : ''})</span>${o.r < 0 ? perchePerdita({azione: 'vende', r: o.r, s: k, nota: o.motivo === 'protezione' ? 'protezione' : o.motivo === 'chiusura' ? 'chiusura' : 'fine della durata'}) : ''}</li>`).join('');
   const tutte = RR.operazioni || [], media = tutte.length ? tutte.reduce((t, o) => t + o.r, 0) / tutte.length : 0;
   const vinte = tutte.filter(o => o.r > 0).length, stimate = tutte.filter(o => o.probabilita != null);
   const regola = RR.soglia != null
@@ -2022,7 +2023,7 @@ function reteAzioniHTML(m) {
     ${segnaliHTML(Rt.segnali, [['tutte', 'Tutte le sedute'], ['mese', 'Ultimo mese'], ['settimana', 'Ultima settimana'], ['giorno', 'Ultima seduta']], 'titolo', Rt.config.orizzonti)}
     ${usa ? '' : fontiHTML() + regoleLibriHTML('azioni')}
     ${probHTML(c0, Rt.esperienza, 'titolo')}
-    ${reteOpsHTML(RR, `La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "${usa ? 'Azioni USA' : 'Azioni italiane'}, rete neurale" e le chiude al più tardi in chiusura.`, usa ? '$' : '€')}
+    ${reteOpsHTML(RR, `La rete decide ogni 5 minuti durante la seduta, sulle barre di Yahoo; il robot rigioca le sue operazioni nel conto "${usa ? 'Azioni USA' : 'Azioni italiane'}, rete neurale" e le chiude al più tardi in chiusura.`, usa ? '$' : '€', 'rete_' + m)}
     <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 ${usa ? 'rete_usa' : 'rete_azioni'}.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;
 }
 
@@ -2224,6 +2225,22 @@ function potaStato(R) {                                                         
   const medio = Math.max(100, JSON.stringify(R.registro).length / R.registro.length);
   R.registro = R.registro.slice(Math.min(R.registro.length - 200, Math.ceil((n - ROBOT_MAX_BYTE) / medio) + 10));
   return true;
+}
+// perché il robot ha venduto in perdita invece di tenere: la regola di uscita di ogni strategia, spiegata
+function perchePerdita(e) {
+  if (e.azione !== 'vende' || e.r == null || e.r >= 0) return '';
+  const n = String(e.nota || ''), rete = !!RETI[e.s], azioni = e.s === 'rete_ita' || e.s === 'rete_usa';
+  const quanto = `Ha perso ${pc(-e.r, 2, false)}, costi compresi. `;
+  let perche;
+  if (n.includes('protezione')) perche = `Il prezzo è sceso fino alla <b>protezione</b> (lo stop-loss fissato al momento dell'acquisto). Tenere voleva dire lasciare aperta una perdita senza limite: la protezione la ferma a quella messa in conto prima di comprare (come nelle skill trader-exit e trader-risk, al massimo lo 0,5 % del capitale per operazione). Nelle verifiche, togliere la protezione non ha migliorato i risultati e ha reso le perdite peggiori molto più grandi.`;
+  else if (n.includes('fine della durata')) perche = `La rete aveva scelto <b>quanto tenere</b> al momento dell'acquisto: la durata in cui stimava più probabile chiudere in guadagno. Allo scadere vende sempre, anche in perdita, perché la sua previsione vale solo per quella durata: oltre non ha nessun segnale, e tenere di più sarebbe una scommessa che non è stata verificata.`;
+  else if (n.includes('chiusura') && (azioni || e.s === 'giornata')) perche = `${e.s === 'giornata' ? 'La regola Oops! (Larry Williams)' : 'La rete delle azioni'} compra e vende <b>nella stessa seduta</b>: alla chiusura vende sempre, così non resta niente aperto di notte. Di notte possono arrivare notizie e salti all'apertura che la regola non sa prevedere e su cui non è stata provata (la strategia "di notte" è stata provata a parte e ritirata). Entro la chiusura il prezzo non è risalito sopra l'entrata più i costi.`;
+  else if (n.includes('24 ore')) perche = `Gli ordini delle crypto valgono <b>24 ore</b>: passato il tempo senza toccare l'obiettivo si esce al prezzo di quel momento. La regola è stata verificata così; tenere di più sarebbe un'altra strategia, mai verificata, e lascerebbe i soldi fermi invece che pronti per le occasioni nuove.`;
+  else if (n.includes('fine sessione') || n.includes('fermata')) perche = `Hai <b>${n.includes('fermata') ? 'fermato la strategia' : 'chiuso la sessione'}</b>: il robot vende tutto quello che ha in mano al prezzo di quel momento, anche in perdita, così il conto si chiude senza posizioni aperte.`;
+  else if (n.includes('apertura')) perche = `La strategia di notte compra in chiusura e vende <b>all'apertura</b> del giorno dopo: l'apertura è stata più bassa della chiusura di ieri.`;
+  else if (rete) perche = `La posizione era scaduta da ore e i dati non la chiudevano più: il robot l'ha chiusa all'ultimo prezzo noto, per non tenerla oltre la durata scelta dalla rete.`;
+  else perche = `È scattata la regola di uscita della strategia (${esc(n)}).`;
+  return `<div class="perche note"><b>Perché ha venduto in perdita invece di tenere:</b> ${quanto}${perche}</div>`;
 }
 const chiaveOp = e => [e.t, e.s, e.sym, e.azione, e.prezzo, e.nota].join('|');     // riconosce un'operazione già vista
 const dataRoma = d => d.toLocaleDateString('sv-SE', {timeZone: 'Europe/Rome'});
@@ -2716,7 +2733,7 @@ function robotHTML() {
   const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
   const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['crypto', 'Crypto, ordini ogni ora'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
     <div class="seg" style="margin-top:6px" role="group" aria-label="Entrate o uscite">${[['tutte', 'Entrate e uscite'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([f, t]) => `<button type="button" data-v="${f}" aria-pressed="${robotVerso === f}">${t}</button>`).join('')}</div>`;
-  const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span></li>`).join('');
+  const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span>${perchePerdita(e)}</li>`).join('');
   const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>
     ${LIVE.fonte || SPETTATORE ? '' : '<p class="note" style="margin-top:4px">Per vederle in diretta: avvia <code>python3 live.py</code> sul computer e tieni aperta la pagina, oppure premi “Prezzi in tempo reale” nell’app desktop di Claude.</p>'}
     ${avvisi ? `<p style="margin-top:4px">${avvisi}</p>` : ''}
