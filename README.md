@@ -654,6 +654,24 @@ come giorni dal primo (ricostruite solo quando si apre il grafico di quel titolo
 nelle classifiche della rete; i formattatori di numeri e date si creano una volta sola. Su un telefono simulato con il
 processore 4 volte più lento si apre in circa 1,1 secondi invece di 1,4.
 
+## L'app sul telefono: installabile e anche senza rete (`pwa.py`)
+
+Sul sito GitHub (https://ringhiosaverio-code.github.io/Finanza/) l'app si installa come un'app vera: su iPhone, in
+Safari, Condividi e poi "Aggiungi alla schermata Home"; su Android, in Chrome, menu e poi "Installa app" (o il pulsante
+"Installa l'app" nella pagina Altro). Si apre a tutto schermo con la sua icona e funziona anche senza rete: un service
+worker tiene l'ultima copia della pagina, dei caratteri e dell'ultimo stato del robot letto; quando la rete c'è prende
+sempre la versione nuova (prima la rete, poi la copia).
+
+```bash
+python3 pwa.py                                         # rifà pwa/: icone (disegnate qui), manifest, service worker
+python3 pwa.py --installa site/index.html             # collegamenti a manifest e icone e larghezza del telefono
+```
+
+Il workflow del sito copia `pwa/` accanto alla pagina e lancia `--installa`. Il service worker si attiva solo sul sito
+GitHub (o con `?pwa=1` in prova), mai su claude.ai né nel motore del cloud. Con `--installa` la pagina riceve anche la
+larghezza del telefono (`<meta name="viewport">`), che su claude.ai mette la cornice dell'artefatto: senza, il telefono
+mostrava il sito largo 980 pixel e rimpicciolito.
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo
@@ -749,7 +767,7 @@ la leva fino a 20 volte, che moltiplica anche le perdite.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali e regole_libri, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali, regole_libri, bilanci e pwa, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 

@@ -2046,7 +2046,20 @@ function renderAltro() {
     <a class="card lk" href="#libri"><b>Dai libri di trading</b><span>Candele giapponesi, rotture, RSI, momenti di entrata: le regole dei libri più famosi provate sui prezzi veri. Quali reggono.</span></a>
     <a class="card lk" href="#metodo"><b>Come funziona</b><span>Il metodo, cosa è stato provato e scartato, i limiti.</span></a>
     <a class="card lk" href="#daytrade"><b>Esempio di day trade</b><span>La Macchina del Tempo su un'operazione in giornata (dati di prova).</span></a>
-  </div>`;
+  </div>
+  ${installaHTML()}`;
+  const b = $('#pwa-installa'); if (b) b.addEventListener('click', installaApp);
+}
+function installaHTML() {
+  const sito = 'https://ringhiosaverio-code.github.io/Finanza/';
+  if (INSTALLATA()) return `<div class="card"><h2>App installata</h2><p class="note" style="margin-top:6px">Stai usando l'app dalla schermata Home: si apre anche senza rete, con l'ultima copia salvata e l'ultimo stato del robot letto.</p></div>`;
+  return `<div class="card"><h2>Installa l'app sul telefono</h2>
+    <p class="note" style="margin-top:6px">Dal sito ${SU_PAGES ? '' : `<a href="${sito}" target="_blank" rel="noopener">${sito.replace('https://', '')}</a> `}l'app si mette sulla schermata Home con la sua icona, si apre a tutto schermo e funziona anche senza rete (con l'ultima copia salvata e l'ultimo stato del robot letto). Quando la rete c'è, prende sempre la versione nuova.</p>
+    <ul class="note" style="margin:8px 0 0 18px;padding:0">
+      <li><b>iPhone</b> (Safari): tocca Condividi <span aria-hidden="true">⬆︎</span>, poi <b>Aggiungi alla schermata Home</b>.</li>
+      <li><b>Android</b> (Chrome): menu <span aria-hidden="true">⋮</span>, poi <b>Installa app</b> (o <b>Aggiungi a schermata Home</b>).</li>
+    </ul>
+    <p style="margin-top:10px"><button type="button" class="more" id="pwa-installa" ${INSTALLA ? '' : 'hidden'}>Installa l'app</button></p></div>`;
 }
 
 /* ---------------- dai libri di trading ---------------- */
@@ -3490,6 +3503,20 @@ function liveInfoHTML() {
 // mette il suo stato nel ramo robot-stato del repository pubblico. La pagina lo rilegge ogni minuto: niente Claude, niente token.
 const STATO_GITHUB = 'https://api.github.com/repos/ringhiosaverio-code/Finanza/contents/robot.json?ref=robot-stato';
 const SU_PAGES = /\.github\.io$/.test(location.hostname);
+// l'app installabile sul telefono (solo sul sito GitHub, mai su claude.ai né nel motore): il service worker tiene una copia
+// della pagina e dell'ultimo stato del robot, così l'app si apre anche senza rete; con la rete prende sempre la versione nuova
+let INSTALLA = null;                                                             // la richiesta di installazione di Chrome/Android
+if ('serviceWorker' in navigator && !window.claude && (SU_PAGES || /[?&]pwa=1/.test(location.search))) {
+  addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); INSTALLA = e; const b = $('#pwa-installa'); if (b) b.hidden = false; });
+}
+const INSTALLATA = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+async function installaApp() {
+  if (!INSTALLA) return;
+  INSTALLA.prompt();
+  try { await INSTALLA.userChoice; } catch (e) {}
+  INSTALLA = null; const b = $('#pwa-installa'); if (b) b.hidden = true;
+}
 let DAL_GITHUB = false;                                                          // su claude.ai: il robot arriva da GitHub
 const STATO_RAW = 'https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/robot.json';
 async function caricaDaGitHub(fresco) {

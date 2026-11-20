@@ -36,6 +36,10 @@ jobs:
           mkdir -p site/app
           cp trader/app.html site/index.html
           cp trader/app.html site/app/index.html
+          # L'app installabile sul telefono: icone, manifest e service worker (si apre anche senza rete)
+          cp pwa/* site/
+          cp pwa/* site/app/
+          python3 pwa.py --installa site/index.html site/app/index.html
           touch site/.nojekyll
       - uses: actions/upload-pages-artifact@v3
         with:
