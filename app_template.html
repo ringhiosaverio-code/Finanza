@@ -1107,6 +1107,8 @@ function avvisiHTML() {
   return `<div class="card" id="avvisi"><h2>Gli avvisi sul telefono</h2>
     <p class="sub" style="margin-top:4px">Il motore nel cloud ti avvisa da solo, anche con l'app chiusa: subito per i conti del piano, della rete sugli ETF e sulle obbligazioni, di Faber e della tendenza crypto; per gli altri un riassunto ogni ora.</p>
     <ol class="note" style="margin:8px 0 0;padding-left:20px;line-height:1.6"><li>Installa l'app gratuita <b>ntfy</b> (App Store o Google Play).</li><li>Tocca <b>+</b> e iscriviti all'argomento <b>${esc(N.argomento)}</b> (server ntfy.sh).</li><li>Fatto: gli avvisi arrivano da soli.</li></ol>
+    <p class="note" style="margin-top:8px"><b>Ogni lunedì alle 8</b> arriva anche il resoconto della settimana: quanto ha fatto ogni conto del robot da lunedì a domenica, SWDA per confronto, le operazioni (quante in guadagno), il diario della rete dal vivo, il suo peso nel piano e le sue scelte.</p>
+    <p style="margin-top:8px"><button type="button" class="more" id="rs-adesso">Mandami il resoconto adesso</button> <span class="note" id="rs-esito" aria-live="polite"></span></p>
     <p class="note" style="margin-top:6px">Il servizio gratuito ha un limite di messaggi al giorno, condiviso con gli altri utenti del cloud: in qualche giorno gli avvisi possono non arrivare. Con un account ntfy personale gratuito il limite diventa tuo. Chi conosce il nome dell'argomento può leggere gli avvisi: non condividerlo.</p></div>`;
 }
 // il futuro: migliaia di futuri possibili ricampionando a blocchi le settimane vere del portafoglio (2021-2026)
@@ -1246,6 +1248,7 @@ function renderPiano() {
   const reteCr = reteTop(['crypto'], 3).map(o => `${esc(tk(o.sym))} ${p100(o.probabilita)}`).join(' · ');
   const vecchio = v.querySelector('#ob-euro'); if (vecchio) obiettivoSett = Number(vecchio.value) || obiettivoSett;
   v.innerHTML = `<div><h1>Il piano</h1><p class="sub" style="margin-top:4px">Lo studio che mette insieme tutto quello che l'app ha imparato: le reti neurali, le regole dei libri (Faber, Antonacci, Clenow), la tendenza dei fondi e i consigli di oggi. Si aggiorna da solo con i dati del ${esc((D.aggiornato || '').slice(0, 10))}. Probabilità del passato, non certezze; non è consulenza finanziaria.</p></div>
+  ${resocontoHTML()}
   <div class="card"><h2>Il mercato adesso</h2><ul class="note" style="margin:6px 0 0;padding-left:18px">${stato.map(x => `<li>${x}</li>`).join('')}</ul></div>
   <div class="card"><h2>Come guadagnare, per orizzonte</h2>${orizzonti}</div>
   ${portafoglioHTML()}
@@ -1277,6 +1280,39 @@ function renderPiano() {
   ['fu-cap', 'fu-mese', 'fu-anni'].forEach(id => { const e = v.querySelector('#' + id); if (e) e.addEventListener('change', () => {
     futuroSt = {cap: Number(v.querySelector('#fu-cap').value) || 0, mese: Number(v.querySelector('#fu-mese').value) || 0, anni: Math.min(40, Math.max(1, Number(v.querySelector('#fu-anni').value) || 1))};
     const t = v.querySelector('#fu-righe'); if (t) t.innerHTML = futuroRighe(); }); });
+  const rs = v.querySelector('#rs-adesso'); if (rs) rs.addEventListener('click', resocontoAdesso);
+}
+// l'ultimo resoconto della settimana (ogni lunedì alle 8): il motore lo scrive nel ramo robot-stato, così si legge qui
+// anche quando l'avviso sul telefono non arriva (limite di ntfy)
+let RESOCONTO = null;
+function resocontoHTML() {
+  const R = RESOCONTO;
+  if (!R || !R.testo) return '<div id="resoconto" hidden></div>';
+  const quando = new Date(R.quando);
+  return `<div class="card" id="resoconto"><h2>${esc(R.titolo || 'Resoconto della settimana')}</h2>
+    <p class="note" style="margin-top:4px">${isNaN(quando) ? '' : 'Scritto ' + esc(quando.toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'})) + ' · '}${R.mandato ? 'arrivato anche sul telefono' : 'non arrivato sul telefono (ntfy ha rifiutato: limite di messaggi)'}</p>
+    <p style="margin-top:8px;white-space:pre-line;font-size:.95rem;line-height:1.55">${esc(R.testo)}</p></div>`;
+}
+async function caricaResoconto() {
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/resoconto.json?t=' + Math.floor(Date.now() / 600e3), {cache: 'no-store'});
+    if (!r.ok) return;
+    const v = await r.json();
+    if (!v || !v.testo || (RESOCONTO && RESOCONTO.quando === v.quando)) return;
+    RESOCONTO = v;
+    const c = $('#resoconto'); if (c) c.outerHTML = resocontoHTML();
+  } catch (e) {}
+}
+// il resoconto della settimana subito sul telefono: lo chiede al motore nel cloud con ntfy, come il "Ricomincia da capo"
+async function resocontoAdesso() {
+  const N = D.notifiche, e = $('#rs-esito'), b = $('#rs-adesso');
+  if (!N || !N.argomento) return;
+  if (b) b.disabled = true;
+  try {
+    const r = await fetch('https://ntfy.sh/' + N.argomento + '-comandi', {method: 'POST', body: JSON.stringify({resoconto: 1, quando: new Date().toISOString()})});
+    if (e) e.textContent = r.ok ? 'Chiesto: arriva sul telefono entro un paio di minuti (se il motore nel cloud è acceso).' : 'ntfy non ha risposto: riprova tra poco.';
+  } catch (x) { if (e) e.textContent = 'Da qui non si può: prova dal sito o dall\'app su claude.ai.'; }
+  setTimeout(() => { if (b) b.disabled = false; }, 30e3);
 }
 
 function renderOggi() {
@@ -3536,6 +3572,7 @@ async function caricaDaGitHub(fresco) {
 async function avviaLive() {
   const bm = $('#rb-motore'); if (bm && !bm.dataset.ok) { bm.dataset.ok = 1; bm.addEventListener('click', aggiornaDalMotore); }
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
+  if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) { caricaResoconto(); setInterval(caricaResoconto, 1800e3); }   // il resoconto del lunedì
   // su claude.ai: se la pagina può leggere GitHub, segue il motore nel cloud ogni minuto (senza token); se no, il suo archivio
   if (window.claude && !MOTORE_PAGINA) {
     const prima = ROBOT;

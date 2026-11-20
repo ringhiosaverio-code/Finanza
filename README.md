@@ -672,6 +672,22 @@ GitHub (o con `?pwa=1` in prova), mai su claude.ai né nel motore del cloud. Con
 larghezza del telefono (`<meta name="viewport">`), che su claude.ai mette la cornice dell'artefatto: senza, il telefono
 mostrava il sito largo 980 pixel e rimpicciolito.
 
+## Il resoconto del lunedì
+
+Ogni lunedì dalle 8 (ora italiana) il motore nel cloud (`pubblica_stato.py`) manda sul telefono, con ntfy, il resoconto
+della settimana appena finita (da lunedì a domenica): il valore di ogni conto del robot e quanto ha fatto rispetto alla
+chiusura della settimana prima (o al capitale, se è ripartito durante la settimana), SWDA per confronto, il conto
+migliore e il peggiore, le operazioni e quante vendite in guadagno, il diario della rete dal vivo con il suo peso nel
+piano e le sue scelte. Lo scrive anche in `trader/resoconto.json`, che va nel ramo `robot-stato`: l'app lo mostra in
+cima alla pagina Il piano anche quando l'avviso non arriva (il servizio gratuito di ntfy ha un limite di messaggi al
+giorno, condiviso con gli altri utenti del cloud; se non parte riprova ogni mezz'ora). Il pulsante "Mandami il
+resoconto adesso" (Il piano, Gli avvisi sul telefono) lo chiede subito al motore.
+
+```bash
+python3 pubblica_stato.py --resoconto             # lo scrive, senza mandarlo
+python3 pubblica_stato.py --resoconto --manda     # e lo manda subito
+```
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo
@@ -767,7 +783,7 @@ la leva fino a 20 volte, che moltiplica anche le perdite.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali, regole_libri, bilanci e pwa, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali, regole_libri, bilanci, pwa e resoconto, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 
