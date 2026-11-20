@@ -204,8 +204,8 @@ class Campioni:
 # cosa impara la rete. "assoluto": chiudere in guadagno dopo i costi. "relativo": fare meglio della metà degli altri titoli
 # nella stessa settimana (Gu, Kelly e Xiu, "Empirical Asset Pricing via Machine Learning", Review of Financial Studies
 # 2020: le reti sanno ordinare i titoli tra loro molto meglio che indovinare dove va tutto il mercato)
-OBIETTIVO = "relativo"
-INSIEME = 5                                            # reti con semi diversi, nella media (gli errori del caso si compensano)
+OBIETTIVO = "assoluto"                                  # il confronto (rete_lungo.py --confronta) non ha trovato di meglio
+INSIEME = 1                                            # più reti nella media: nel confronto non ha aiutato
 
 
 def bersagli(C, obiettivo=None):
