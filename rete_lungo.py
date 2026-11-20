@@ -30,6 +30,7 @@ import time
 import numpy as np
 
 import rete
+import bilanci
 import segnali
 import settimana
 import simula
@@ -59,9 +60,14 @@ MONDO = [("sp500", "^GSPC", "America/New_York", (16, 0)), ("vix", "^VIX", "Ameri
          ("eurusd", "EURUSD=X", "Europe/London", (23, 0))]
 NOMI_MONDO = ["sp500_mese", "sp500_media200", "ftsemib_mese", "vix_livello", "vix_mese", "tassi_mese", "curva_tassi",
               "dollaro_mese", "petrolio_mese", "oro_mese", "credito_mese", "eurusd_mese"]
+BILANCI = True                                         # i bilanci delle aziende USA dalla SEC (bilanci.py)
 NOMI_FEATURE = (["g_" + n for n in segnali.NOMI_GIORNALIERI] + ["trimestre"] + ["cat_" + c for c in CATEGORIE]
-                + NOMI_MONDO + list(segnali.NOMI_SENTIMENTO))
+                + NOMI_MONDO + list(segnali.NOMI_SENTIMENTO) + ["b_" + n for n in bilanci.NOMI_BILANCI])
 FONTI = {
+    "b_utili_prezzo": "bilancio: utili sul valore di borsa, il fattore value (Fama e French 1992)", "b_roe": "bilancio: redditività del patrimonio, il fattore quality (Novy-Marx 2013)",
+    "b_margine": "bilancio: margine di utile (Asness, Frazzini e Pedersen, Quality minus junk)", "b_crescita_ricavi": "bilancio: crescita dei ricavi in un anno",
+    "b_debito": "bilancio: passività sulle attività (Asness, Frazzini e Pedersen)", "b_crescita_dividendi": "bilancio: crescita del dividendo in un anno",
+    "b_ha_bilanci": "bilancio: azienda USA con i conti alla SEC",
     "g_anno": "momento di un anno (Jegadeesh e Titman 1993; Moskowitz, Ooi e Pedersen 2012)", "g_mese": "inversione di un mese (Jegadeesh 1990)",
     "g_settimana": "inversione di una settimana (Lehmann 1990)", "g_media200": "sopra o sotto la media di 200 giorni (Faber 2007)",
     "g_max52": "vicinanza al massimo di 52 settimane (George e Hwang 2004)", "g_vol_mese": "volatilità bassa (Ang e altri 2006)",
@@ -188,8 +194,9 @@ class Campioni:
             sent = segnali.sentimento_per_giorno([gg[i] for i in righe], fg)
             onehot = np.zeros(len(CATEGORIE), np.float32)
             onehot[CATEGORIE.index(m)] = 1.0
+            B = bilanci.per_titolo(s, gg, c) if (BILANCI and m == "usa") else np.zeros((n, len(bilanci.NOMI_BILANCI)), np.float32)
             for k, i in enumerate(righe):
-                x = np.concatenate([T[i], [np.clip(tri[i], -8, 8)], onehot, mondo[k], sent[k]]).astype(np.float32)
+                x = np.concatenate([T[i], [np.clip(tri[i], -8, 8)], onehot, mondo[k], sent[k], B[i]]).astype(np.float32)
                 rr, ok = np.zeros(len(ORIZZONTI)), np.zeros(len(ORIZZONTI), bool)
                 for j, H in enumerate(ORIZZONTI):
                     e = int(np.searchsorted(ordin, ordin[i] + H))

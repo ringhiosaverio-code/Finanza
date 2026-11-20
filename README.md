@@ -591,6 +591,15 @@ di area quotati a Milano. Con 5 reti nella media (una sola dipendeva troppo dal 
 due partenze diverse), sugli anni mai visti: tutti i titoli a una settimana +0,38 % contro +0,14 % (t 3,4); le 3 scelte
 settimanali tra 40 ETF +0,53 % contro +0,16 % (t 4,4); il piano con la rete +15,8 % l'anno, Sharpe 1,56, calo -14,3 %.
 
+## I bilanci delle aziende nella rete: `bilanci.py`
+
+Per le azioni USA la rete del medio periodo vede anche il bilancio, dai dati XBRL della SEC (data.sec.gov, con un nome
+generico, senza dati personali): utili sul valore di borsa (value), redditività del patrimonio e margine (quality),
+crescita dei ricavi, passività sulle attività, crescita del dividendo. Ogni numero conta solo dal giorno in cui è stato
+depositato alla SEC. Il codice SEC di ogni titolo si trova confrontando i nomi e confermando con il ticker (165 su 171).
+Con la stessa verifica: azioni USA a un mese +1,35 % contro +1,15 % senza bilanci (la media fa +1,24 %); nel resto
+nessuna differenza oltre il caso. Il piano con la rete: +15,4 % l'anno, Sharpe 1,56, calo massimo -12,8 %.
+
 ## Il portafoglio con la rete neurale: `portafoglio.py`
 
 Le strategie che hanno funzionato messe insieme, settimana per settimana, con i costi, dal 2021 al 2026: anni che la rete
