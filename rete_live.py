@@ -178,6 +178,30 @@ MARGINE_ROBOT = 0.001                                      # il robot dell'app l
 GIORNI_ROBOT = 3                                           # giorni di decisioni rigiocate a ogni aggiornamento dell'app
 
 
+_STORIA = {}
+
+
+def storia_robot(giorni):
+    """Gli scambi delle 30 crypto per il robot, caricati una volta ogni 2 minuti (la rete e gli ordini sui segnali li usano entrambi)."""
+    if _STORIA.get("giorni") == giorni and time.time() - _STORIA.get("quando", 0) < 120:
+        return _STORIA["storia"]
+    storia = Storia(rete_dati.COPPIE_ROBOT, giorni=giorni + 8)
+    storia.carica(log=lambda m: None)
+    _STORIA.update(giorni=giorni, quando=time.time(), storia=storia)
+    return storia
+
+
+def robot_segnali(giorni=GIORNI_ROBOT, log=print):
+    """Per il robot dell'app: gli ordini sui segnali (rete.rigioca_segnali) negli ultimi `giorni` giorni, sulle 30 crypto."""
+    storia = storia_robot(giorni)
+    M, k = storia.mondo()
+    chiuse, aperte = rete.rigioca_segnali(M, k - giorni * 1440, k + 1, rete.COSTO)
+    log("[rete_live] ordini sui segnali per il robot: %d operazioni chiuse, %d aperte in %d giorni" % (len(chiuse), len(aperte), giorni))
+    return {"generato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), "costo": rete.COSTO,
+            "giorni": giorni, "segnali": list(rete.SEGNALI_ROBOT), "operazioni": chiuse, "aperte": aperte,
+            "prezzi": {s: round(float(storia.p[s][-1]), 8) for s in storia.simboli if len(storia.p[s])}}
+
+
 def robot_crypto(giorni=GIORNI_ROBOT, margine=MARGINE_ROBOT, log=print):
     """Per il robot dell'app: le operazioni che la rete fa decidendo ogni minuto negli ultimi `giorni` giorni, sugli
     scambi di Kraken fino a adesso, e le posizioni ancora aperte. Sceglie la rete della probabilità di guadagno (compra
@@ -188,8 +212,7 @@ def robot_crypto(giorni=GIORNI_ROBOT, margine=MARGINE_ROBOT, log=print):
         (modello, costo), usato = sel, None
     else:                                                  # se manca: il Q-learning con il margine imposto
         (modello, costo), usato = rete.carica_modello(rete.COSTO), margine
-    storia = Storia(rete_dati.COPPIE_ROBOT, giorni=giorni + 8)   # 30 crypto; 7 giorni e un'ora di storia per le caratteristiche
-    storia.carica(log=lambda m: None)
+    storia = storia_robot(giorni)                          # 30 crypto; 7 giorni e un'ora di storia per le caratteristiche
     M, k = storia.mondo()
     chiuse, aperte, vantaggio = rete.rigioca(modello, M, k - giorni * 1440, k + 1, usato, costo, quota_minima=QUOTA_MINIMA, quota_ora=QUOTA_ORA,
                                              orizzonte_max=ORIZZONTE_MAX, per_crypto=PER_CRYPTO, distanza=DISTANZA)

@@ -217,6 +217,16 @@ def rete_usa_robot_app(log=print):
         return None
 
 
+def segnali_robot_app(log=print):
+    """Gli ordini sui segnali delle 30 crypto per il robot (rete_live.robot_segnali), o None."""
+    try:
+        import rete_live
+        return rete_live.robot_segnali(log=log)
+    except Exception as e:
+        log("[app] ordini sui segnali saltati: %s" % str(e)[:160])
+        return None
+
+
 def rete_lungo_app(log=print):
     """La rete del medio e lungo periodo (python3 rete_lungo.py), o None."""
     try:
@@ -322,6 +332,7 @@ def leggero(out, log=print):
     data["rete_usa"] = rete_usa_app(log) or data.get("rete_usa")          # la rete delle azioni USA
     data["rete_usa_robot"] = rete_usa_robot_app(log) or data.get("rete_usa_robot")
     data["rete_lungo"] = rete_lungo_app(log) or data.get("rete_lungo")    # medio e lungo periodo
+    data["segnali_robot"] = segnali_robot_app(log) or data.get("segnali_robot")   # crypto: ordini sui segnali
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
@@ -354,6 +365,7 @@ def main(argv=None):
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
             "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(), "rete_lungo": rete_lungo_app(),
+            "segnali_robot": segnali_robot_app(),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),

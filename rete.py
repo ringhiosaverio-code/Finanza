@@ -37,6 +37,7 @@ import math
 import os
 import sys
 import time
+import types
 
 import numpy as np
 
@@ -1627,6 +1628,71 @@ def scelte_modello(modello, X, margine=None, orizzonti_ok=None):
     return politica(Q, modello["margine"] if margine is None else margine), Q[..., 1:].max(axis=-1) - Q[..., 0]
 
 
+def _rigioca_operazioni(M, K, az, punteggio, voce, sig, costo=COSTO, slip=SLIP_STOP, per_crypto=1, distanza=0, nomi=None):
+    """Rigioca le azioni az (crypto x istanti K: 0 aspetta, altrimenti orizzonte + 1) sugli scambi: si entra
+    all'apertura del minuto, la protezione scatta sui minimi (eseguita un po' peggio), si esce all'apertura del minuto
+    in cui finisce l'orizzonte. Fino a `per_crypto` posizioni insieme per crypto, a `distanza` minuti l'una dall'altra.
+    nomi: (crypto x istanti) il nome del segnale di ogni operazione, se c'è. Ritorna (chiuse, aperte)."""
+    iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    chiuse, aperte = [], []
+    for c, sym in enumerate(M.simboli):
+        attive, ultimo = [], -10 ** 9                          # fine delle posizioni aperte su questa crypto, ultimo ingresso
+        for i in np.flatnonzero(az[c] > 0):
+            k = int(K[i])
+            attive = [e for e in attive if e > k]
+            if len(attive) >= per_crypto or k - ultimo < distanza:
+                continue
+            h = ORIZZONTI[int(az[c, i]) - 1]
+            entrata = float(M.o[c, k])
+            stop = entrata * (1.0 - min(K_STOP * float(sig[c, i]) * math.sqrt(h / 60.0), 0.9))
+            fine = k + h
+            tocca = np.flatnonzero(M.l[c, k:min(fine, M.n)] <= stop)
+            op = {**({"segnale": str(nomi[c, i])} if nomi is not None else {}), "sym": sym, "t": iso(k), "prezzo": round(entrata, 8), "minuti": int(h), "protezione": round(stop, 8),
+                  "scade": iso(fine), voce: round(float(punteggio[c, i]), 6)}
+            if len(tocca):
+                kk = k + int(tocca[0])
+                uscita, t_usc, motivo = min(stop, float(M.o[c, kk])) * (1.0 - slip), kk + 1, "protezione"
+            elif fine <= M.n - 1:
+                uscita, t_usc, motivo = float(M.o[c, fine]), fine, "scadenza"
+            else:
+                aperte.append(op)                              # aperta: occupa un posto finché non si chiude
+                attive.append(float("inf"))
+                ultimo = k
+                continue
+            op.update({"t_uscita": iso(t_usc), "prezzo_uscita": round(uscita, 8), "motivo": motivo,
+                       "r": round((1.0 - costo) ** 2 * uscita / entrata - 1.0, 6)})
+            chiuse.append(op)
+            attive.append(t_usc)
+            ultimo = k
+    chiuse.sort(key=lambda o: o["t"])
+    return chiuse, aperte
+
+
+# gli ordini sui segnali: a ogni minuto, su ogni crypto, il primo segnale della ricerca che scatta (in quest'ordine)
+SEGNALI_ROBOT = ("williams", "flusso", "btc_guida", "ribasso", "prima_mezzora", "paura", "momento")
+
+
+def rigioca_segnali(M, k_da, k_a, costo=COSTO, slip=SLIP_STOP, per_crypto=3, distanza=5, nomi=SEGNALI_ROBOT):
+    """Le operazioni degli ordini sui segnali: ogni minuto in [k_da, k_a), per ogni crypto, se scatta un segnale della
+    ricerca (rottura di Williams, flusso degli ordini, Bitcoin che guida, ribasso a 4 ore, prima mezz'ora, paura
+    estrema, momento) si compra e si tiene la durata di quel segnale. Fino a `per_crypto` posizioni insieme per crypto,
+    a `distanza` minuti l'una dall'altra. Ritorna (chiuse, aperte)."""
+    P = Pronto(M)
+    K = np.arange(max(k_da, AVVIO), k_a)
+    if len(K) == 0:
+        return [], []
+    X = caratteristiche(P, K)
+    sig = sigma_ora(P, K)
+    D = types.SimpleNamespace(X=X, M=M, K=K)
+    az = np.zeros(X.shape[:2], dtype=int)
+    quale = np.full(X.shape[:2], "", dtype=object)
+    for nome in nomi:
+        a = az_regola(D, 0, len(K), nome)
+        m = (az == 0) & (a > 0)
+        az[m], quale[m] = a[m], nome
+    return _rigioca_operazioni(M, K, az, np.ones(az.shape, np.float32), "forza", sig, costo, slip, per_crypto, distanza, quale)
+
+
 def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, ogni=1, quota_minima=None, quota_ora=None,
             orizzonte_max=None, per_crypto=1, distanza=0):
     """Le operazioni che il modello fa decidendo ogni `ogni` minuti in [k_da, k_a), una posizione alla volta per crypto,
@@ -1655,38 +1721,7 @@ def rigioca(modello, M, k_da, k_a, margine=None, costo=COSTO, slip=SLIP_STOP, og
                 S[m] = np.minimum(S[m], float(np.quantile(vantaggio[:, m], 1.0 - quota_ora)))
         tutte, _ = scelte_modello(modello, X, 0.0, ok)
         az = np.where(vantaggio >= S[None, :], tutte, 0)
-    iso = lambda k: datetime.datetime.fromtimestamp(M.t0 + 60.0 * k, datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    chiuse, aperte = [], []
-    for c, sym in enumerate(M.simboli):
-        attive, ultimo = [], -10 ** 9                          # fine delle posizioni aperte su questa crypto, ultimo ingresso
-        for i in np.flatnonzero(az[c] > 0):
-            k = int(K[i])
-            attive = [e for e in attive if e > k]
-            if len(attive) >= per_crypto or k - ultimo < distanza:
-                continue
-            h = ORIZZONTI[int(az[c, i]) - 1]
-            entrata = float(M.o[c, k])
-            stop = entrata * (1.0 - min(K_STOP * float(sig[c, i]) * math.sqrt(h / 60.0), 0.9))
-            fine = k + h
-            tocca = np.flatnonzero(M.l[c, k:min(fine, M.n)] <= stop)
-            op = {"sym": sym, "t": iso(k), "prezzo": round(entrata, 8), "minuti": int(h), "protezione": round(stop, 8),
-                  "scade": iso(fine), _VOCE[modello.get("tipo")]: round(float(vantaggio[c, i]), 6)}
-            if len(tocca):
-                kk = k + int(tocca[0])
-                uscita, t_usc, motivo = min(stop, float(M.o[c, kk])) * (1.0 - slip), kk + 1, "protezione"
-            elif fine <= M.n - 1:
-                uscita, t_usc, motivo = float(M.o[c, fine]), fine, "scadenza"
-            else:
-                aperte.append(op)                              # aperta: occupa un posto finché non si chiude
-                attive.append(float("inf"))
-                ultimo = k
-                continue
-            op.update({"t_uscita": iso(t_usc), "prezzo_uscita": round(uscita, 8), "motivo": motivo,
-                       "r": round((1.0 - costo) ** 2 * uscita / entrata - 1.0, 6)})
-            chiuse.append(op)
-            attive.append(t_usc)
-            ultimo = k
-    chiuse.sort(key=lambda o: o["t"])
+    chiuse, aperte = _rigioca_operazioni(M, K, az, vantaggio, _VOCE[modello.get("tipo")], sig, costo, slip, per_crypto, distanza)
     return chiuse, aperte, {sym: round(float(vantaggio[c, -1]), 6) for c, sym in enumerate(M.simboli)}
 
 
