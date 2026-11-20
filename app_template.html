@@ -1065,6 +1065,81 @@ function probSim(sym) {                                                         
   const h = s.orizzonti.find(o => o.giorni === s.hold); if (!h) return null;
   const p = h.scenari.prudente; return {p: p.p_gain, p10: p.p10, oriz: h.orizzonte};
 }
+// il diario della rete dal vivo: le scelte di ogni lunedì e com'è andata davvero la settimana dopo (rete_lungo.py)
+function diarioReteHTML() {
+  const G = D.diario_rete; if (!G || !G.voci || !G.voci.length) return '';
+  const fatte = G.voci.filter(x => x.esito != null);
+  const media = a => a.length ? a.reduce((t, x) => t + x, 0) / a.length : null;
+  const mR = media(fatte.map(x => x.esito)), mT = media(fatte.map(x => x.tutti).filter(x => x != null)), vinte = fatte.filter(x => x.tutti != null && x.esito > x.tutti).length;
+  const righe = G.voci.slice(-12).reverse().map(x => `<tr><td class="l">${esc(x.giorno)}</td><td class="l">${x.scelte.map(s => esc(tk(s))).join(', ')}</td><td class="${x.esito == null ? '' : x.esito >= 0 ? 'pos' : 'neg'}">${x.esito == null ? '<span class="note">in corso</span>' : pc(x.esito, 2)}</td><td>${x.tutti == null ? '–' : pc(x.tutti, 2)}</td></tr>`).join('');
+  return `<div class="card" id="diario-rete"><h2>La rete dal vivo: com'è andata davvero</h2>
+    <p class="sub" style="margin-top:4px">Ogni lunedì la rete sceglie 3 ETF; una settimana dopo si guarda il risultato vero, contro la media di tutti gli ETF. È la prova più onesta: dati che nessuno poteva conoscere quando la rete ha scelto.</p>
+    ${fatte.length ? `<p class="note" style="margin-top:6px"><b>Finora:</b> ${fatte.length} settimane chiuse, in media ${pc(mR, 2)} a settimana contro ${mT != null ? pc(mT, 2) : '–'} della media; meglio della media in ${vinte} su ${fatte.length}. ${fatte.length < 20 ? 'Servono almeno 20-30 settimane per dire qualcosa.' : ''}</p>` : '<p class="note" style="margin-top:6px">Il diario è appena cominciato: il primo risultato arriva tra una settimana.</p>'}
+    <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Settimana dal</th><th class="l">Scelte</th><th>Risultato</th><th>Media ETF</th></tr></thead><tbody>${righe}</tbody></table></div></div>`;
+}
+// gli avvisi sul telefono: il motore nel cloud li manda con ntfy (gratis, senza Claude e senza token)
+function avvisiHTML() {
+  const N = D.notifiche; if (!N || !N.argomento) return '';
+  return `<div class="card" id="avvisi"><h2>Gli avvisi sul telefono</h2>
+    <p class="sub" style="margin-top:4px">Il motore nel cloud ti avvisa da solo, anche con l'app chiusa: subito per i conti del piano, della rete sugli ETF e sulle obbligazioni, di Faber e della tendenza crypto; per gli altri un riassunto ogni ora.</p>
+    <ol class="note" style="margin:8px 0 0;padding-left:20px;line-height:1.6"><li>Installa l'app gratuita <b>ntfy</b> (App Store o Google Play).</li><li>Tocca <b>+</b> e iscriviti all'argomento <b>${esc(N.argomento)}</b> (server ntfy.sh).</li><li>Fatto: gli avvisi arrivano da soli.</li></ol>
+    <p class="note" style="margin-top:6px">Il servizio gratuito ha un limite di messaggi al giorno, condiviso con gli altri utenti del cloud: in qualche giorno gli avvisi possono non arrivare. Con un account ntfy personale gratuito il limite diventa tuo. Chi conosce il nome dell'argomento può leggere gli avvisi: non condividerlo.</p></div>`;
+}
+// il futuro: migliaia di futuri possibili ricampionando a blocchi le settimane vere del portafoglio (2021-2026)
+let futuroSt = {cap: 1000, mese: 100, anni: 10};
+function futuroCalcola(serie, cap, mese, anni, n = 1500) {
+  const W = Math.round(anni * 52), fine = [];
+  let seme = 12345; const caso = () => { seme = (seme * 1103515245 + 12345) % 2147483648; return seme / 2147483648; };
+  for (let k = 0; k < n; k++) {
+    let v = cap;
+    for (let w = 0; w < W;) {
+      const i = Math.floor(caso() * (serie.length - 4));
+      for (let b = 0; b < 4 && w < W; b++, w++) { v = v * (1 + serie[i + b]); if (Math.floor((w + 1) * 12 / 52) > Math.floor(w * 12 / 52)) v += mese; }
+    }
+    fine.push(v);
+  }
+  fine.sort((a, b) => a - b);
+  const q = x => fine[Math.floor(x * (fine.length - 1))];
+  return {p10: q(0.1), p50: q(0.5), p90: q(0.9), versato: cap + mese * 12 * anni};
+}
+function futuroRighe() {
+  const P = D.portafoglio && D.portafoglio.combinazioni; if (!P) return '';
+  const {cap, mese, anni} = futuroSt;
+  return [['piano_rete', 'Il piano con la rete'], ['solo_mondo', 'Solo SWDA'], ['classico_80_20', 'Il classico 80/20']].filter(([k]) => P[k] && P[k].settimane).map(([k, n]) => {
+    const r = futuroCalcola(P[k].settimane, cap, mese, anni);
+    return `<tr><td class="l"><b>${n}</b></td><td class="neg">${nf(Math.round(r.p10 / 10) * 10, 0)} €</td><td><b>${nf(Math.round(r.p50 / 10) * 10, 0)} €</b></td><td class="pos">${nf(Math.round(r.p90 / 10) * 10, 0)} €</td></tr>`; }).join('') +
+    `<tr><td class="l"><b>Versato in tutto</b></td><td colspan="3">${nf(cap + mese * 12 * anni, 0)} €</td></tr>`;
+}
+function futuroHTML() {
+  const P = D.portafoglio && D.portafoglio.combinazioni; if (!P || !P.piano_rete || !P.piano_rete.settimane) return '';
+  const inp = (id, et, v, step) => `<label class="f" for="${id}">${et}<input id="${id}" type="number" min="0" step="${step}" value="${v}" inputmode="numeric"></label>`;
+  return `<div class="card" id="futuro"><h2>Dove puoi arrivare</h2>
+    <p class="sub" style="margin-top:4px">Migliaia di futuri possibili, costruiti rimescolando a blocchi di un mese le settimane vere del portafoglio dal ${esc(D.portafoglio.da)}: il caso sfortunato (1 su 10 va peggio), quello medio e quello fortunato (1 su 10 va meglio). Tasse escluse.</p>
+    <div class="acct" style="margin-top:10px">${inp('fu-cap', 'Capitale iniziale (€)', futuroSt.cap, 100)}${inp('fu-mese', 'Ogni mese (€)', futuroSt.mese, 50)}${inp('fu-anni', 'Anni', futuroSt.anni, 1)}</div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Portafoglio</th><th>Sfortunato</th><th>Medio</th><th>Fortunato</th></tr></thead><tbody id="fu-righe">${futuroRighe()}</tbody></table></div>
+    <p class="note" style="margin-top:6px">Sei anni di storia non contengono tutti i crolli possibili: il caso sfortunato vero può essere peggiore. Non è una promessa.</p></div>`;
+}
+// il tuo portafoglio vero contro il piano: cosa comprare e vendere, con le tasse stimate
+function pianoMioHTML() {
+  const w = pesiPiano(); if (!w) return '';
+  const pos = (PF && PF.posizioni) || [];
+  if (!pos.length) return `<div class="card" id="piano-mio"><h2>Il tuo portafoglio e il piano</h2><p class="sub" style="margin-top:4px">Scrivi quello che possiedi in <a href="#portafoglio" style="color:var(--accent)">Il mio portafoglio</a>: qui l'app ti dirà cosa comprare e cosa vendere per seguire il piano di questa settimana, con le tasse stimate.</p></div>`;
+  const val = {}, carico = {};
+  for (const p of pos) { const s = SIM[p.sym]; if (!s) continue; const pz = s.prezzo * fx(s); val[p.sym] = (val[p.sym] || 0) + p.qty * pz; carico[p.sym] = (carico[p.sym] || 0) + p.qty * p.prezzo * fx(s); }
+  const tot = Object.values(val).reduce((t, x) => t + x, 0); if (!tot) return '';
+  const tutti = new Set([...Object.keys(val), ...Object.keys(w.pesi)]);
+  let tasse = 0;
+  const righe = [...tutti].map(sym => { const ora = val[sym] || 0, voluto = (w.pesi[sym] || 0) * tot, diff = voluto - ora;
+    if (Math.abs(diff) < Math.max(0.005 * tot, 10)) return null;
+    let t = 0; if (diff < 0 && carico[sym]) { const guad = (ora - carico[sym]) * (-diff / ora); const s = SIM[sym] || {};
+      t = guad > 0 ? guad * (s.categoria === 'bond' && /govt|gov|btp|treasury|gilt/i.test(s.name || '') ? 0.125 : 0.26) : 0; tasse += t; }
+    return {sym, diff, t}; }).filter(Boolean).sort((a, b) => a.diff - b.diff);
+  const lista = righe.map(r => `<tr><td class="l"><b>${esc(tk(r.sym))}</b> <span class="note">${esc(((SIM[r.sym] || {}).name || '').slice(0, 28))}</span></td><td class="${r.diff > 0 ? 'pos' : 'neg'}"><b>${r.diff > 0 ? 'compra' : 'vendi'} ${nf(Math.abs(r.diff), 0)} €</b></td><td>${r.t ? '≈ ' + nf(r.t, 0) + ' €' : '–'}</td></tr>`).join('');
+  return `<div class="card" id="piano-mio"><h2>Il tuo portafoglio e il piano</h2>
+    <p class="sub" style="margin-top:4px">Il tuo portafoglio vale circa ${eur(tot)} (ai prezzi dell'ultimo aggiornamento). Per seguire il piano di questa settimana (dal ${esc(w.giorno)}):</p>
+    ${lista ? `<div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Titolo</th><th>Cosa fare</th><th>Tasse stimate</th></tr></thead><tbody>${lista}</tbody></table></div>
+    <p class="note" style="margin-top:6px">Tasse stimate sulle vendite in guadagno: ${eur(tasse)} (26 %, 12,5 % sui titoli di Stato; le minusvalenze passate e le regole degli ETF possono cambiarle: chiedi a un commercialista). Se le tasse sono alte rispetto al vantaggio, conviene spostarsi verso il piano solo con i soldi nuovi.</p>` : '<p class="note" style="margin-top:6px">Sei già allineato al piano: niente da fare.</p>'}</div>`;
+}
 // il calcolatore dell'obiettivo: quanto capitale serve per guadagnare X euro a settimana, al netto delle tasse
 let obiettivoSett = 300;
 function obiettivoRighe(euro) {
@@ -1138,7 +1213,11 @@ function renderPiano() {
   <div class="card"><h2>Il mercato adesso</h2><ul class="note" style="margin:6px 0 0;padding-left:18px">${stato.map(x => `<li>${x}</li>`).join('')}</ul></div>
   <div class="card"><h2>Come guadagnare, per orizzonte</h2>${orizzonti}</div>
   ${portafoglioHTML()}
+  ${pianoMioHTML()}
+  ${futuroHTML()}
   ${obiettivoHTML()}
+  ${diarioReteHTML()}
+  ${avvisiHTML()}
   <div class="card"><h2>Le occasioni di oggi</h2>
     <h3 style="margin-top:6px">ETF</h3><div class="scroll"><table><thead><tr><th class="l">I migliori per le regole</th><th>Probabilità di guadagno</th><th class="l">Anche scelto da</th></tr></thead><tbody>${etf}</tbody></table></div>
     <h3 style="margin-top:14px">Obbligazioni <span class="note">· dalle più sicure</span></h3><div class="scroll"><table><thead><tr><th class="l">ETF obbligazionario</th><th>Cedola</th><th>Probabilità di guadagno</th><th class="l">Segnali</th></tr></thead><tbody>${bond}</tbody></table></div>
@@ -1158,6 +1237,9 @@ function renderPiano() {
   const ob = v.querySelector('#ob-euro');
   if (ob) ob.addEventListener('input', () => { obiettivoSett = Math.max(0, Number(ob.value) || 0); const t = v.querySelector('#ob-righe');
     if (t) t.innerHTML = obiettivoRighe(obiettivoSett).map(r => `<tr><td class="l" style="white-space:normal"><b>${esc(r.nome)}</b><br><span class="note">${esc(r.nota)} · rendimento usato ${pc(r.annuo, 1)} l'anno</span></td><td><b>${r.cap ? nf(Math.round(r.cap / 100) * 100, 0) + ' €' : '–'}</b></td><td>${r.oscilla ? '± ' + nf(Math.round(r.oscilla / 10) * 10, 0) + ' €' : '–'}</td></tr>`).join(''); });
+  ['fu-cap', 'fu-mese', 'fu-anni'].forEach(id => { const e = v.querySelector('#' + id); if (e) e.addEventListener('change', () => {
+    futuroSt = {cap: Number(v.querySelector('#fu-cap').value) || 0, mese: Number(v.querySelector('#fu-mese').value) || 0, anni: Math.min(40, Math.max(1, Number(v.querySelector('#fu-anni').value) || 1))};
+    const t = v.querySelector('#fu-righe'); if (t) t.innerHTML = futuroRighe(); }); });
 }
 
 function renderOggi() {
@@ -1592,6 +1674,7 @@ function renderCrypto() {
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
       return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b> <span class="note">a ${esc(h.orizzonte)}</span></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
   ${cryptoTendenzaHTML()}
+  ${carryHTML()}
   ${cryptoLungoHTML()}
   ${reteLungoHTML('crypto')}
   ${reteHTML()}
@@ -1604,6 +1687,14 @@ function renderCrypto() {
 }
 
 /* ---------------- crypto: medio e lungo termine (crypto_lungo.py e gli studi) ---------------- */
+function carryHTML() {
+  const K = D.carry_crypto; if (!K || !K.crypto) return '';
+  const righe = Object.entries(K.crypto).map(([n, x]) => `<tr><td class="l"><b>${esc(n)}</b></td><td class="${x.sempre.annuo >= 0 ? 'pos' : 'neg'}">${pc(x.sempre.annuo, 1)}</td><td class="${x.regola.annuo >= 0 ? 'pos' : 'neg'}">${pc(x.regola.annuo, 1)}<br><span class="note">dentro il ${p100(x.regola.dentro)} del tempo</span></td><td class="${x.oggi_annuo >= 0 ? 'pos' : 'neg'}">${pc(x.oggi_annuo, 1)}</td></tr>`).join('');
+  return `<div class="card" id="crypto-carry"><h2>Il carry delle crypto: comprare e vendere il futures insieme</h2>
+    <p class="sub" style="margin-top:4px">Si compra la crypto e si vende lo stesso importo del suo contratto perpetuo su Kraken: i movimenti del prezzo si annullano e si incassa il "funding" che pagano i compratori dei futures (Schmeling, Schrimpf e Todorov, "Crypto carry", Banca dei Regolamenti Internazionali). Un anno di dati orari, costi di ${pc(K.costo * 2, 1, false)} tra entrata e uscita.</p>
+    <div class="verdetto v-no" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">✕</span><div><b>Quest'anno non conviene</b><p>Su Bitcoin ed Ethereum il carry ha reso circa il 3 % l'anno, quanto un conto deposito ma con il rischio della piattaforma; sulle altre crypto zero o in perdita, e oggi il funding è negativo quasi ovunque. Negli anni di euforia può superare il 40 %: l'app lo ricalcola e lo vedrai qui.</p></div></div></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Crypto</th><th>Sempre dentro, l'anno</th><th>Con la regola dei 7 giorni</th><th>Oggi, all'anno</th></tr></thead><tbody>${righe}</tbody></table></div></div>`;
+}
 function cryptoTendenzaHTML() {
   const T = D.crypto_tendenza; if (!T || !T.strategie) return '';
   const NOMI = {tendenza_vol: 'Tendenza con volatilità obiettivo (come i fondi)', tendenza: 'Tendenza, senza volatilità obiettivo', tutte_uguali: 'Tutte le crypto in parti uguali', solo_bitcoin: 'Solo Bitcoin'};
@@ -2297,7 +2388,8 @@ $('#all-list').innerHTML = SIM_LIST.map(s => `<option value="${esc((s.isin ? s.i
 // A pagina chiusa le operazioni si rifanno con i prezzi ufficiali (aste, massimi e minimi del giorno) e le
 // candele orarie delle crypto; con le quotazioni in tempo reale succedono dal vivo. Quello che è
 // registrato non cambia e non si conta due volte. Lo stesso codice gira nel cloud (robot_cloud.js).
-const ROBOT_CAPITALE = 10000, ROBOT_PIANI = 36, ROBOT_COSTO_CRYPTO = 0.002, TOBIN = 0.001;
+let ROBOT_CAPITALE = 10000;                                                      // il capitale di ogni strategia: si sceglie quando si ricomincia da capo
+const ROBOT_PIANI = 36, ROBOT_COSTO_CRYPTO = 0.002, TOBIN = 0.001;
 // Azioni: solo durante la seduta del loro mercato, mai di notte. Crypto: 24 ore su 24 (esercitazione: le verifiche corrette perdono).
 const STRATEGIE = {
   giornata: {nome: 'Azioni in seduta (Oops!)', breve: 'Azioni', stato: 'esercitazione', chip: 'bassa'},
@@ -2399,7 +2491,8 @@ function robotNuovo(inizio, costo, scelte) {
   const ora = new Date().toISOString();
   return {versione: 2, id: Math.random().toString(36).slice(2, 10), rev: 0, inizio, dal: inizio + 'T00:00:00.000Z', costo, conti, registro: [], storico: [], sessione: {aperta: true, da: ora, chiusa: null}};
 }
-function robotMigra(v) {                                                          // dal robot della prima versione
+function robotMigra(v) {
+  if (v && v.capitale) ROBOT_CAPITALE = v.capitale;                                                          // dal robot della prima versione
   if (v && v.versione === 2 && v.conti && v.conti.crypto && !v.crypto_ripresa) {          // le crypto erano state ritirate per qualche ora: tornano, come esercitazione
     v.crypto_ripresa = 1;
     if (v.sessione && v.sessione.aperta) v.conti.crypto.attiva = true;
@@ -2924,27 +3017,36 @@ function robotSalva() {
 const MOTORE_PAGINA = /[?&]motore=1/.test(location.search);
 let SPETTATORE = false;
 // "Ricomincia da capo": un robot nuovo, tutte le strategie attive, che investe solo da adesso; vecchie operazioni cancellate
-function robotDaCapo(quando, costo, rev) {
+function robotDaCapo(quando, costo, rev, capitale) {
+  ROBOT_CAPITALE = capitale || ROBOT_CAPITALE || 10000;
   const scelte = {}; Object.keys(STRATEGIE).forEach(k => { if (!STRATEGIE[k].ritirata) scelte[k] = true; });
   const R = robotNuovo(quando.slice(0, 10), costo || 0.0002, scelte);
-  R.dal = quando; R.reset = quando; R.rev = rev || 0;
+  R.dal = quando; R.reset = quando; R.rev = rev || 0; R.capitale = ROBOT_CAPITALE;
   Object.values(R.conti).forEach(c => { c.dal = quando; });
   return R;
 }
+function capitaleScelto() { const e = $('#rb-capitale'); return Number(e && e.value) || ROBOT_CAPITALE || 10000; }
 async function ricominciaDaCapo() {
   const esito = t => { const e = $('#rb-reset-esito'); if (e) e.textContent = t; };
   const ora = new Date().toISOString();
   if (!SPETTATORE) {                                                              // il robot gira qui: si ricomincia subito
-    ROBOT = robotDaCapo(ora, ROBOT && ROBOT.costo, (ROBOT && ROBOT.rev || 0) + 1);
+    ROBOT = robotDaCapo(ora, ROBOT && ROBOT.costo, (ROBOT && ROBOT.rev || 0) + 1, capitaleScelto());
     robotGiro(); robotSalva(); aggiornaRobot(); aggiornaTicker();
-    avviso('Ricominciato da capo: 10.000 € per ogni strategia, da adesso.');
+    avviso(`Ricominciato da capo: ${nf(ROBOT_CAPITALE, 0)} € per ogni strategia, da adesso.`);
     return;
   }
-  esito('Chiedo al motore nel cloud di ricominciare…');                          // lo fa il motore: glielo chiede il cloud
+  esito('Chiedo al motore nel cloud di ricominciare…');                          // lo fa il motore: glielo chiede l'app con ntfy (gratis)
+  const N = D.notifiche;
+  if (N && N.argomento) {
+    try {
+      const r = await fetch('https://ntfy.sh/' + N.argomento + '-comandi', {method: 'POST', body: JSON.stringify({reset: capitaleScelto(), quando: ora})});
+      if (r.ok) { esito('Fatto: entro un paio di minuti il motore ricomincia da capo con ' + nf(capitaleScelto(), 0) + ' € per strategia.'); return; }
+    } catch (e) {}
+  }
   try {
     const mcp = window.claude && claude.use ? await claude.use('mcp') : null;
     if (!mcp) { esito('Da qui non si può: tocca "Ricomincia da capo" nell\'app su claude.ai.'); return; }
-    await mcp.callTool(CCR, 'fire_trigger', {trigger_id: MOTORE_COMPITO, text: 'RESET DEL ROBOT: richiesto con il pulsante "Ricomincia da capo" alle ' + ora + '. Esegui solo `python3 reset_robot.py` nella cartella del progetto e rispondi in una riga.'}, {cache: false});
+    await mcp.callTool(CCR, 'fire_trigger', {trigger_id: MOTORE_COMPITO, text: 'RESET DEL ROBOT: richiesto con il pulsante "Ricomincia da capo" alle ' + ora + ', capitale ' + capitaleScelto() + ' euro per strategia. Esegui solo `python3 reset_robot.py --capitale ' + capitaleScelto() + '` nella cartella del progetto e rispondi in una riga.'}, {cache: false});
     esito('Fatto: entro un paio di minuti il motore ricomincia da capo e le operazioni vecchie spariscono.');
   } catch (e) { esito('Il cloud non ha risposto: riprova tra poco.'); }
 }
@@ -2953,7 +3055,7 @@ async function sincronizzaRobot() {
     const r = await fetch('/robot', {cache: 'no-store'}); if (!r.ok) return;
     const v = await r.json();
     if (v && v.reset_richiesto && (!ROBOT || ROBOT.reset !== v.reset_richiesto) && MOTORE_PAGINA) {   // reset chiesto dal cloud
-      ROBOT = robotDaCapo(v.reset_richiesto, v.costo, (v.rev || 0) + 1);
+      ROBOT = robotDaCapo(v.reset_richiesto, v.costo, (v.rev || 0) + 1, v.reset_capitale);
       robotGiro(); robotSalva(); aggiornaRobot(); aggiornaTicker();
       return;
     }
@@ -3027,7 +3129,8 @@ function robotHTML() {
     <div class="tiles" style="margin-top:10px">${usati.map(tile).join('')}</div>
     ${feed}
     <h3 style="margin-top:14px">Posizioni aperte adesso</h3>${tabPos}
-    <p style="margin-top:12px"><button type="button" class="more" id="rb-reset">↺ Ricomincia da capo</button> <span class="note" id="rb-reset-esito">Cancella le operazioni vecchie e riparte da 10.000 € per ogni strategia, investendo solo da adesso.</span></p>
+    <p style="margin-top:12px"><label class="f" for="rb-capitale" style="display:inline-flex;gap:6px;align-items:center">Capitale per strategia <select id="rb-capitale">${[1000, 5000, 10000, 50000].map(c => `<option value="${c}"${c === ROBOT_CAPITALE ? ' selected' : ''}>${nf(c, 0)} €</option>`).join('')}</select></label>
+    <button type="button" class="more" id="rb-reset">↺ Ricomincia da capo</button> <span class="note" id="rb-reset-esito">Cancella le operazioni vecchie e riparte con il capitale scelto per ogni strategia, investendo solo da adesso.</span></p>
     ${aperta ? `<p style="margin-top:12px"><button type="button" class="more" id="rb-termina">Termina la sessione</button></p>
       <p class="note" style="margin-top:4px">Terminando: crypto e azioni in giornata si vendono subito al prezzo di adesso; i piani in attesa si annullano. Poi il robot si ferma.</p>`
     : `<h3 style="margin-top:14px">Nuova sessione</h3>${robotModulo(false)}<p style="margin-top:12px"><button type="button" class="go" id="rb-riprendi">Inizia la sessione</button></p>`}

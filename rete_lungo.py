@@ -402,6 +402,44 @@ def pesi_robot(o, scelte, giorno, categorie=None, orizzonte="7"):
     return {"giorno": lunedi, "pesi": {x["sym"]: round(1.0 / scelte, 4) for x in lista[:scelte]}}
 
 
+DIARIO = os.path.join(ROOT, "diario_rete.json")
+
+
+def aggiorna_diario(scelta, C, percorso=None):
+    """Il diario della rete dal vivo: le scelte sugli ETF di ogni lunedì con i prezzi di entrata, e una settimana dopo
+    il risultato vero (media delle scelte) contro la media di tutti gli ETF e dell'oro. Solo dati arrivati dopo la scelta."""
+    percorso = percorso or DIARIO
+    try:
+        with open(percorso, encoding="utf-8") as fh:
+            G = json.load(fh)
+    except (OSError, ValueError):
+        G = {"voci": []}
+    prezzi = {u[0]: u[3] for u in C.ultimi if u[1] in ("etf", "oro")}
+    oggi = datetime.date.fromisoformat(max(u[2] for u in C.ultimi if u[1] in ("etf", "oro"))) if C.ultimi else datetime.date.today()
+    ultima = max((datetime.date.fromisoformat(v["giorno"]) for v in G["voci"]), default=None)
+    if ultima is None or (oggi - ultima).days >= 7:                             # una voce a settimana, con i prezzi del giorno della scelta
+        G["voci"].append({"giorno": oggi.isoformat(), "scelte": list(scelta["pesi"]), "prezzi": prezzi, "esito": None, "tutti": None})
+    for v in G["voci"]:
+        if v["esito"] is not None or (oggi - datetime.date.fromisoformat(v["giorno"])).days < 7:
+            continue
+        fine = (datetime.date.fromisoformat(v["giorno"]) + datetime.timedelta(days=7)).isoformat()
+        r = {}
+        for s, p0 in v["prezzi"].items():
+            if not p0:
+                continue
+            gg, o, h, l, c = segnali.giornaliere(s, "Europe/Rome", (17, 35))
+            k = next((i for i, g in enumerate(gg) if g >= fine), None)
+            if k is not None:
+                r[s] = float(c[k]) / p0 * (1 - COSTO["etf"]) - 1
+        sc = [r[s] for s in v["scelte"] if s in r]
+        if sc and len(r) >= 5:
+            v["esito"], v["tutti"] = float(np.mean(sc)), float(np.mean(list(r.values())))
+    G["voci"] = G["voci"][-104:]
+    with open(percorso, "w", encoding="utf-8") as fh:
+        json.dump(G, fh, separators=(",", ":"))
+    return G
+
+
 def studia(log=print, salva=True, sezione=None):
     t0 = time.time()
     S = SEZIONI.get(sezione) or {}
@@ -426,6 +464,8 @@ def studia(log=print, salva=True, sezione=None):
         ris["robot"] = pesi_robot(ris["oggi"], S["scelte"], ris["dati"]["a"])
     else:                                                                       # la rete generale sceglie anche dentro ETF e obbligazioni
         ris["robot_sezioni"] = {k: pesi_robot(ris["oggi"], v["scelte"], ris["dati"]["a"], v["categorie"]) for k, v in SEZIONI.items()}
+        if salva:
+            aggiorna_diario(ris["robot_sezioni"]["etf"], C)
     ris["durata_minuti"] = round((time.time() - t0) / 60, 1)
     if salva:
         with open(uscita, "w", encoding="utf-8") as fh:

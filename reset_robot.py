@@ -3,7 +3,7 @@
 del motore applica entro pochi secondi (un robot nuovo, tutte le strategie attive, che investe solo da adesso; le
 operazioni vecchie spariscono). Lo usa il pulsante "Ricomincia da capo" dell'app.
 
-    python3 reset_robot.py
+    python3 reset_robot.py [--capitale 1000]
 """
 import datetime
 import json
@@ -14,14 +14,18 @@ SERVER = "http://127.0.0.1:8770/robot"
 
 
 def main():
+    capitale = 10000
+    if "--capitale" in sys.argv:
+        capitale = int(float(sys.argv[sys.argv.index("--capitale") + 1]))
     with urllib.request.urlopen(SERVER, timeout=10) as r:
         v = json.load(r)
     ora = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z")
     v["reset_richiesto"] = ora
+    v["reset_capitale"] = capitale
     v["rev"] = int(v.get("rev") or 0) + 1000                        # più alto di qualunque salvataggio nel frattempo
     req = urllib.request.Request(SERVER, data=json.dumps(v).encode(), headers={"Content-Type": "application/json"}, method="POST")
     urllib.request.urlopen(req, timeout=10).read()
-    print("reset chiesto al motore alle %s" % ora)
+    print("reset chiesto al motore alle %s, %d euro per strategia" % (ora, capitale))
     return 0
 
 

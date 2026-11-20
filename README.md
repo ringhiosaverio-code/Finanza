@@ -596,6 +596,17 @@ ruotate ogni settimana). Il robot segue il piano nel conto "Il piano con la rete
 python3 portafoglio.py     # i pezzi, la rete fuori campione e le combinazioni: portafoglio.json (mezzo minuto)
 ```
 
+## Le altre funzioni del piano
+
+Nella pagina "Il piano": il **calcolatore dell'obiettivo** (quanto capitale serve per guadagnare una cifra a settimana,
+al netto delle tasse, e quanto oscilla), **il tuo portafoglio e il piano** (cosa comprare e vendere per seguire il piano
+della settimana, con le tasse stimate), **dove puoi arrivare** (migliaia di futuri dal ricampionamento a blocchi delle
+settimane vere del portafoglio), **la rete dal vivo** (`diario_rete.json`: le scelte di ogni settimana e il risultato
+vero una settimana dopo) e **gli avvisi sul telefono** con ntfy (`notifiche.json`: subito i conti del piano, ogni ora un
+riassunto degli altri). Il robot si può far ripartire con 1.000, 5.000, 10.000 o 50.000 € per strategia; il comando
+arriva al motore anche dal sito GitHub, con ntfy. `carry_crypto.py` misura il carry delle crypto sui futures di Kraken:
+quest'anno circa il 3 % su Bitcoin ed Ethereum, zero o in perdita sulle altre.
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo

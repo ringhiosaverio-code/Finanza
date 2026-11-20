@@ -356,6 +356,9 @@ def leggero(out, log=print):
     data["crypto_tendenza"] = tendenza_app(log) or data.get("crypto_tendenza")    # crypto: tendenza come i fondi
     data["strategie_lungo"] = strategie_lungo_app(log) or data.get("strategie_lungo")   # ETF e azioni: le regole dei libri
     data["portafoglio"] = load_json(os.path.join(ROOT, "portafoglio.json")) or data.get("portafoglio")   # il portafoglio con la rete
+    data["notifiche"] = load_json(os.path.join(ROOT, "notifiche.json")) or data.get("notifiche")       # l'argomento degli avvisi ntfy
+    data["diario_rete"] = load_json(os.path.join(ROOT, "diario_rete.json")) or data.get("diario_rete")   # la rete dal vivo
+    data["carry_crypto"] = load_json(os.path.join(ROOT, "carry_crypto.json")) or data.get("carry_crypto")  # il carry delle crypto
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
@@ -388,7 +391,7 @@ def main(argv=None):
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
             "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(), "rete_lungo": rete_lungo_app(),
-            "segnali_robot": segnali_robot_app(), "crypto_tendenza": tendenza_app(), "strategie_lungo": strategie_lungo_app(), "portafoglio": load_json(os.path.join(ROOT, "portafoglio.json")),
+            "segnali_robot": segnali_robot_app(), "crypto_tendenza": tendenza_app(), "strategie_lungo": strategie_lungo_app(), "portafoglio": load_json(os.path.join(ROOT, "portafoglio.json")), "notifiche": load_json(os.path.join(ROOT, "notifiche.json")), "diario_rete": load_json(os.path.join(ROOT, "diario_rete.json")), "carry_crypto": load_json(os.path.join(ROOT, "carry_crypto.json")),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),

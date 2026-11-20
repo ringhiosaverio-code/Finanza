@@ -137,6 +137,8 @@ def studia(log=print, salva=True):
         r = combina(pezzi, pesi, comuni, vol)
         ris["combinazioni"][k] = {"nome": nome, "pesi": pesi, "vol_obiettivo": vol, "tutto": misure(r),
                                   "prima_meta": misure(r[:meta]), "seconda_meta": misure(r[meta:])}
+        if k in ("piano_rete", "solo_mondo", "classico_80_20"):                 # per il simulatore del futuro nell'app
+            ris["combinazioni"][k]["settimane"] = [round(float(x), 5) for x in r]
         m, s2 = ris["combinazioni"][k]["tutto"], ris["combinazioni"][k]["seconda_meta"]
         log("   %-16s annuo %+6.1f %% · volatilità %5.1f %% · Sharpe %.2f · calo %6.1f %% · seconda metà %+5.1f %% (Sharpe %.2f, calo %5.1f %%)" % (
             k, 100 * m["annuo"], 100 * m["volatilita"], m["sharpe"], 100 * m["calo_massimo"], 100 * s2["annuo"], s2["sharpe"], 100 * s2["calo_massimo"]))

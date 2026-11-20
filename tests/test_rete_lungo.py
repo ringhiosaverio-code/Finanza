@@ -82,5 +82,19 @@ class ObiettivoRelativo(unittest.TestCase):
         self.assertGreater(L.auc(P[:, 1], (C.R[5000:, 1] > 0).astype(int)), 0.6)
 
 
+class Diario(unittest.TestCase):
+    def test_una_voce_a_settimana_con_i_prezzi_del_giorno_della_scelta(self):
+        import tempfile
+        C = types.SimpleNamespace(ultimi=[("E1", "etf", "2030-01-07", 10.0, None), ("E2", "etf", "2030-01-07", 20.0, None)])
+        with tempfile.TemporaryDirectory() as t:
+            p = os.path.join(t, "d.json")
+            G = L.aggiorna_diario({"giorno": "2030-01-07", "pesi": {"E1": 0.5}}, C, p)
+            G = L.aggiorna_diario({"giorno": "2030-01-07", "pesi": {"E2": 0.5}}, C, p)      # stessa settimana: niente voce nuova
+        self.assertEqual(len(G["voci"]), 1)
+        self.assertEqual(G["voci"][0]["scelte"], ["E1"])
+        self.assertEqual(G["voci"][0]["prezzi"], {"E1": 10.0, "E2": 20.0})
+        self.assertIsNone(G["voci"][0]["esito"])
+
+
 if __name__ == "__main__":
     unittest.main()
