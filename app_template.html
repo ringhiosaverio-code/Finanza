@@ -1849,7 +1849,14 @@ function epurataHTML() {
     return `<tr><td class="l"><b>${esc(L.nomi_orizzonti[j])}</b></td><td>${m(a)}</td><td>${m(b)}</td></tr>`; };
   return `<h3 style="margin-top:14px">La prova più severa: cross-validation epurata</h3>
     <p class="note" style="margin-top:2px">Il tempo dal ${esc(E.con_bilanci.orizzonti['7'].per_blocco[0].da)} a oggi diviso in ${E.con_bilanci.blocchi} pezzi: ogni pezzo è stimato da una rete che non lo ha mai visto, togliendo dall'addestramento i dati che lo toccano e ${E.con_bilanci.embargo} giorni dopo (López de Prado, "Advances in Financial Machine Learning", capitolo 7). Così ogni settimana dal primo all'ultimo anno conta, non solo gli ultimi anni.</p>
-    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Durata</th><th>Senza bilanci</th><th>Con i bilanci delle aziende USA</th></tr></thead><tbody>${L.orizzonti.map((h, j) => riga(String(h), j)).join('')}</tbody></table></div>`;
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Durata</th><th>Senza bilanci</th><th>Con i bilanci delle aziende USA</th></tr></thead><tbody>${L.orizzonti.map((h, j) => riga(String(h), j)).join('')}</tbody></table></div>${calendarioHTML(E)}`;
+}
+// il calendario dei conti (sorpresa degli utili), provato con la stessa verifica epurata
+function calendarioHTML(E) {
+  const a = E.senza_calendario && E.senza_calendario.orizzonti['7'], b = E.con_calendario && E.con_calendario.orizzonti['7'];
+  if (!a || !b) return '';
+  const aiuta = b.tutti.scelte.media - b.tutti.tutti.media > a.tutti.scelte.media - a.tutti.tutti.media && b.tutti.t > a.tutti.t;
+  return `<p class="note" style="margin-top:8px"><b>Il calendario dei conti</b> (la sorpresa degli utili dell'ultimo trimestre e quanto è recente il bilancio, la "deriva dopo gli utili" di Bernard e Thomas): provato con la stessa prova. A una settimana le scelte fanno ${pc(b.tutti.scelte.media, 2)} contro ${pc(b.tutti.tutti.media, 2)} della media (t ${nf(b.tutti.t, 1)}), senza ${pc(a.tutti.scelte.media, 2)} (t ${nf(a.tutti.t, 1)}): ${aiuta ? 'aiuta, ed è acceso.' : 'non aiuta, quindi resta spento.'}</p>`;
 }
 function reteLungoHTML(solo) {
   const L = D.rete_lungo; if (!L || !L.verifica || !L.verifica.orizzonti) return '';

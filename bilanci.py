@@ -20,6 +20,7 @@ La SEC chiede ai programmi di presentarsi: qui si usa un nome generico, senza da
 Solo la libreria standard e numpy. Non è consulenza finanziaria.
 """
 
+import bisect
 import datetime
 import json
 import os
@@ -33,7 +34,14 @@ import numpy as np
 ROOT = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(ROOT, "trader", "cache", "sec")
 UA = "Finanza ricerca"
-NOMI_BILANCI = ("utili_prezzo", "roe", "margine", "crescita_ricavi", "debito", "crescita_dividendi", "ha_bilanci")
+NOMI_BILANCI = ("utili_prezzo", "roe", "margine", "crescita_ricavi", "debito", "crescita_dividendi", "ha_bilanci",
+                "sorpresa_utili", "bilancio_fresco")
+# il calendario dei conti: la sorpresa degli utili dell'ultimo trimestre (contro lo stesso trimestre dell'anno prima) e
+# quanto è fresco l'ultimo bilancio depositato. Dopo i conti il prezzo continua per settimane nella direzione della
+# sorpresa ("post-earnings announcement drift", Bernard e Thomas 1989). False: le due colonne restano a zero.
+# Provato con la cross-validation epurata (python3 rete_lungo.py --epurata-calendario, 20 novembre 2026): a 1 settimana
+# +0,30 % sulla media con il calendario contro +0,34 % senza (t 2,4 contro 3,2), a 1 e 3 mesi uguale. Non aiuta: spento.
+CALENDARIO = False
 RICAVI = ("Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax", "SalesRevenueNet",
           "RevenueFromContractWithCustomerIncludingAssessedTax")
 CONCETTI = {"utile": ("NetIncomeLoss",), "ricavi": RICAVI, "patrimonio": ("StockholdersEquity",), "passivita": ("Liabilities",),
@@ -163,6 +171,30 @@ def _annui(righe):
     return sorted(out)
 
 
+def _trimestri(righe):
+    """Gli utili di un trimestre (dai 10-Q, 80-100 giorni): [(filed, end, val, accn)] ordinati per deposito."""
+    out = []
+    for filed, start, end, val, form, accn in righe:
+        if start and form.startswith("10-Q") and 80 <= (datetime.date.fromisoformat(end) - datetime.date.fromisoformat(start)).days <= 100:
+            out.append((filed, end, val, accn))
+    return sorted(out)
+
+
+def sorprese(righe):
+    """Per ogni deposito di un 10-Q: (data di deposito, sorpresa), con la sorpresa = utile del trimestre contro lo stesso
+    trimestre dell'anno prima nello stesso bilancio, tra -1 e +1. Solo dati noti quel giorno."""
+    T = _trimestri(righe)
+    out = []
+    for accn in sorted({x[3] for x in T}):
+        q = [x for x in T if x[3] == accn]
+        ultimo = max(q, key=lambda x: x[1])
+        e = datetime.date.fromisoformat(ultimo[1])
+        prima = [x for x in q if 330 <= (e - datetime.date.fromisoformat(x[1])).days <= 400]
+        if prima and prima[0][2] != 0:
+            out.append((ultimo[0], float(np.clip((ultimo[2] - prima[0][2]) / abs(prima[0][2]), -1, 1))))
+    return sorted(out)
+
+
 def _istanti(righe):
     return sorted((filed, end, val) for filed, start, end, val, form, accn in righe if not start)
 
@@ -213,6 +245,9 @@ def tabella(sym_fatti, giorni, prezzi):
         pas = sorted((f, e, tot[(f, e)] - v) for f, e, v in patr if (f, e) in tot)
     flot = sorted(tuple(x) for x in F.get("flottante", []))
     ordinali = [datetime.date.fromisoformat(g).toordinal() for g in giorni]
+    depositi = sorted({r[0] for r in F.get("utile", [])})
+    S = sorprese(F.get("utile", []))
+    date_sorpresa, valori_sorpresa = [x[0] for x in S], [x[1] for x in S]
     mese, base, valore = None, np.zeros(len(NOMI_BILANCI), np.float32), None
     for i, g in enumerate(giorni):
         if g[:7] != mese:                                             # i bilanci cambiano di rado: si ricalcola una volta al mese
@@ -238,6 +273,14 @@ def tabella(sym_fatti, giorni, prezzi):
                     if k >= 0 and prezzi[k] > 0:
                         valore = (u[2], fl[2], prezzi[k])
         out[i] = base
+        if CALENDARIO and base[6]:
+            k = bisect.bisect_right(depositi, g) - 1                  # l'ultimo bilancio depositato entro oggi
+            if k >= 0:
+                giorni_da = ordinali[i] - datetime.date.fromisoformat(depositi[k]).toordinal()
+                out[i, 8] = np.exp(-giorni_da / 30.0)                   # 1 il giorno dei conti, quasi 0 dopo tre mesi
+            j = bisect.bisect_right(date_sorpresa, g) - 1
+            if j >= 0:
+                out[i, 7] = valori_sorpresa[j] * np.exp(-(ordinali[i] - datetime.date.fromisoformat(date_sorpresa[j]).toordinal()) / 60.0)
         if valore is not None and prezzi[i] > 0:                      # utile / valore di borsa di oggi (rapporto dei prezzi corretti)
             cap = valore[1] * prezzi[i] / valore[2]
             out[i, 0] = np.clip(valore[0] / cap, -0.5, 0.5) * 10 if cap > 0 else 0.0

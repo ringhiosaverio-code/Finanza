@@ -68,6 +68,8 @@ FONTI = {
     "b_margine": "bilancio: margine di utile (Asness, Frazzini e Pedersen, Quality minus junk)", "b_crescita_ricavi": "bilancio: crescita dei ricavi in un anno",
     "b_debito": "bilancio: passività sulle attività (Asness, Frazzini e Pedersen)", "b_crescita_dividendi": "bilancio: crescita del dividendo in un anno",
     "b_ha_bilanci": "bilancio: azienda USA con i conti alla SEC",
+    "b_sorpresa_utili": "calendario dei conti: sorpresa degli utili del trimestre, che sfuma in due mesi (Bernard e Thomas 1989)",
+    "b_bilancio_fresco": "calendario dei conti: quanto è recente l'ultimo bilancio depositato",
     "g_anno": "momento di un anno (Jegadeesh e Titman 1993; Moskowitz, Ooi e Pedersen 2012)", "g_mese": "inversione di un mese (Jegadeesh 1990)",
     "g_settimana": "inversione di una settimana (Lehmann 1990)", "g_media200": "sopra o sotto la media di 200 giorni (Faber 2007)",
     "g_max52": "vicinanza al massimo di 52 settimane (George e Hwang 2004)", "g_vol_mese": "volatilità bassa (Ang e altri 2006)",
@@ -636,8 +638,23 @@ def main(argv=None):
     ap.add_argument("--sezione", choices=sorted(SEZIONI), help="solo una categoria: etf (con l'oro) o obbligazioni")
     ap.add_argument("--tutte", action="store_true", help="la rete generale e quelle di ETF e obbligazioni")
     ap.add_argument("--confronta", action="store_true", help="confronta obiettivo assoluto/relativo e 1/5 reti sulla stessa verifica")
+    ap.add_argument("--epurata-calendario", action="store_true", help="la cross-validation epurata con e senza il calendario dei conti (sorpresa degli utili)")
     ap.add_argument("--epurata", action="store_true", help="la cross-validation epurata (10 blocchi, embargo 14 giorni), con e senza bilanci: rete_lungo_epurata.json")
     a = ap.parse_args(argv)
+    if a.epurata_calendario:                                # il calendario dei conti aiuta? stessi blocchi, con e senza
+        try:
+            with open(os.path.join(ROOT, "rete_lungo_epurata.json"), encoding="utf-8") as fh:
+                ris = json.load(fh)
+        except (OSError, ValueError):
+            ris = {}
+        for nome, c in (("senza_calendario", False), ("con_calendario", True)):
+            bilanci.CALENDARIO = c
+            print("[rete_lungo] cross-validation epurata, %s" % nome.replace("_", " "))
+            ris[nome] = verifica_epurata(Campioni(lambda m: None))
+        ris["creato_calendario"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        with open(os.path.join(ROOT, "rete_lungo_epurata.json"), "w", encoding="utf-8") as fh:
+            json.dump(rete._pulisci(ris), fh, separators=(",", ":"))
+        return 0
     if a.epurata:
         global BILANCI
         ris = {"creato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}

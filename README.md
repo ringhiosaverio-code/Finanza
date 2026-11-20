@@ -612,6 +612,15 @@ Prado, cap. 7): 469 settimane stimate invece di 300. Con i bilanci: a una settim
 meglio della media in 9 pezzi su 10; le 3 scelte tra gli ETF +0,47 % (t 4,1). Senza bilanci +0,29 % (t 2,4), 7 su 10:
 i bilanci aiutano. A uno e tre mesi nessun vantaggio. I risultati sono in `rete_lungo_epurata.json` e nell'app.
 
+## Il calendario dei conti: provato e spento
+
+`bilanci.py` sa calcolare anche la sorpresa degli utili dell'ultimo trimestre (contro lo stesso trimestre dell'anno
+prima, dai 10-Q, solo dalla data di deposito) e quanto è recente l'ultimo bilancio: la "deriva dopo gli utili" di
+Bernard e Thomas (1989). Con la cross-validation epurata (`python3 rete_lungo.py --epurata-calendario`) a una settimana
+la rete fa +0,30 % sulla media con il calendario e +0,34 % senza (t 2,4 contro 3,2), a 1 e 3 mesi uguale: non aiuta,
+quindi `bilanci.CALENDARIO` resta `False`. Le notizie (quante e con che tono, GDELT) e lo stato del mercato (S&P 500
+sopra la media di 200 giorni, VIX, curva dei tassi) erano già tra i dati della rete.
+
 ## Il portafoglio con la rete neurale: `portafoglio.py`
 
 Le strategie che hanno funzionato messe insieme, settimana per settimana, con i costi, dal 2021 al 2026: anni che la rete
