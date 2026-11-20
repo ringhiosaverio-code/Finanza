@@ -57,5 +57,14 @@ class Addestramento(unittest.TestCase):
         self.assertGreater(L.auc(P[:, 1], (C.R[5000:, 1] > 0).astype(int)), 0.6)
 
 
+class PesiDelRobot(unittest.TestCase):
+    def test_le_migliori_della_sezione_in_parti_uguali_dal_lunedi(self):
+        o = {"7": [{"sym": "A", "categoria": "usa"}, {"sym": "E1", "categoria": "etf"}, {"sym": "B1", "categoria": "bond"},
+                   {"sym": "E2", "categoria": "oro"}, {"sym": "E3", "categoria": "etf"}, {"sym": "E4", "categoria": "etf"}]}
+        r = L.pesi_robot(o, 3, "2026-11-19", ("etf", "oro"))
+        self.assertEqual(r["giorno"], "2026-11-16")                                 # il lunedì della settimana
+        self.assertEqual(r["pesi"], {"E1": 0.3333, "E2": 0.3333, "E3": 0.3333})
+
+
 if __name__ == "__main__":
     unittest.main()

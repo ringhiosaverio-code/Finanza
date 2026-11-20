@@ -1103,6 +1103,8 @@ function renderOggi() {
     </article>`; }).join('') : '<div class="card empty">Nessuno strumento con questi filtri oggi.</div>'}</div>
   ${!oggiSt.tutti && filtered.length > 10 ? `<button type="button" class="go" id="o-tutti" style="justify-self:center">Mostra tutti (${filtered.length})</button>` : ''}
   ${reteLungoHTML()}
+  ${sezioneReteHTML('etf')}
+  ${sezioneReteHTML('obbligazioni')}
   ${strategieLibriHTML()}
   <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (prezzi corretti per dividendi e split, tasse escluse). Anche con il ${all.length ? p100(all[0].p) : '70 %'} di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
   v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
@@ -1416,6 +1418,22 @@ function renderDemo() {
 /* ---------------- crypto ---------------- */
 /* ---------------- medio e lungo periodo con la rete neurale (rete_lungo.py) ---------------- */
 const CAT_LUNGO = {usa: 'Azioni USA', italia: 'Azioni italiane', etf: 'ETF azionari', bond: 'ETF obbligazionari', oro: 'Oro e materie prime', crypto: 'Crypto'};
+function sezioneReteHTML(sez) {
+  const L = D.rete_lungo; if (!L || !L.verifica || !L.robot_sezioni || !L.robot_sezioni[sez]) return '';
+  const etf = sez === 'etf', O = L.orizzonti, N = L.nomi_orizzonti, cat = etf ? ['etf', 'oro'] : ['bond'];
+  const righe = O.map((h, j) => { const x = (L.verifica.orizzonti[String(h)].sezioni || {})[sez]; if (!x) return '';
+    return `<tr><td class="l"><b>${esc(N[j])}</b></td><td class="${x.scelte.media >= 0 ? 'pos' : 'neg'}"><b>${pc(x.scelte.media, 2)}</b><br><span class="note">${p100(x.scelte.vinte)} in guadagno</span></td><td class="${x.tutti.media >= 0 ? 'pos' : 'neg'}">${pc(x.tutti.media, 2)}<br><span class="note">${p100(x.tutti.vinte)}</span></td><td>t ${nf(x.t, 1)}</td></tr>`; }).join('');
+  const x7 = (L.verifica.orizzonti[String(O[0])].sezioni || {})[sez], R = L.robot_sezioni[sez];
+  const lista = ((L.oggi || {})[String(O[0])] || []).filter(o => cat.includes(o.categoria)).slice(0, 8);
+  const tit = etf ? 'ETF con la rete neurale' : 'Obbligazioni con la rete neurale';
+  const verd = etf ? (x7 && x7.t >= 2 && x7.scelte.media > x7.tutti.media ? `Scegliendo ogni settimana i 3 ETF migliori su 14 la rete ha fatto ${pc(x7.scelte.media, 2)} a settimana contro ${pc(x7.tutti.media, 2)} della media (t ${nf(x7.t, 1)}: difficile che sia solo fortuna). Più lontano (un mese, tre mesi) la differenza sparisce.` : 'La rete non sceglie gli ETF meglio della media in modo credibile.')
+    : (x7 ? `Tra le obbligazioni la rete perde meno della media (${pc(x7.scelte.media, 2)} a settimana contro ${pc(x7.tutti.media, 2)}), ma in questi anni di tassi in salita le obbligazioni hanno perso quasi tutte: la rete limita i danni, non crea guadagni.` : '');
+  return `<div class="card" id="rete-${sez}"><h2>${tit}</h2>
+    <p class="sub" style="margin-top:4px">La rete neurale del medio periodo (che impara da 188 titoli, perché le reti allenate solo su ${etf ? '14 ETF' : '16 obbligazioni'} non imparavano niente) usata per scegliere solo ${etf ? 'tra gli ETF azionari e l\'oro' : 'tra gli ETF obbligazionari'}: ogni settimana il 25 % con la probabilità più alta di chiudere in guadagno. Verifica anno per anno, su anni mai visti.</p>
+    <div class="verdetto ${etf && x7 && x7.t >= 2 ? 'v-cautela' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${etf && x7 && x7.t >= 2 ? '!' : '✕'}</span><div><b>${etf && x7 && x7.t >= 2 ? 'Sceglie meglio, a una settimana' : 'Non crea guadagni'}</b><p>${verd}</p></div></div></div>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Durata</th><th>Scelte della rete</th><th>Tutti ${etf ? 'gli ETF' : 'le obbligazioni'}</th><th>Solidità</th></tr></thead><tbody>${righe}</tbody></table></div>
+    <p class="note" style="margin-top:8px"><b>Questa settimana (dal ${esc(R.giorno)}):</b> ${Object.keys(R.pesi).map(s => esc(tk(s))).join(', ')}. ${lista.length ? 'La classifica: ' + lista.map(o => `${esc(tk(o.sym))} ${p100(o.probabilita)}`).join(' · ') + '.' : ''} Il robot li segue nel conto "${etf ? 'ETF' : 'Obbligazioni'}, rete neurale". Non è consulenza finanziaria.</p></div>`;
+}
 function strategieLibriHTML() {
   const S = D.strategie_lungo; if (!S || !S.mercati) return '';
   const NOMI = {antonacci: 'Antonacci, "Dual Momentum Investing": ogni mese azioni USA o europee, la più forte in 12 mesi; se nessuna sale, obbligazioni',
@@ -2181,14 +2199,12 @@ const STRATEGIE = {
   giornata: {nome: 'Azioni in seduta (Oops!)', breve: 'Azioni', stato: 'esercitazione', chip: 'bassa'},
   tendenza: {nome: 'Crypto, tendenza come i fondi', breve: 'Tendenza crypto', stato: 'esercitazione', chip: 'media'},
   faber: {nome: 'ETF, media di 10 mesi (Faber)', breve: 'ETF Faber', stato: 'esercitazione', chip: 'media'},
+  rete_etf: {nome: 'ETF, rete neurale', breve: 'Rete ETF', stato: 'esercitazione', chip: 'media'},
+  rete_obbl: {nome: 'Obbligazioni, rete neurale', breve: 'Rete obbligazioni', stato: 'esercitazione', chip: 'media'},
   segnali: {nome: 'Crypto, ordini sui segnali', breve: 'Segnali crypto', stato: 'esercitazione', chip: 'bassa'},
-  crypto: {nome: 'Crypto, ordini ogni ora (ritirata)', breve: 'Crypto ogni ora', stato: 'ritirata', chip: 'bassa', ritirata: true},
   rete: {nome: 'Crypto, rete neurale', breve: 'Rete crypto', stato: 'esercitazione', chip: 'bassa'},
   rete_ita: {nome: 'Azioni italiane, rete neurale', breve: 'Rete Italia', stato: 'esercitazione', chip: 'bassa'},
   rete_usa: {nome: 'Azioni USA, rete neurale', breve: 'Rete USA', stato: 'esercitazione', chip: 'bassa'},
-  // ritirate: il robot non compra più di notte; restano solo per chiudere le posizioni che hanno ancora
-  usa_notte: {nome: 'Azioni USA, di notte (ritirata)', breve: 'USA notte', stato: 'ritirata', chip: 'media', mercato: 'usa', n: 10, ritirata: true},
-  ita_notte: {nome: 'Azioni italiane, di notte (ritirata)', breve: 'Italia notte', stato: 'ritirata', chip: 'media', mercato: 'italia', n: 5, ritirata: true},
 };
 // le ore di seduta di ogni mercato, nel suo fuso (lun-ven)
 const MERCATI_ORE = {usa: {tz: 'America/New_York', apre: '09:30', chiude: '16:00'}, italia: {tz: 'Europe/Rome', apre: '09:00', chiude: '17:30'}};
@@ -2227,6 +2243,14 @@ function oraItaliana(mer, k, d) {
   const giorno = d || partiIn(new Date(), MERCATI_ORE[mer].tz).d;
   return new Date(istanteMercato(giorno, mer, k)).toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
 }
+// le strategie ritirate (azioni di notte, crypto ogni ora) si tolgono dal robot, con le loro operazioni
+const RITIRATE = ['usa_notte', 'ita_notte', 'crypto'];
+function togliRitirate(v) {
+  for (const k of RITIRATE) delete v.conti[k];
+  v.registro = (v.registro || []).filter(e => !RITIRATE.includes(e.s));
+  v.storico = (v.storico || []).map(x => { const y = Object.assign({}, x); RITIRATE.forEach(k => delete y[k]); return y; });
+  return v;
+}
 // le strategie ritirate non comprano più: restano solo per chiudere quello che hanno ancora
 function senzaRitirate(R) { for (const k of Object.keys(STRATEGIE)) if (STRATEGIE[k].ritirata && R.conti[k]) R.conti[k].attiva = false; return R; }
 
@@ -2234,6 +2258,10 @@ function senzaRitirate(R) { for (const k of Object.keys(STRATEGIE)) if (STRATEGI
 const PORTAFOGLI = {
   tendenza: {dati: () => D.crypto_tendenza && D.crypto_tendenza.oggi, costo: ROBOT_COSTO_CRYPTO, fonte: 'chiusura del giorno',
     giu: 'tendenza girata: momento a 1, 3 e 12 mesi non più positivo', meno: 'peso ridotto: volatilità salita o tendenza più debole', su: w => `tendenza positiva, peso ${p100(w)} del conto (dalla volatilità)`},
+  rete_etf: {dati: () => D.rete_lungo && D.rete_lungo.robot_sezioni && D.rete_lungo.robot_sezioni.etf, costo: 0.001, fonte: 'rete neurale, ogni lunedì',
+    giu: 'uscito dai 3 migliori della settimana per la rete neurale', meno: 'peso ricalcolato a inizio settimana', su: w => `tra i 3 ETF più probabili in guadagno a una settimana per la rete, peso ${p100(w)}`},
+  rete_obbl: {dati: () => D.rete_lungo && D.rete_lungo.robot_sezioni && D.rete_lungo.robot_sezioni.obbligazioni, costo: 0.001, fonte: 'rete neurale, ogni lunedì',
+    giu: 'uscita dalle 4 migliori della settimana per la rete neurale', meno: 'peso ricalcolato a inizio settimana', su: w => `tra le 4 obbligazioni più probabili in guadagno a una settimana per la rete, peso ${p100(w)}`},
   faber: {dati: () => D.strategie_lungo && D.strategie_lungo.mercati && D.strategie_lungo.mercati.etf && D.strategie_lungo.mercati.etf.oggi && D.strategie_lungo.mercati.etf.oggi.faber, costo: 0.001, fonte: 'fine del mese',
     giu: 'sotto la media di 10 mesi (regola di Faber)', meno: 'peso ricalcolato a fine mese', su: w => `sopra la media di 10 mesi (Faber), peso ${p100(w)} del conto`},
 };
@@ -2255,15 +2283,16 @@ function robotMigra(v) {                                                        
     if (v.sessione && v.sessione.aperta) v.conti.crypto.attiva = true;
   }
   if (v && v.versione === 2 && v.conti) for (const k of [...RETI_NOMI, ...Object.keys(PORTAFOGLI)]) if (!v.conti[k]) v.conti[k] = contoVuoto(k, !!(v.sessione && v.sessione.aperta));
+  if (v && v.versione === 2 && v.conti) togliRitirate(v);
   if (!v || v.versione === 2) return v && v.conti ? senzaRitirate(v) : v;
   const R = robotNuovo(v.inizio, (v.notte && v.notte.costo) || 0.0002, {});
   if (v.notte) { R.conti.usa_notte = Object.assign(contoVuoto('usa_notte', false), v.notte); delete R.conti.usa_notte.costo; }
   if (v.crypto) R.conti.crypto = Object.assign(contoVuoto('crypto', false), v.crypto);
   R.storico = (v.storico || []).map(x => ({d: x.d, usa_notte: x.notte, crypto: x.crypto}));
   senzaRitirate(R);
-  R.sessione = {aperta: !!(R.conti.usa_notte.attiva || R.conti.crypto.attiva), da: v.acceso || R.sessione.da, chiusa: null};
+  R.sessione = {aperta: !!((R.conti.usa_notte || {}).attiva || (R.conti.crypto || {}).attiva), da: v.acceso || R.sessione.da, chiusa: null};
   if (!R.sessione.aperta) R.sessione.chiusa = R.sessione.da;
-  return senzaRitirate(R);
+  return senzaRitirate(togliRitirate(R));
 }
 function evento(R, e) { R.registro = (R.registro || []).concat([e]).slice(-1000); }
 const ROBOT_MAX_BYTE = 235000;                                                    // l'archivio dell'app accetta documenti fino a 256 KiB (262.144 byte)
@@ -2282,6 +2311,7 @@ function perchePerdita(e) {
   const quanto = `Ha perso ${pc(-e.r, 2, false)}, costi compresi. `;
   let perche;
   if (n.includes('protezione')) perche = `Il prezzo è sceso fino alla <b>protezione</b> (lo stop-loss fissato al momento dell'acquisto). Tenere voleva dire lasciare aperta una perdita senza limite: la protezione la ferma a quella messa in conto prima di comprare (come nelle skill trader-exit e trader-risk, al massimo lo 0,5 % del capitale per operazione). Nelle verifiche, togliere la protezione non ha migliorato i risultati e ha reso le perdite peggiori molto più grandi.`;
+  else if (n.includes('migliori della settimana') || n.includes('ricalcolato a inizio settimana')) perche = `Ogni lunedì la rete neurale rifà la classifica e tiene solo i titoli con la probabilità più alta di guadagnare nella settimana (è l'orizzonte in cui la sua verifica regge). Chi esce dalla classifica si vende, anche in perdita: tenerlo vorrebbe dire puntare su un titolo che la rete adesso giudica peggiore degli altri.`;
   else if (n.includes('media di 10 mesi') || n.includes('ricalcolato a fine mese')) perche = `La regola di Mebane Faber tiene un ETF solo finché il suo prezzo è sopra la media degli ultimi 10 mesi, e lo vende quando ci scende sotto: serve a stare fuori dai ribassi lunghi (dal 2017 ha ridotto il calo massimo da -34 % a -14 %). Uscendo si accetta una piccola perdita per evitarne una grande; a volte il prezzo poi risale, è il prezzo dell'assicurazione.`;
   else if (n.includes('tendenza girata') || n.includes('peso ridotto')) perche = `Come fanno i fondi di tendenza (Hurst, Ooi e Pedersen, AQR) si tiene una crypto solo finché il suo momento a 1, 3 e 12 mesi è positivo, e meno quando oscilla di più (Moreira e Muir). ${n.includes('girata') ? 'La tendenza si è girata: tenere voleva dire restare dentro un ribasso, che è proprio quello che la strategia evita (nel 2022 le crypto hanno perso fino all\'80 %).' : 'La volatilità è salita o la tendenza si è indebolita: si riduce la posizione per tenere costante il rischio.'} Ogni singola vendita può essere in perdita: conta il conto nel suo insieme.`;
   else if (n.includes('durata del segnale')) perche = `Ogni segnale ha la sua <b>durata</b>, quella con cui è stato studiato (per esempio un'ora per il flusso degli ordini, 4 ore per il ribasso). Allo scadere vende sempre, anche in perdita: oltre quella durata il segnale non dice più niente, e tenere sarebbe una scommessa senza motivo.`;
@@ -2436,7 +2466,7 @@ function robotGiornata(R, adesso) {
 
 /* crypto: i piani di 24 ore */
 function pianiCrypto(R) {
-  const out = {}, O = D.intraday && D.intraday.ore, aperti = (R && R.conti.crypto.piani) || {};
+  const out = {}, O = D.intraday && D.intraday.ore, aperti = (R && R.conti.crypto && R.conti.crypto.piani) || {};
   for (const [s, x] of Object.entries((D.intraday && D.intraday.crypto) || {}))   // i due piani al giorno di prima: solo per chiudere quelli già in posizione
     for (const p of (x.storia_piani || [])) { const k = `${s}|${p.regola}|${p.ora}`; if (aperti[k] && aperti[k].fase === 'dentro') out[k] = Object.assign({sym: s}, p); }
   for (const [s, x] of Object.entries((O && O.crypto) || {}))                     // gli ordini orari degli ultimi 7 giorni, come sono andati
@@ -2540,12 +2570,12 @@ function posizioniAperte(R) {
     const fino = new Date(p.scade).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
     out.push({k, sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `sotto ${nf(p.protezione, dec(p.protezione))} o alle ${fino}`, cur: RETI[k].cur || '€', costo: 2 * RETI[k].costo()});
   }
-  for (const k of ['usa_notte', 'ita_notte']) {                                     // strategie ritirate: le posizioni rimaste si chiudono alla prossima apertura
+  for (const k of ['usa_notte', 'ita_notte'].filter(k => R.conti[k] && STRATEGIE[k])) {                                     // strategie ritirate: le posizioni rimaste si chiudono alla prossima apertura
     const A = R.conti[k].aperta, mer = STRATEGIE[k].mercato;
     if (A && A.stato === 'in mano') A.titoli.forEach((s, j) => out.push({k, sym: s, entrata: A.prezzi[j], ora: prezzoOra(s, A.prezzi[j]), quando: istanteMercato(A.data, mer, 'chiude'), esce: `alla prossima apertura (${oraItaliana(mer, 'apre')}), strategia ritirata`, cur: mer === 'usa' ? '$' : '€'}));
   }
   for (const p of Object.values(R.conti.giornata.posizioni)) out.push({k: 'giornata', sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `in chiusura (${oraItaliana(mercatoDi(p.sym), 'chiude', p.d)})`, cur: mercatoDi(p.sym) === 'usa' ? '$' : '€', costo: R.costo});
-  for (const r of Object.values(R.conti.crypto.piani)) if (r.fase === 'dentro') {
+  for (const r of Object.values((R.conti.crypto || {piani: {}}).piani)) if (r.fase === 'dentro') {
     const fino = new Date(isoN(r.scade || r.fino)).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'});
     out.push({k: 'crypto', sym: r.sym, entrata: r.prezzo_entrata, ora: prezzoOra(r.sym, r.prezzo_entrata), quando: r.quando,
       esce: `sotto ${nf(r.protezione, dec(r.protezione))} o sopra ${nf(r.obiettivo, dec(r.obiettivo))}, entro ${fino}`, cur: '€', costo: 2 * ROBOT_COSTO_CRYPTO});
@@ -2555,9 +2585,9 @@ function posizioniAperte(R) {
 function simboliRobot() {
   if (!ROBOT) return [];
   const out = new Set(), C = ROBOT.conti;
-  for (const r of Object.values(C.crypto.piani)) if ((C.crypto.attiva && r.fase === 'attesa') || r.fase === 'dentro') out.add(r.sym);
-  if (C.crypto.attiva) Object.keys((D.intraday && D.intraday.ore && D.intraday.ore.crypto) || {}).forEach(s => out.add(s));
-  for (const k of ['usa_notte', 'ita_notte']) if (C[k].aperta) C[k].aperta.titoli.forEach(s => out.add(s));
+  if (C.crypto) for (const r of Object.values(C.crypto.piani)) if ((C.crypto.attiva && r.fase === 'attesa') || r.fase === 'dentro') out.add(r.sym);
+  if (C.crypto && C.crypto.attiva) Object.keys((D.intraday && D.intraday.ore && D.intraday.ore.crypto) || {}).forEach(s => out.add(s));
+  for (const k of ['usa_notte', 'ita_notte']) if (C[k] && C[k].aperta) C[k].aperta.titoli.forEach(s => out.add(s));
   if (C.giornata.attiva) Object.keys((D.giornata && D.giornata.candele) || {}).forEach(s => out.add(s));
   Object.values(C.giornata.posizioni).forEach(p => out.add(p.sym));
   for (const k of Object.keys(RETI)) if (C[k]) Object.values(C[k].posizioni).forEach(p => out.add(p.sym));
@@ -2664,10 +2694,8 @@ function robotTendenza(R, adesso, k = 'tendenza') {
   return true;
 }
 function robotPasso(R, adesso) {
-  let cambiato = robotNotte(R, 'usa_notte');
-  cambiato = robotNotte(R, 'ita_notte') || cambiato;
+  let cambiato = false;
   cambiato = robotGiornata(R, adesso) || cambiato;
-  cambiato = robotCrypto(R, adesso) || cambiato;
   for (const k of Object.keys(RETI)) if (R.conti[k]) cambiato = robotRete(R, k, adesso) || cambiato;
   for (const k of Object.keys(PORTAFOGLI)) if (R.conti[k]) cambiato = robotTendenza(R, adesso, k) || cambiato;
   const oggi = adesso.toISOString().slice(0, 10), st = R.storico || (R.storico = []);
@@ -2691,7 +2719,7 @@ function daChiedere(R, adesso) {                                                
   const P = prezziNotte(), G = candeleGiornata(), C = R.conti, out = new Set();
   const finestra = (mer, p) => { const M = MERCATI_ORE[mer]; return p.feriale && p.hm >= M.apre && p.hm <= piuOre(M.chiude, 1) && ROBOT_FESTA[mer] !== p.d; };   // dall'apertura a un'ora dopo la chiusura
   const manca = (s, d, j) => !(P[s] && P[s][d] && P[s][d][j]);
-  for (const k of ['usa_notte', 'ita_notte']) {                                    // le strategie ritirate: solo per chiudere
+  for (const k of ['usa_notte', 'ita_notte'].filter(k => C[k] && STRATEGIE[k])) {                                    // le strategie ritirate: solo per chiudere
     const N = C[k], mer = STRATEGIE[k].mercato, A = N.aperta, p = partiIn(adesso, MERCATI_ORE[mer].tz);
     if (!finestra(mer, p)) continue;
     if (A && A.stato === 'in mano' && A.data < p.d) A.titoli.forEach(s => { if (manca(s, p.d, 0)) out.add(s); });   // l'apertura per chiudere
@@ -2705,7 +2733,7 @@ function daChiedere(R, adesso) {                                                
   return [...out].filter(s => !ROBOT_CHIESTI[s] || adesso - ROBOT_CHIESTI[s] > 4 * 60e3);
 }
 async function robotOrdini() {                                                    // live.py: gli ordini dell'ora, rifatti a ogni ora piena
-  if (!ROBOT || !ROBOT.conti.crypto.attiva || LIVE.fonte !== 'locale' || robotOrdini.va) return;
+  if (!ROBOT || !ROBOT.conti.crypto || !ROBOT.conti.crypto.attiva || LIVE.fonte !== 'locale' || robotOrdini.va) return;
   const slot = Math.floor((Date.now() / 1000 - 120) / 3600);                      // come live.py: due minuti dopo l'ora piena la candela è chiusa
   if (LIVE.ordiniSlot === slot) return;
   robotOrdini.va = true;
@@ -2772,10 +2800,40 @@ function robotSalva() {
 // pagine (il telefono) sono spettatrici: mostrano lo stato del motore e gli mandano i tuoi comandi (avvia, ferma...)
 const MOTORE_PAGINA = /[?&]motore=1/.test(location.search);
 let SPETTATORE = false;
+// "Ricomincia da capo": un robot nuovo, tutte le strategie attive, che investe solo da adesso; vecchie operazioni cancellate
+function robotDaCapo(quando, costo, rev) {
+  const scelte = {}; Object.keys(STRATEGIE).forEach(k => { if (!STRATEGIE[k].ritirata) scelte[k] = true; });
+  const R = robotNuovo(quando.slice(0, 10), costo || 0.0002, scelte);
+  R.dal = quando; R.reset = quando; R.rev = rev || 0;
+  Object.values(R.conti).forEach(c => { c.dal = quando; });
+  return R;
+}
+async function ricominciaDaCapo() {
+  const esito = t => { const e = $('#rb-reset-esito'); if (e) e.textContent = t; };
+  const ora = new Date().toISOString();
+  if (!SPETTATORE) {                                                              // il robot gira qui: si ricomincia subito
+    ROBOT = robotDaCapo(ora, ROBOT && ROBOT.costo, (ROBOT && ROBOT.rev || 0) + 1);
+    robotGiro(); robotSalva(); aggiornaRobot(); aggiornaTicker();
+    avviso('Ricominciato da capo: 10.000 € per ogni strategia, da adesso.');
+    return;
+  }
+  esito('Chiedo al motore nel cloud di ricominciare…');                          // lo fa il motore: glielo chiede il cloud
+  try {
+    const mcp = window.claude && claude.use ? await claude.use('mcp') : null;
+    if (!mcp) { esito('Da qui non si può: tocca "Ricomincia da capo" nell\'app su claude.ai.'); return; }
+    await mcp.callTool(CCR, 'fire_trigger', {trigger_id: MOTORE_COMPITO, text: 'RESET DEL ROBOT: richiesto con il pulsante "Ricomincia da capo" alle ' + ora + '. Esegui solo `python3 reset_robot.py` nella cartella del progetto e rispondi in una riga.'}, {cache: false});
+    esito('Fatto: entro un paio di minuti il motore ricomincia da capo e le operazioni vecchie spariscono.');
+  } catch (e) { esito('Il cloud non ha risposto: riprova tra poco.'); }
+}
 async function sincronizzaRobot() {
   try {
     const r = await fetch('/robot', {cache: 'no-store'}); if (!r.ok) return;
     const v = await r.json();
+    if (v && v.reset_richiesto && (!ROBOT || ROBOT.reset !== v.reset_richiesto) && MOTORE_PAGINA) {   // reset chiesto dal cloud
+      ROBOT = robotDaCapo(v.reset_richiesto, v.costo, (v.rev || 0) + 1);
+      robotGiro(); robotSalva(); aggiornaRobot(); aggiornaTicker();
+      return;
+    }
     if (v && !v.vuoto && v.conti && (!ROBOT || (v.rev || 0) > (ROBOT.rev || 0))) {
       ROBOT = robotMigra(v); robotUltimaChiave = robotUltimaChiave === undefined ? undefined : robotUltimaChiave;
       Store.save('robot', JSON.parse(JSON.stringify(ROBOT)));
@@ -2826,13 +2884,13 @@ function robotHTML() {
       return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(p.sym))}</b> <span class="note">${STRATEGIE[p.k].breve} · dalle ${new Date(p.quando).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'})}</span><br><span class="note">esce ${esc(p.esce)}</span></td><td>${nf(p.entrata, dec(p.entrata))} ${p.cur}</td><td>${nf(p.ora, dec(p.ora))} ${p.cur}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div>
       ${pos.some(p => STRATEGIE[p.k].ritirata) ? '<p class="note" style="margin-top:4px">Le posizioni di notte rimaste da prima di questa versione si chiudono alla prossima apertura: il robot non ne apre di nuove.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
   const tutte = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1);
-  if (!['tutte', 'giornata', 'faber', 'tendenza', 'segnali', 'crypto', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
+  if (!['tutte', 'giornata', 'rete_etf', 'rete_obbl', 'faber', 'tendenza', 'segnali', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
   const filtrate = tutte.filter(e => (robotFiltro === 'tutte' || e.s === robotFiltro)       // una sezione per strategia
     && (robotVerso === 'tutte' || (robotVerso === 'entrate' ? e.azione === 'compra' : e.azione === 'vende')));
   const reg = filtrate.slice(0, robotLimite);
   const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome'}) + ', in seduta' : oraDi(e.t);
   const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
-  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['faber', 'ETF, media di 10 mesi'], ['tendenza', 'Crypto, tendenza come i fondi'], ['segnali', 'Crypto, ordini sui segnali'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
+  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['rete_etf', 'ETF, rete neurale'], ['rete_obbl', 'Obbligazioni, rete neurale'], ['faber', 'ETF, media di 10 mesi'], ['tendenza', 'Crypto, tendenza come i fondi'], ['segnali', 'Crypto, ordini sui segnali'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
     <div class="seg" style="margin-top:6px" role="group" aria-label="Entrate o uscite">${[['tutte', 'Entrate e uscite'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([f, t]) => `<button type="button" data-v="${f}" aria-pressed="${robotVerso === f}">${t}</button>`).join('')}</div>`;
   const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span>${perchePerdita(e)}</li>`).join('');
   const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>
@@ -2846,6 +2904,7 @@ function robotHTML() {
     <div class="tiles" style="margin-top:10px">${usati.map(tile).join('')}</div>
     ${feed}
     <h3 style="margin-top:14px">Posizioni aperte adesso</h3>${tabPos}
+    <p style="margin-top:12px"><button type="button" class="more" id="rb-reset">↺ Ricomincia da capo</button> <span class="note" id="rb-reset-esito">Cancella le operazioni vecchie e riparte da 10.000 € per ogni strategia, investendo solo da adesso.</span></p>
     ${aperta ? `<p style="margin-top:12px"><button type="button" class="more" id="rb-termina">Termina la sessione</button></p>
       <p class="note" style="margin-top:4px">Terminando: crypto e azioni in giornata si vendono subito al prezzo di adesso; i piani in attesa si annullano. Poi il robot si ferma.</p>`
     : `<h3 style="margin-top:14px">Nuova sessione</h3>${robotModulo(false)}<p style="margin-top:12px"><button type="button" class="go" id="rb-riprendi">Inizia la sessione</button></p>`}
@@ -2880,6 +2939,7 @@ function robotEventi() {
   document.querySelectorAll('#robot [data-f]').forEach(b => b.addEventListener('click', () => { robotFiltro = b.dataset.f; robotLimite = 30; aggiornaRobot(); }));
   document.querySelectorAll('#robot [data-v]').forEach(b => b.addEventListener('click', () => { robotVerso = b.dataset.v; robotLimite = 30; aggiornaRobot(); }));
   $('#rb-altre')?.addEventListener('click', () => { robotLimite += 30; aggiornaRobot(); });
+  $('#rb-reset')?.addEventListener('click', e => { if (chiediConferma(e.currentTarget, 'Sicuro? Cancella tutto e riparte')) ricominciaDaCapo(); });
   $('#rb-avvisi')?.addEventListener('click', async () => {
     try { const p = await Notification.requestPermission(); avviso(p === 'granted' ? 'Avvisi attivi: se la pagina è in un’altra scheda ti avviso a ogni operazione.' : 'Il browser non concede gli avvisi.'); }
     catch (e) { avviso('Questo browser non permette gli avvisi.'); }

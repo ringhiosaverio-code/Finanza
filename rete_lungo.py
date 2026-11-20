@@ -36,6 +36,10 @@ import simula
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 USCITA = os.path.join(ROOT, "rete_lungo.json")
+# le reti per categoria: ETF azionari con l'oro, e obbligazioni; ognuna con il suo file, la sua verifica e il suo conto
+SEZIONI = {"etf": {"categorie": ("etf", "oro"), "file": "rete_lungo_etf.json", "quota": 0.25, "scelte": 3},
+           "obbligazioni": {"categorie": ("bond",), "file": "rete_lungo_obbligazioni.json", "quota": 0.25, "scelte": 4}}
+MIN_ADDESTRAMENTO = 5000                               # campioni minimi per una finestra della verifica (meno per categoria)
 ORIZZONTI = (7, 30, 91)                                # giorni di calendario
 NOMI_ORIZZONTI = ("1 settimana", "1 mese", "3 mesi")
 CATEGORIE = ("usa", "italia", "etf", "bond", "oro", "crypto")
@@ -145,12 +149,14 @@ def tabella_mondo(log=print):
 class Campioni:
     """Un campione per titolo e settimana: caratteristiche (solo passato), rendimenti netti a 7, 30 e 91 giorni."""
 
-    def __init__(self, log=print):
+    def __init__(self, log=print, categorie=None):
         gm, TM = tabella_mondo(log)
         fg = segnali.fear_greed(log=log)
         X, R, OK, giorni, sym, cat = [], [], [], [], [], []
         self.ultimi = []                                                       # per titolo: la riga di oggi
         for s, m, tz, ch in titoli():
+            if categorie and m not in categorie:
+                continue
             gg, o, h, l, c = segnali.giornaliere(s, tz, ch)
             n = len(gg)
             if n < STORIA + 30:
@@ -254,7 +260,7 @@ def riassunto(r):
     return {"n": int(len(r)), "media": float(r.mean()) if len(r) else 0.0, "vinte": float((r > 0).mean()) if len(r) else 0.0}
 
 
-def verifica(C, log=print):
+def verifica(C, log=print, quota=QUOTA, minimo=None):
     """Anno per anno: si impara dagli esiti chiusi prima dell'anno, si sceglie durante l'anno."""
     ultimo = datetime.date.fromordinal(int(C.g.max())).year
     P = np.full((len(C.X), len(ORIZZONTI)), np.nan, np.float32)
@@ -266,7 +272,7 @@ def verifica(C, log=print):
         tr = np.flatnonzero(fine_esito < a0 - 365)                          # addestramento: esiti chiusi un anno prima
         va = np.flatnonzero((C.g >= a0 - 365) & (fine_esito < a0))          # scelta dell'epoca: l'anno prima, esiti chiusi
         te = np.flatnonzero((C.g >= a0) & (C.g < a1))
-        if len(tr) < 5000 or len(te) == 0:
+        if len(tr) < (minimo or MIN_ADDESTRAMENTO) or len(te) == 0:
             continue
         log("[rete_lungo] verifica %d: impara da %d campioni, sceglie su %d, prova su %d" % (anno, len(tr), len(va), len(te)))
         m = addestra(C, tr, va)
@@ -284,16 +290,16 @@ def verifica(C, log=print):
             s = k[(p >= a) & (p <= b)]
             if len(s):
                 cal.append({"stimata": float(P[s, j].mean()), "vera": float((C.R[s, j] > 0).mean()), "n": int(len(s))})
-        sc, tu, scarti = scelte_settimanali(C, te, P[:, j], j)
+        sc, tu, scarti = scelte_settimanali(C, te, P[:, j], j, quota)
         prese = scelte_settimanali.prese
         composizione = {c: float((C.cat[prese] == c).mean()) for c in CATEGORIE} if len(prese) else {}
-        mo, _, scarti_mo = scelte_settimanali(C, te, C.X[:, F("g_anno")], j)
+        mo, _, scarti_mo = scelte_settimanali(C, te, C.X[:, F("g_anno")], j, quota)
         sovrapp = max(H / 7.0, 1.0)                                         # le settimane si sovrappongono: t più prudente
         t = float(scarti.mean() / (scarti.std(ddof=1) / math.sqrt(len(scarti) / sovrapp))) if len(scarti) > 3 else 0.0
         per_anno = []
         for anno in anni:
             ka = te[(C.g[te] >= datetime.date(anno, 1, 1).toordinal()) & (C.g[te] < datetime.date(anno + 1, 1, 1).toordinal())]
-            s1, t1, _ = scelte_settimanali(C, ka, P[:, j], j)
+            s1, t1, _ = scelte_settimanali(C, ka, P[:, j], j, quota)
             per_anno.append({"anno": anno, "scelte": riassunto(s1), "tutti": riassunto(t1)})
         out["orizzonti"][str(H)] = {"auc": auc(p, y), "calibrazione": cal, "scelte": riassunto(sc), "tutti": riassunto(tu),
                                     "momento": riassunto(mo), "scarto": float(scarti.mean()) if len(scarti) else 0.0, "t": t,
@@ -301,6 +307,14 @@ def verifica(C, log=print):
                                     "tutti_composizione": {c: float((C.cat[k] == c).mean()) for c in CATEGORIE},
                                     "per_categoria": {c: riassunto(C.R[k[(C.cat[k] == c)], j]) for c in CATEGORIE}}
         o = out["orizzonti"][str(H)]
+        # la rete generale usata per scegliere solo dentro una sezione (ETF con l'oro, obbligazioni): il meglio 25 % di ogni settimana
+        o["sezioni"] = {}
+        for nome_s, S in SEZIONI.items():
+            ks = te[np.isin(C.cat[te], S["categorie"])]
+            if len(ks):
+                s1, t1, sc1 = scelte_settimanali(C, ks, P[:, j], j, S["quota"])
+                o["sezioni"][nome_s] = {"scelte": riassunto(s1), "tutti": riassunto(t1),
+                                        "t": float(sc1.mean() / (sc1.std(ddof=1) / math.sqrt(len(sc1) / max(H / 7.0, 1.0)))) if len(sc1) > 3 and sc1.std() > 0 else 0.0}
         # il confronto giusto: titoli a caso con la stessa miscela di categorie delle scelte (le crypto salgono di più)
         o["stesso_mix"] = float(sum(composizione.get(c, 0.0) * o["per_categoria"][c]["media"] for c in CATEGORIE))
         log("[rete_lungo] %s: AUC %.3f · scelte %d, media %+.2f %% (in guadagno %.0f %%) · tutti %+.2f %% · momento %+.2f %% · scarto t %.1f" % (
@@ -346,33 +360,50 @@ def oggi(C, m):
     return out
 
 
-def studia(log=print, salva=True):
+def pesi_robot(o, scelte, giorno, categorie=None, orizzonte="7"):
+    """I pesi per un conto del robot: le `scelte` (delle `categorie`) con la probabilità più alta di chiudere in guadagno
+    all'orizzonte (di serie una settimana, dove la verifica regge), in parti uguali, rifatti ogni settimana (dal lunedì)."""
+    lista = [x for x in (o.get(orizzonte) or []) if not categorie or x["categoria"] in categorie]
+    d = datetime.date.fromisoformat(giorno)
+    lunedi = (d - datetime.timedelta(days=d.weekday())).isoformat()
+    return {"giorno": lunedi, "pesi": {x["sym"]: round(1.0 / scelte, 4) for x in lista[:scelte]}}
+
+
+def studia(log=print, salva=True, sezione=None):
     t0 = time.time()
-    C = Campioni(log)
+    S = SEZIONI.get(sezione) or {}
+    uscita = os.path.join(ROOT, S["file"]) if S else USCITA
+    quota = S.get("quota", QUOTA)
+    C = Campioni(log, S.get("categorie"))
     ris = {"creato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "orizzonti": list(ORIZZONTI),
-           "nomi_orizzonti": list(NOMI_ORIZZONTI), "caratteristiche": list(NOMI_FEATURE), "quota": QUOTA, "costi": COSTO,
+           "nomi_orizzonti": list(NOMI_ORIZZONTI), "caratteristiche": list(NOMI_FEATURE), "quota": quota, "costi": COSTO,
+           "sezione": sezione,
            "dati": {"campioni": int(len(C.X)), "titoli": int(len(set(C.sym.tolist()))),
                     "da": datetime.date.fromordinal(int(C.g.min())).isoformat(), "a": datetime.date.fromordinal(int(C.g.max())).isoformat(),
                     "per_categoria": {c: int(len(set(C.sym[C.cat == c].tolist()))) for c in CATEGORIE}}}
     log("[rete_lungo] quali dati sono legati a quello che succede dopo")
     ris["segnali"] = studio_segnali(C)
-    ris["verifica"] = verifica(C, log)
+    ris["verifica"] = verifica(C, log, quota, 800 if S else None)
     fine_esito = C.g + max(ORIZZONTI)
     tr = np.flatnonzero(fine_esito < C.g.max() - 365)
     va = np.flatnonzero((C.g >= C.g.max() - 365 - max(ORIZZONTI)) & C.OK[:, 0])
-    m = addestra(C, tr if len(tr) > 5000 else np.flatnonzero(C.OK[:, 0]), va)
+    m = addestra(C, tr if len(tr) > (800 if S else MIN_ADDESTRAMENTO) else np.flatnonzero(C.OK[:, 0]), va)
     ris["oggi"] = oggi(C, m)
+    if S:
+        ris["robot"] = pesi_robot(ris["oggi"], S["scelte"], ris["dati"]["a"])
+    else:                                                                       # la rete generale sceglie anche dentro ETF e obbligazioni
+        ris["robot_sezioni"] = {k: pesi_robot(ris["oggi"], v["scelte"], ris["dati"]["a"], v["categorie"]) for k, v in SEZIONI.items()}
     ris["durata_minuti"] = round((time.time() - t0) / 60, 1)
     if salva:
-        with open(USCITA, "w", encoding="utf-8") as fh:
+        with open(uscita, "w", encoding="utf-8") as fh:
             json.dump(rete._pulisci(ris), fh, separators=(",", ":"))
-        log("[rete_lungo] scritto %s (%.1f minuti)" % (os.path.basename(USCITA), ris["durata_minuti"]))
+        log("[rete_lungo] scritto %s (%.1f minuti)" % (os.path.basename(uscita), ris["durata_minuti"]))
     return ris
 
 
-def per_app():
+def per_app(sezione=None):
     try:
-        with open(USCITA, encoding="utf-8") as fh:
+        with open(os.path.join(ROOT, SEZIONI[sezione]["file"]) if sezione else USCITA, encoding="utf-8") as fh:
             return json.load(fh)
     except (OSError, ValueError):
         return None
@@ -380,8 +411,14 @@ def per_app():
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.parse_args(argv)
-    studia()
+    ap.add_argument("--sezione", choices=sorted(SEZIONI), help="solo una categoria: etf (con l'oro) o obbligazioni")
+    ap.add_argument("--tutte", action="store_true", help="la rete generale e quelle di ETF e obbligazioni")
+    a = ap.parse_args(argv)
+    if a.tutte:
+        for sez in (None, *SEZIONI):
+            studia(sezione=sez)
+    else:
+        studia(sezione=a.sezione)
     return 0
 
 
