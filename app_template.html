@@ -1264,6 +1264,7 @@ function renderPiano() {
   ${obiettivoHTML()}
   ${diarioReteHTML()}
   ${avvisiHTML()}
+  ${allarmiHTML()}
   <div class="card"><h2>Le occasioni di oggi</h2>
     <h3 style="margin-top:6px">ETF</h3><div class="scroll"><table><thead><tr><th class="l">I migliori per le regole</th><th>Probabilità di guadagno</th><th class="l">Anche scelto da</th></tr></thead><tbody>${etf}</tbody></table></div>
     <h3 style="margin-top:14px">Obbligazioni <span class="note">· dalle più sicure</span></h3><div class="scroll"><table><thead><tr><th class="l">ETF obbligazionario</th><th>Cedola</th><th>Probabilità di guadagno</th><th class="l">Segnali</th></tr></thead><tbody>${bond}</tbody></table></div>
@@ -1288,6 +1289,7 @@ function renderPiano() {
     const t = v.querySelector('#fu-righe'); if (t) t.innerHTML = futuroRighe(); }); });
   const rs = v.querySelector('#rs-adesso'); if (rs) rs.addEventListener('click', resocontoAdesso);
   const aq = v.querySelector('#avvisi-qui'); if (aq) aq.addEventListener('click', avvisiQui);
+  allarmiEventi();
 }
 // l'ultimo resoconto della settimana (ogni lunedì alle 8): il motore lo scrive nel ramo robot-stato, così si legge qui
 // anche quando l'avviso sul telefono non arriva (limite di ntfy)
@@ -1298,6 +1300,23 @@ function resocontoHTML() {
   return `<div class="card" id="resoconto"><h2>${esc(R.titolo || 'Resoconto della settimana')}</h2>
     <p class="note" style="margin-top:4px">${orario(R.quando) ? 'Scritto ' + esc(orario(R.quando)) + ' · ' : ''}${R.mandato ? 'arrivato anche sul telefono' : 'non arrivato sul telefono (ntfy ha rifiutato: limite di messaggi)'}</p>
     <p style="margin-top:8px;white-space:pre-line;font-size:.95rem;line-height:1.55">${esc(R.testo)}</p></div>`;
+}
+// il robot mese per mese: quanto ha fatto ogni conto in ogni mese (dall'ultimo valore del mese prima, o dal capitale)
+// contro SWDA nello stesso periodo
+function mesiRobotHTML() {
+  const R = ROBOT; if (!R || !(R.storico || []).length) return '';
+  const st = R.storico, mesi = [...new Set(st.map(x => x.d.slice(0, 7)))];
+  const fine = m => st.filter(x => x.d.slice(0, 7) === m).slice(-1)[0];
+  const conti = Object.keys(STRATEGIE).filter(k => st.some(x => x[k] != null));
+  const MESI = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+  const cella = r => r == null ? '<td>–</td>' : `<td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 1)}</td>`;
+  const righe = mesi.map((m, i) => { const f = fine(m), p = i ? fine(mesi[i - 1]) : null;
+    const prima = k => (p && p[k] != null ? p[k] : (k === '_swda' ? (st.find(x => x.d.slice(0, 7) === m && x._swda) || {})._swda : ROBOT_CAPITALE));
+    const r = k => f[k] != null && prima(k) ? f[k] / prima(k) - 1 : null;
+    return `<tr><td class="l"><b>${MESI[Number(m.slice(5)) - 1]} ${m.slice(0, 4)}</b>${i === 0 ? ' <span class="note">dal ' + esc(dt(st[0].d)) + '</span>' : ''}</td>${conti.map(k => cella(r(k))).join('')}${cella(r('_swda'))}</tr>`; }).reverse().join('');
+  return `<div class="card" id="rb-mesi"><h2>Mese per mese</h2>
+    <p class="sub" style="margin-top:4px">Quanto ha fatto ogni conto in ogni mese, contro SWDA (il mondo intero) negli stessi giorni. I conti di medio periodo vanno giudicati su più mesi.</p>
+    <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Mese</th>${conti.map(k => `<th>${esc(STRATEGIE[k].breve)}</th>`).join('')}<th>SWDA</th></tr></thead><tbody>${righe}</tbody></table></div></div>`;
 }
 // il robot con un broker vero: il conto di prova su Alpaca (alpaca_paper.py), letto dal ramo robot-stato
 let ALPACA = null;
@@ -1370,6 +1389,49 @@ async function avvisiQui() {
   if (!('Notification' in window)) { if (e) e.textContent = 'Questo browser non mostra notifiche: usa ntfy.'; return; }
   const p = await Notification.requestPermission().catch(() => 'denied');
   if (e) e.textContent = p === 'granted' ? 'Fatto: con l\'app aperta i nuovi avvisi arrivano anche come notifiche. Ad app chiusa servono ntfy.' : 'Permesso negato: lo puoi cambiare dalle impostazioni del browser.';
+}
+// gli avvisi sui prezzi: li mette l'app (comando ntfy al motore), li controlla il motore ogni minuto con i prezzi di Yahoo
+let ALLARMI_STATO = null;
+const comandoMotore = async cmd => { const N = D.notifiche; if (!N || !N.argomento) return false;
+  try { const r = await fetch('https://ntfy.sh/' + N.argomento + '-comandi', {method: 'POST', body: JSON.stringify(cmd)}); return r.ok; } catch (e) { return false; } };
+function allarmiListaHTML() {
+  const A = ALLARMI_STATO;
+  if (!A) return '<p class="note">Gli avvisi messi si leggono dal motore nel cloud (sul sito GitHub e su claude.ai).</p>';
+  const att = (A.attivi || []).map(x => `<li><b>${esc(tk(x.sym))}</b> ${x.verso} ${nf(x.prezzo, dec(x.prezzo))} <button type="button" class="linkb al-togli" data-id="${esc(x.id)}">togli</button></li>`).join('');
+  const sc = (A.scattati || []).slice(-5).reverse().map(x => `<li><b>${esc(tk(x.sym))}</b> ${x.verso} ${nf(x.prezzo, dec(x.prezzo))}: scattato ${esc(orario(x.scattato))} a ${nf(x.a, dec(x.a))}</li>`).join('');
+  return `${att ? `<ul class="note" style="margin:6px 0 0;padding-left:18px">${att}</ul>` : '<p class="note">Nessun avviso attivo.</p>'}${sc ? `<p class="note" style="margin-top:6px"><b>Scattati di recente</b></p><ul class="note" style="margin:4px 0 0;padding-left:18px">${sc}</ul>` : ''}`;
+}
+function allarmiHTML() {
+  if (!D.notifiche || !D.notifiche.argomento) return '';
+  return `<div class="card" id="allarmi"><h2>Avvisi sui prezzi</h2>
+    <p class="sub" style="margin-top:4px">Ti avvisa sul telefono (ntfy) quando un titolo sale sopra o scende sotto il prezzo che scegli. Lo controlla il motore nel cloud ogni minuto, anche ad app chiusa; ogni avviso scatta una volta sola. Simboli come in Yahoo: SWDA.MI, ENI.MI, AAPL, BTC-EUR.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:end">
+      <label class="f">Titolo<input id="al-sym" placeholder="SWDA.MI" autocapitalize="characters" style="width:9em"></label>
+      <label class="f">Quando<select id="al-verso"><option value="sotto">scende sotto</option><option value="sopra">sale sopra</option></select></label>
+      <label class="f">Prezzo<input id="al-prezzo" type="number" step="any" min="0" inputmode="decimal" style="width:7em"></label>
+      <button type="button" class="more" id="al-metti">Metti l'avviso</button></div>
+    <p class="note" id="al-esito" aria-live="polite" style="margin-top:6px"></p>
+    <div id="allarmi-lista" style="margin-top:6px">${allarmiListaHTML()}</div></div>`;
+}
+async function caricaAllarmi() {
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/allarmi.json?t=' + Math.floor(Date.now() / 60e3), {cache: 'no-store'});
+    if (!r.ok) return;
+    ALLARMI_STATO = await r.json();
+    const c = $('#allarmi-lista'); if (c) { c.innerHTML = allarmiListaHTML(); allarmiEventi(); }
+  } catch (e) {}
+}
+function allarmiEventi() {
+  const esito = t => { const e = $('#al-esito'); if (e) e.textContent = t; };
+  const m = $('#al-metti');
+  if (m && !m.dataset.ok) { m.dataset.ok = 1; m.addEventListener('click', async () => {
+    const sym = ($('#al-sym').value || '').trim().toUpperCase(), prezzo = Number($('#al-prezzo').value), verso = $('#al-verso').value;
+    if (!/^[A-Z0-9.^=-]{1,20}$/.test(sym) || !(prezzo > 0)) { esito('Scrivi il simbolo (come SWDA.MI) e un prezzo maggiore di zero.'); return; }
+    esito((await comandoMotore({allarme: {sym, verso, prezzo}})) ? `Chiesto al motore: avviso quando ${sym} ${verso === 'sopra' ? 'sale sopra' : 'scende sotto'} ${nf(prezzo, dec(prezzo))}. Compare qui sotto entro un paio di minuti.` : 'ntfy non ha risposto: riprova tra poco.');
+    setTimeout(caricaAllarmi, 90e3); }); }
+  document.querySelectorAll('.al-togli').forEach(b => b.addEventListener('click', async () => {
+    esito((await comandoMotore({togli_allarme: b.dataset.id})) ? 'Chiesto al motore di toglierlo: sparisce entro un paio di minuti.' : 'ntfy non ha risposto: riprova tra poco.');
+    setTimeout(caricaAllarmi, 90e3); }));
 }
 // il resoconto della settimana subito sul telefono: lo chiede al motore nel cloud con ntfy, come il "Ricomincia da capo"
 async function resocontoAdesso() {
@@ -2458,6 +2520,7 @@ function renderGiornata() {
   v.innerHTML = `<div><h1>Il robot</h1><p class="sub" style="margin-top:4px">Conti finti che comprano e vendono da soli nel motore del cloud, giorno e notte: le operazioni in diretta, i conti contro SWDA, il conto di prova su Alpaca e, più sotto, le reti neurali e la regola che il robot usa in giornata. Le regole provate e messe da parte sono in <a href="#prove" style="color:var(--accent)">Altro, Le prove di prima</a>.</p></div>
   ${robotHTML()}
   ${graficiRobotHTML()}
+  ${mesiRobotHTML()}
   ${alpacaHTML()}
   <div style="margin-top:22px"><h2>In giornata</h2><p class="sub" style="margin-top:4px">Comprare e vendere nella stessa seduta: le reti neurali e la regola Oops! che il robot usa nei conti in giornata, con la verifica su anni mai visti.</p></div>
   ${ogni ? `<div class="verdetto v-${regge.length ? 'cautela' : 'no'}"><div class="vh"><span class="vi" aria-hidden="true">${regge.length ? '!' : '✕'}</span><div><b>${regge.length ? 'Con cautela' : 'Per ora no'}</b>
@@ -3663,6 +3726,7 @@ async function avviaLive() {
   if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) {                            // il resoconto del lunedì e il conto Alpaca
     caricaResoconto(); caricaAlpaca(); setInterval(() => { caricaResoconto(); caricaAlpaca(); }, 1800e3);
     caricaAvvisi(); setInterval(caricaAvvisi, 120e3);                               // gli avvisi: ogni 2 minuti
+    caricaAllarmi(); setInterval(caricaAllarmi, 300e3);                             // gli avvisi sui prezzi
   }
   // su claude.ai: se la pagina può leggere GitHub, segue il motore nel cloud ogni minuto (senza token); se no, il suo archivio
   if (window.claude && !MOTORE_PAGINA) {

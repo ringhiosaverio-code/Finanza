@@ -15,7 +15,9 @@ il conto di prova su Alpaca (alpaca_paper.py), se ci sono le chiavi.
 import datetime
 import json
 import os
+import re
 import shutil
+import urllib.parse
 import urllib.request
 import subprocess
 import sys
@@ -33,7 +35,8 @@ VISTI = os.path.join(ROOT, "trader", "ntfy_visti.json")
 RESOCONTO = os.path.join(ROOT, "trader", "resoconto.json")   # l'ultimo resoconto, anche per l'app (ramo robot-stato)
 ALPACA = os.path.join(ROOT, "trader", "alpaca.json")
 AVVISI = os.path.join(ROOT, "trader", "avvisi.json")         # gli ultimi avvisi, anche quelli non partiti: l'app li mostra
-CODA = os.path.join(ROOT, "trader", "ntfy_coda.json")        # gli avvisi rifiutati da ntfy, da rimandare         # il conto di prova su Alpaca, per l'app (alpaca_paper.py)
+CODA = os.path.join(ROOT, "trader", "ntfy_coda.json")        # gli avvisi rifiutati da ntfy, da rimandare
+ALLARMI = os.path.join(ROOT, "trader", "allarmi.json")       # gli avvisi sui prezzi messi dall'app         # il conto di prova su Alpaca, per l'app (alpaca_paper.py)
 IMPORTANTI = ("piano", "rete_etf", "rete_obbl", "faber", "tendenza")      # questi subito; gli altri in un riassunto ogni ora
 NOMI = {"piano": "Il piano con la rete", "rete_etf": "ETF, rete neurale", "rete_obbl": "Obbligazioni, rete neurale",
         "faber": "ETF, media di 10 mesi", "tendenza": "Crypto, tendenza", "segnali": "Crypto, segnali", "rete": "Crypto, rete neurale",
@@ -246,9 +249,9 @@ def resoconto(adesso=None, subito=False):
 
 
 def comandi():
-    """I comandi che arrivano dall'app (anche dal sito GitHub) sull'argomento ntfy "<argomento>-comandi": per ora il
-    reset ("Ricomincia da capo" con il capitale scelto) e il resoconto della settimana adesso. Si esegue solo quello più
-    recente, una volta sola."""
+    """I comandi che arrivano dall'app (anche dal sito GitHub) sull'argomento ntfy "<argomento>-comandi": il reset
+    ("Ricomincia da capo" con il capitale scelto: solo il più recente), il resoconto della settimana adesso, gli avvisi
+    sui prezzi da aggiungere o togliere. Ognuno una volta sola."""
     try:
         with open(NOTIFICHE, encoding="utf-8") as fh:
             argomento = json.load(fh)["argomento"]
@@ -264,20 +267,85 @@ def comandi():
     msg = [m for m in righe if m.get("event") == "message"]
     if not msg:
         return
-    ultimo = msg[-1]
-    v["comando"] = ultimo["id"]
+    v["comando"] = msg[-1]["id"]
     with open(VISTI, "w", encoding="utf-8") as fh:
         json.dump(v, fh)
-    try:
-        cmd = json.loads(ultimo.get("message") or "{}")
-    except ValueError:
-        return
-    if "resoconto" in cmd:                                              # "Mandami il resoconto adesso" dall'app
-        resoconto(subito=True)
-    if "reset" in cmd:
-        capitale = int(float(cmd.get("reset") or 10000))
+    reset = None
+    for m in msg:
+        try:
+            cmd = json.loads(m.get("message") or "{}")
+        except ValueError:
+            continue
+        if not isinstance(cmd, dict):
+            continue
+        if "resoconto" in cmd:                                          # "Mandami il resoconto adesso" dall'app
+            resoconto(subito=True)
+        if "reset" in cmd:
+            reset = cmd
+        if "allarme" in cmd or "togli_allarme" in cmd:
+            gestisci_allarme(cmd)
+    if reset:
+        capitale = int(float(reset.get("reset") or 10000))
         subprocess.run([sys.executable, os.path.join(ROOT, "reset_robot.py"), "--capitale", str(capitale)], timeout=60)
         print(time.strftime("%H:%M:%S"), "reset dal comando dell'app, %d euro" % capitale, flush=True)
+
+
+def gestisci_allarme(cmd):
+    """Aggiunge o toglie un avviso sul prezzo: {"allarme": {"sym", "verso": "sopra"|"sotto", "prezzo"}} o
+    {"togli_allarme": id}. Al più 30 avvisi; i simboli come in Yahoo (SWDA.MI, BTC-EUR, AAPL)."""
+    A = _leggi(ALLARMI, {"attivi": [], "scattati": []})
+    if "togli_allarme" in cmd:
+        A["attivi"] = [x for x in A["attivi"] if x["id"] != str(cmd["togli_allarme"])]
+    else:
+        x = cmd.get("allarme") or {}
+        sym, verso = str(x.get("sym", "")).upper().strip(), x.get("verso")
+        try:
+            prezzo = float(x.get("prezzo"))
+        except (TypeError, ValueError):
+            return False
+        if not re.fullmatch(r"[A-Z0-9.^=\-]{1,20}", sym) or verso not in ("sopra", "sotto") or not prezzo > 0 or len(A["attivi"]) >= 30:
+            return False
+        A["attivi"].append({"id": "%x" % int(time.time() * 1000), "sym": sym, "verso": verso, "prezzo": prezzo,
+                            "creato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")})
+    _scrivi(ALLARMI, A)
+    return True
+
+
+def quotazioni(simboli):
+    """I prezzi di adesso dal server del motore (live.py), che li prende da Yahoo."""
+    url = "http://127.0.0.1:8770/quotazioni?s=" + urllib.parse.quote(",".join(simboli))
+    with urllib.request.urlopen(url, timeout=20) as r:
+        return {k: q.get("p") for k, q in (json.load(r).get("quote") or {}).items() if q and q.get("p")}
+
+
+def allarmi(prezzi_di=None):
+    """Ogni minuto controlla gli avvisi sui prezzi: quando un prezzo passa la soglia manda l'avviso (una volta) e lo
+    sposta tra quelli scattati."""
+    A = _leggi(ALLARMI, {"attivi": [], "scattati": []})
+    if not A["attivi"]:
+        return 0
+    try:
+        P = (prezzi_di or quotazioni)(sorted({x["sym"] for x in A["attivi"]}))
+        argomento = _leggi(NOTIFICHE, {})["argomento"]
+    except Exception:
+        return 0
+    restano, scattati = [], 0
+    for x in A["attivi"]:
+        p = P.get(x["sym"])
+        if p is None or not ((x["verso"] == "sopra" and p >= x["prezzo"]) or (x["verso"] == "sotto" and p <= x["prezzo"])):
+            restano.append(x)
+            continue
+        try:
+            manda("Prezzo: %s %s %s" % (x["sym"].replace(".MI", "").replace("-EUR", ""), x["verso"], _num(x["prezzo"], 2)),
+                  "%s è a %s (soglia %s, messa il %s)." % (x["sym"], _num(p, 2), _num(x["prezzo"], 2), _giorno(x["creato"][:10])), argomento, "bell")
+        except Exception:
+            pass                                                        # resta nella coda degli avvisi e nell'app
+        x["scattato"], x["a"] = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"), p
+        A["scattati"] = (A["scattati"] + [x])[-20:]
+        scattati += 1
+    A["attivi"] = restano
+    _scrivi(ALLARMI, A)
+    return scattati
 
 
 def avvisi(adesso=None):
@@ -370,13 +438,13 @@ def una_volta(ultimo):
         return ultimo
     m = (os.path.getmtime(STATO), os.path.getmtime(APP) if os.path.exists(APP) else 0.0,
          os.path.getmtime(RESOCONTO) if os.path.exists(RESOCONTO) else 0.0, os.path.getmtime(ALPACA) if os.path.exists(ALPACA) else 0.0,
-         os.path.getmtime(AVVISI) if os.path.exists(AVVISI) else 0.0)
+         os.path.getmtime(AVVISI) if os.path.exists(AVVISI) else 0.0, os.path.getmtime(ALLARMI) if os.path.exists(ALLARMI) else 0.0)
     if m == ultimo:
         return ultimo
     prepara()
     shutil.copy(STATO, os.path.join(DIR, "robot.json"))
     git("add", "robot.json")
-    for f in (RESOCONTO, ALPACA, AVVISI):                          # l'ultimo resoconto della settimana e il conto Alpaca, per l'app
+    for f in (RESOCONTO, ALPACA, AVVISI, ALLARMI):                          # l'ultimo resoconto della settimana e il conto Alpaca, per l'app
         if os.path.exists(f):
             shutil.copy(f, os.path.join(DIR, os.path.basename(f)))
             git("add", os.path.basename(f))
@@ -404,6 +472,7 @@ def main():
             resoconto()
             alpaca()
             riprova_coda()
+            allarmi()
         except Exception as e:                                   # rete o git: si riprova al giro dopo
             print(time.strftime("%H:%M:%S"), "errore:", str(e)[:200], flush=True)
         time.sleep(60)

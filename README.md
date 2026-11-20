@@ -705,6 +705,14 @@ Ogni avviso, partito o no, finisce in `trader/avvisi.json` (ramo `robot-stato`):
 (`trader/ntfy_coda.json`) e il motore li rimanda ogni 10 minuti. Con un account ntfy personale gratuito il limite è
 solo tuo: il token si mette tra i segreti di rete dell'ambiente per `ntfy.sh` (o nella variabile `NTFY_TOKEN`).
 
+## Avvisi sui prezzi e il robot mese per mese
+
+Nella pagina Il piano si mette un avviso su un titolo (simbolo come in Yahoo: SWDA.MI, ENI.MI, AAPL, BTC-EUR) quando
+sale sopra o scende sotto un prezzo: l'app lo manda al motore come comando ntfy, il motore (`pubblica_stato.py`) lo
+salva in `trader/allarmi.json` (ramo `robot-stato`) e ogni minuto lo controlla con i prezzi di Yahoo del server
+`live.py`; quando scatta manda l'avviso, una volta sola. Nella pagina Il robot la tabella "Mese per mese" dà il
+rendimento di ogni conto in ogni mese contro SWDA negli stessi giorni.
+
 ## Il resoconto del lunedì
 
 Ogni lunedì dalle 8 (ora italiana) il motore nel cloud (`pubblica_stato.py`) manda sul telefono, con ntfy, il resoconto
