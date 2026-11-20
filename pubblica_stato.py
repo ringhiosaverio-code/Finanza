@@ -63,14 +63,16 @@ def _giorno(d):
     return "%s %d %s" % (GIORNI[g.weekday()], g.day, MESI[g.month - 1])
 
 
-def resoconto_testo(stato, diario=None, oggi=None):
+def resoconto_testo(stato, diario=None, oggi=None, finora=False):
     """Il resoconto della settimana appena finita (da lunedì a domenica), da mandare il lunedì: (titolo, testo), o
     None se il robot non ha ancora uno storico. I conti partono tutti dal capitale scelto; quelli nati durante la
-    settimana contano da lì. oggi: la data del lunedì (datetime.date)."""
+    settimana contano da lì. oggi: la data del lunedì (datetime.date). finora: chiesto a metà settimana, la settimana
+    in corso fino a oggi compreso."""
     storico = [x for x in (stato.get("storico") or []) if x.get("d")]
     oggi = oggi or datetime.datetime.now(ROMA).date()
+    finora = finora and oggi.weekday() != 0
     lunedi = oggi - datetime.timedelta(days=oggi.weekday() or 7)                 # il lunedì della settimana appena finita
-    fine = [x for x in storico if x["d"] < oggi.isoformat()]
+    fine = [x for x in storico if x["d"] <= oggi.isoformat()] if finora else [x for x in storico if x["d"] < oggi.isoformat()]
     if not fine:
         return None
     fine = fine[-1]
@@ -88,7 +90,7 @@ def resoconto_testo(stato, diario=None, oggi=None):
         v0 = float(base.get(k) or capitale)
         conti[k] = (float(fine[k]), float(fine[k]) / v0 - 1)
         righe.append("%s: %s € (%s)" % (NOMI.get(k, k), _num(conti[k][0]), _pc(conti[k][1])))
-    con_swda = [x for x in storico if x["d"] <= fine["d"] and x.get("_swda")]
+    con_swda = [x for x in storico if x["d"] < fine["d"] and x.get("_swda")]          # un prezzo di partenza prima della fine
     s0 = base.get("_swda") or next((x["_swda"] for x in con_swda if x["d"] >= dal.isoformat()), None)
     if s0 and fine.get("_swda"):
         righe.append("SWDA (il mondo intero, per confronto): %s" % _pc(fine["_swda"] / s0 - 1))
@@ -116,7 +118,7 @@ def resoconto_testo(stato, diario=None, oggi=None):
     voci = G.get("voci") or []
     if voci and voci[-1].get("scelte"):
         righe.append("Le scelte della rete adesso (dal %s): %s." % (_giorno(voci[-1]["giorno"]), ", ".join(x.replace(".MI", "") for x in voci[-1]["scelte"])))
-    return "Resoconto della settimana · %s" % _giorno(oggi), "\n".join(righe).strip()
+    return "Resoconto della settimana%s · %s" % (" (finora)" if finora else "", _giorno(oggi)), "\n".join(righe).strip()
 
 
 def resoconto(adesso=None, subito=False):
@@ -147,7 +149,7 @@ def resoconto(adesso=None, subito=False):
             diario = json.load(fh)
     except (OSError, ValueError):
         diario = None
-    r = resoconto_testo(stato, diario, adesso.date())
+    r = resoconto_testo(stato, diario, adesso.date(), finora=subito)
     if not r:
         return False
     mandato = True
@@ -320,6 +322,6 @@ if __name__ == "__main__":
                 dr = json.load(fh)
         except (OSError, ValueError):
             dr = None
-        print("\n".join(resoconto_testo(st, dr) or ("(niente: il robot non ha ancora uno storico)",)))
+        print("\n".join(resoconto_testo(st, dr, finora=True) or ("(niente: il robot non ha ancora uno storico)",)))
         sys.exit(0)
     sys.exit(main())

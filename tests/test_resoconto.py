@@ -64,6 +64,16 @@ class Testo(unittest.TestCase):
         self.assertNotIn("SWDA", t)
         self.assertNotIn("Operazioni", t)
 
+    def test_finora_a_meta_settimana(self):
+        st = {"capitale": 1000, "storico": [{"d": "2030-01-13", "piano": 1000}, {"d": "2030-01-15", "piano": 1010},
+                                            {"d": "2030-01-16", "piano": 1020}], "registro": []}
+        titolo, t = P.resoconto_testo(st, None, datetime.date(2030, 1, 16), finora=True)
+        self.assertEqual(titolo, "Resoconto della settimana (finora) · mer 16 gen")
+        self.assertIn("Il robot dal lun 14 gen al mer 16 gen, 1.000 € per conto:", t)
+        self.assertIn("Il piano con la rete: 1.020 € (+2,0 %)", t)          # oggi compreso
+        titolo, t = P.resoconto_testo(STATO, None, LUNEDI, finora=True)    # il lunedì: la settimana appena finita
+        self.assertEqual(titolo, "Resoconto della settimana · lun 14 gen")
+
     def test_senza_storico(self):
         self.assertIsNone(P.resoconto_testo({"storico": []}, None, LUNEDI))
         self.assertIsNone(P.resoconto_testo({"storico": [{"d": "2030-01-14", "piano": 1}]}, None, LUNEDI))
@@ -99,7 +109,7 @@ class Invio(unittest.TestCase):
         self.assertFalse(P.resoconto(ora(14, 9)))                          # già mandato
         self.assertEqual(self.mandati, [("Resoconto della settimana · lun 14 gen", "prova")])
         self.assertTrue(P.resoconto(ora(15, 9), subito=True))              # "Mandami il resoconto adesso"
-        self.assertEqual(len(self.mandati), 2)
+        self.assertEqual(self.mandati[-1], ("Resoconto della settimana (finora) · mar 15 gen", "prova"))
 
     def test_se_non_parte_riprova_ogni_mezzora_e_resta_per_l_app(self):
         def rotto(*a, **k):
