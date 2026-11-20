@@ -1164,6 +1164,18 @@ function obiettivoHTML() {
     <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Strategia</th><th>Capitale che serve</th><th>Quanto oscilla in una settimana normale</th></tr></thead><tbody id="ob-righe">${righe}</tbody></table></div>
     <p class="note" style="margin-top:6px">È una media: in una settimana il conto può salire o scendere di molto di più (la colonna a destra è una settimana normale; nei crolli si perde di più). Nessuna strategia dà una cifra fissa ogni settimana: chi la promette sta vendendo qualcosa, spesso una truffa.</p></div>`;
 }
+function costiTasseHTML() {
+  const K = D.portafoglio && D.portafoglio.costi_tasse; if (!K) return '';
+  const r = (x, nome, nota) => `<tr><td class="l" style="white-space:normal"><b>${nome}</b><br><span class="note">${nota}</span></td><td class="${x.annuo_netto >= 0 ? 'pos' : 'neg'}"><b>${pc(x.annuo_netto, 1)}</b></td></tr>`;
+  return `<div class="card" id="costi-tasse"><h2>Costi e tasse: cambiare solo quando conviene</h2>
+    <p class="sub" style="margin-top:4px">In Italia il guadagno di un ETF paga il 26 % quando si vende, e le perdite degli ETF non lo possono compensare (sono un altro tipo di reddito). Chi cambia ETF ogni settimana paga le tasse a ogni guadagno. Qui la rete tiene un ETF finché resta vicino ai migliori: lo cambia solo se il nuovo ha una probabilità più alta di almeno ${nf(100 * K.margine_oggi, 0)} punti. Il margine si sceglie ogni anno guardando solo gli anni prima.</p>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Dal 2021, dopo costi e tasse</th><th>All'anno, netto</th></tr></thead><tbody>
+      ${r(K.imparato, 'La rete, cambiando solo quando conviene', `circa ${nf(K.imparato.cambi_anno, 0)} cambi l'anno · margine scelto sugli anni prima`)}
+      ${r(K.ogni_settimana, 'La rete, cambiando ogni settimana', `circa ${nf(K.ogni_settimana.cambi_anno, 0)} cambi l'anno · lordo ${pc(K.ogni_settimana.annuo_lordo, 1)}: le tasse si mangiano i due terzi`)}
+      ${r(K.swda, 'SWDA tenuto, tasse una volta sola alla fine', `lordo ${pc(K.swda.annuo_lordo, 1)}`)}
+    </tbody></table></div>
+    <p class="note" style="margin-top:6px">Il robot segue questa regola nel conto "ETF, rete neurale" e nella parte della rete del piano. Le minusvalenze di azioni o certificati possono compensare altri guadagni: per il tuo caso chiedi a un commercialista.</p></div>`;
+}
 function portafoglioHTML() {
   const P = D.portafoglio; if (!P || !P.combinazioni) return '';
   const cella = m => m ? `<b class="${m.annuo >= 0 ? 'pos' : 'neg'}">${pc(m.annuo, 1)}</b> l'anno<br><span class="note">Sharpe ${nf(m.sharpe, 2)} · calo <span class="neg">${pc(m.calo_massimo, 0)}</span></span>` : '–';
@@ -1213,6 +1225,7 @@ function renderPiano() {
   <div class="card"><h2>Il mercato adesso</h2><ul class="note" style="margin:6px 0 0;padding-left:18px">${stato.map(x => `<li>${x}</li>`).join('')}</ul></div>
   <div class="card"><h2>Come guadagnare, per orizzonte</h2>${orizzonti}</div>
   ${portafoglioHTML()}
+  ${costiTasseHTML()}
   ${pianoMioHTML()}
   ${futuroHTML()}
   ${obiettivoHTML()}

@@ -79,12 +79,99 @@ def pezzo_rete_etf(scelte=3, log=print):
         log("[portafoglio] rete: anno %d" % anno)
         P[te] = RL.stima(RL.addestra(C, tr, va), C.X[te])[:, 0]
     ok = ~np.isnan(P) & np.isin(C.cat, ("etf", "oro")) & C.OK[:, 0]
-    out = {}
+    out, settimane = {}, {}
     for w in np.unique(C.settimana[ok]):
         k = np.flatnonzero(ok & (C.settimana == w))
         if len(k) >= 5:
             out[int(w)] = float(C.R[k[np.argsort(-P[k])[:scelte]], 0].mean())
+            lordo = (1 + C.R[k, 0]) / (1 - RL.COSTO["etf"]) - 1                  # senza il costo di andata e ritorno
+            settimane[int(w)] = {C.sym[i]: (float(P[i]), float(r)) for i, r in zip(k, lordo)}
+    pezzo_rete_etf.settimane = settimane                                        # per lo studio di costi e tasse
     return out
+
+
+# ---------------------------------------------------------------- costi e tasse: cambiare solo quando conviene
+
+TASSA = 0.26                        # sui guadagni degli ETF, quando si vende; le perdite degli ETF non li compensano
+COSTO_LATO = 0.0005                 # commissione e spread per ogni compravendita, per lato
+MARGINI = (0.0, 0.01, 0.02, 0.03, 0.05, 0.08, 0.12)
+
+
+def simula_isteresi(settimane, margine, scelte=3, tasse=True, liquida=True):
+    """Il conto che segue le scelte della rete sugli ETF, settimana per settimana, con costi e tasse vere: si tiene un
+    ETF finché la sua probabilità non scende sotto quella del terzo migliore meno `margine`; ogni vendita paga i costi
+    e il 26 % sul guadagno (le perdite non si compensano: per un ETF sono di un altro tipo di reddito); quello che si
+    incassa si rimette nei nuovi scelti. Alla fine si vende tutto (liquida) per confrontare al netto.
+    settimane: {settimana: {sym: (probabilità, rendimento lordo della settimana)}}. Ritorna (valori settimanali, cambi)."""
+    pos = {}                                                    # sym -> [valore, valore di carico]
+    valori, cambi, cassa = [], 0, 1.0
+    for w in sorted(settimane):
+        c = settimane[w]
+        ordine = sorted(c, key=lambda s: -c[s][0])
+        soglia = c[ordine[min(scelte, len(ordine)) - 1]][0] - margine
+        for s in list(pos):                                     # chi non regge più si vende
+            if s not in c or c[s][0] < soglia:
+                v, carico = pos.pop(s)
+                v *= 1 - COSTO_LATO
+                if tasse and v > carico:
+                    v -= TASSA * (v - carico)
+                cassa += v
+                cambi += 1
+        nuovi = [s for s in ordine if s not in pos][:scelte - len(pos)]
+        if nuovi and cassa > 0:
+            quota = cassa / len(nuovi)
+            for s in nuovi:
+                pos[s] = [quota * (1 - COSTO_LATO), quota]
+            cassa = 0.0
+        for s in pos:                                           # la settimana passa
+            pos[s][0] *= 1 + c[s][1]
+        valori.append(cassa + sum(v for v, _ in pos.values()))
+    if liquida and pos:                                         # alla fine si vende tutto, con le tasse
+        fine = cassa
+        for v, carico in pos.values():
+            v *= 1 - COSTO_LATO
+            fine += v - (TASSA * (v - carico) if tasse and v > carico else 0.0)
+        valori[-1] = fine
+    return valori, cambi
+
+
+def studio_costi_tasse(settimane, mondo, log=print):
+    """Ogni anno si sceglie il margine che negli anni prima ha lasciato più soldi dopo costi e tasse, e lo si usa
+    nell'anno dopo (mai visto). Si confronta con il cambio ogni settimana (margine zero) e con SWDA tenuto e venduto
+    alla fine (tasse una volta sola)."""
+    anni = sorted({datetime.date.fromordinal(w * 7).year for w in settimane})
+    per_anno = lambda a: {w: v for w, v in settimane.items() if datetime.date.fromordinal(w * 7).year == a}
+    def netto(sett, m):
+        val, cambi = simula_isteresi(sett, m)
+        return (val[-1] if val else 1.0), cambi
+    scelti, conto_learn, conto_zero, cambi_learn, cambi_zero = [], 1.0, 1.0, 0, 0
+    for a in anni:
+        prima = {w: v for w, v in settimane.items() if datetime.date.fromordinal(w * 7).year < a}
+        m = max(MARGINI, key=lambda x: netto(prima, x)[0]) if len(prima) >= 26 else 0.02
+        f, c = netto(per_anno(a), m)
+        f0, c0 = netto(per_anno(a), 0.0)
+        conto_learn *= f
+        conto_zero *= f0
+        cambi_learn += c
+        cambi_zero += c0
+        scelti.append({"anno": a, "margine": m, "netto": f - 1, "netto_ogni_settimana": f0 - 1})
+        log("[portafoglio] %d: margine scelto %.2f · netto %+.1f %% (cambiando ogni settimana %+.1f %%)" % (a, m, 100 * (f - 1), 100 * (f0 - 1)))
+    n_anni = len(settimane) / SETTIMANE
+    mo = [mondo.get(w, 0.0) for w in sorted(settimane)]
+    swda = np.prod([1 + x for x in mo])
+    swda_netto = swda - TASSA * max(swda - 1, 0) - 2 * COSTO_LATO
+    tutto = {m: netto(settimane, m) for m in MARGINI}
+    lordo = simula_isteresi(settimane, 0.0, tasse=False)[0][-1]
+    ris = {"anni": scelti, "margine_oggi": max(MARGINI, key=lambda x: tutto[x][0]),
+           "imparato": {"annuo_netto": conto_learn ** (1 / n_anni) - 1, "cambi_anno": cambi_learn / n_anni},
+           "ogni_settimana": {"annuo_netto": conto_zero ** (1 / n_anni) - 1, "cambi_anno": cambi_zero / n_anni,
+                              "annuo_lordo": lordo ** (1 / n_anni) - 1},
+           "swda": {"annuo_netto": swda_netto ** (1 / n_anni) - 1, "annuo_lordo": swda ** (1 / n_anni) - 1},
+           "per_margine": {("%.2f" % m): {"annuo_netto": tutto[m][0] ** (1 / n_anni) - 1, "cambi_anno": tutto[m][1] / n_anni} for m in MARGINI}}
+    log("[portafoglio] costi e tasse: margine imparato %+.1f %% l'anno netto (%.0f cambi l'anno) · ogni settimana %+.1f %% netto (%.0f cambi, lordo %+.1f %%) · SWDA %+.1f %% netto" % (
+        100 * ris["imparato"]["annuo_netto"], ris["imparato"]["cambi_anno"], 100 * ris["ogni_settimana"]["annuo_netto"],
+        ris["ogni_settimana"]["cambi_anno"], 100 * ris["ogni_settimana"]["annuo_lordo"], 100 * ris["swda"]["annuo_netto"]))
+    return ris
 
 
 def combina(pezzi, pesi, settimane, vol_obiettivo=None):
@@ -133,6 +220,9 @@ def studia(log=print, salva=True):
     ris = {"creato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC"), "da": da, "a": a,
            "meta": datetime.date.fromordinal(comuni[meta] * 7).isoformat(), "combinazioni": {}}
     log("[portafoglio] %d settimane comuni, dal %s al %s" % (len(comuni), da, a))
+    sett = {w: v for w, v in getattr(pezzo_rete_etf, "settimane", {}).items() if comuni[0] <= w <= comuni[-1]}
+    if sett:
+        ris["costi_tasse"] = studio_costi_tasse(sett, pezzi["mondo"], log)
     for k, (pesi, vol, nome) in COMBINAZIONI.items():
         r = combina(pezzi, pesi, comuni, vol)
         ris["combinazioni"][k] = {"nome": nome, "pesi": pesi, "vol_obiettivo": vol, "tutto": misure(r),

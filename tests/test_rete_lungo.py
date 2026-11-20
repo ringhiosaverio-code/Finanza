@@ -96,5 +96,24 @@ class Diario(unittest.TestCase):
         self.assertIsNone(G["voci"][0]["esito"])
 
 
+class Isteresi(unittest.TestCase):
+    def test_si_tiene_chi_e_ancora_vicino_ai_migliori(self):
+        o = {"7": [{"sym": "A", "categoria": "etf", "probabilita": 0.60}, {"sym": "B", "categoria": "etf", "probabilita": 0.58},
+                   {"sym": "C", "categoria": "etf", "probabilita": 0.57}, {"sym": "D", "categoria": "etf", "probabilita": 0.555},
+                   {"sym": "E", "categoria": "etf", "probabilita": 0.50}]}
+        r = L.pesi_con_isteresi(o, 3, "2030-01-09", ("etf",), ["D", "E"], 0.02)
+        self.assertEqual(r["tenuti"], ["D"])                                         # D è a 1,5 punti dal terzo: si tiene; E no
+        self.assertEqual(sorted(r["pesi"]), ["A", "B", "D"])
+        self.assertEqual(L.pesi_con_isteresi(o, 3, "2030-01-09", ("etf",), ["D"], 0.0)["tenuti"], [])
+
+    def test_le_tasse_si_pagano_solo_sui_guadagni_e_cambiare_meno_conviene(self):
+        import portafoglio as PF
+        sett = {w: {"A": (0.6 if w % 2 else 0.55, 0.01), "B": (0.55 if w % 2 else 0.6, 0.01), "C": (0.5, 0.0)} for w in range(100, 140)}
+        v0, c0 = PF.simula_isteresi(sett, 0.0, scelte=1)
+        v1, c1 = PF.simula_isteresi(sett, 0.1, scelte=1)
+        self.assertLess(c1, c0)                                                      # con il margine si cambia meno
+        self.assertGreater(v1[-1], v0[-1])                                           # e restano più soldi dopo costi e tasse
+
+
 if __name__ == "__main__":
     unittest.main()

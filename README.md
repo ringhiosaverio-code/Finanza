@@ -624,6 +624,14 @@ riassunto degli altri). Il robot si può far ripartire con 1.000, 5.000, 10.000 
 arriva al motore anche dal sito GitHub, con ntfy. `carry_crypto.py` misura il carry delle crypto sui futures di Kraken:
 quest'anno circa il 3 % su Bitcoin ed Ethereum, zero o in perdita sulle altre.
 
+## Costi e tasse: cambiare solo quando conviene
+
+Con le tasse italiane (26 % sui guadagni degli ETF quando si vende, senza compensare le perdite degli ETF) cambiare le
+scelte ogni settimana costa moltissimo. `portafoglio.py` simula il conto che segue la rete sugli ETF con costi e tasse
+vere: cambiando ogni settimana +29,1 % lordo diventa +10,4 % netto (127 cambi l'anno), meno di SWDA tenuto (+10,6 %
+netto). Tenendo un ETF finché la sua probabilità resta entro un margine dal terzo migliore (margine scelto ogni anno
+sugli anni prima, di solito 1-2 punti) resta +15,0 % l'anno netto con 84 cambi. Il robot usa il margine imparato.
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo

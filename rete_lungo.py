@@ -409,6 +409,40 @@ def oggi(C, m):
     return out
 
 
+def pesi_con_isteresi(o, scelte, giorno, categorie, precedenti, margine, orizzonte="7"):
+    """Come pesi_robot, ma si tengono gli ETF della settimana prima finché la loro probabilità non scende sotto quella
+    dell'ultimo dei migliori meno `margine` (portafoglio.studio_costi_tasse: con le tasse italiane conviene cambiare meno)."""
+    lista = [x for x in (o.get(orizzonte) or []) if not categorie or x["categoria"] in categorie]
+    if not lista:
+        return {"giorno": giorno, "pesi": {}, "margine": margine}
+    prob = {x["sym"]: x["probabilita"] for x in lista}
+    soglia = lista[min(scelte, len(lista)) - 1]["probabilita"] - margine
+    tenuti = [s for s in (precedenti or []) if s in prob and prob[s] >= soglia][:scelte]
+    nuovi = [x["sym"] for x in lista if x["sym"] not in tenuti][:scelte - len(tenuti)]
+    d = datetime.date.fromisoformat(giorno)
+    lunedi = (d - datetime.timedelta(days=d.weekday())).isoformat()
+    tutti = tenuti + nuovi
+    return {"giorno": lunedi, "pesi": {s: round(1.0 / len(tutti), 4) for s in tutti}, "tenuti": tenuti, "margine": margine}
+
+
+def _margine_e_precedenti():
+    """Il margine imparato da portafoglio.py e le scelte della settimana prima (dal diario della rete dal vivo)."""
+    margine, precedenti = 0.02, []
+    try:
+        with open(os.path.join(ROOT, "portafoglio.json"), encoding="utf-8") as fh:
+            margine = float(json.load(fh).get("costi_tasse", {}).get("margine_oggi", margine))
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(DIARIO, encoding="utf-8") as fh:
+            voci = json.load(fh).get("voci") or []
+        if voci:
+            precedenti = voci[-1].get("scelte") or []
+    except (OSError, ValueError):
+        pass
+    return margine, precedenti
+
+
 def pesi_robot(o, scelte, giorno, categorie=None, orizzonte="7"):
     """I pesi per un conto del robot: le `scelte` (delle `categorie`) con la probabilità più alta di chiudere in guadagno
     all'orizzonte (di serie una settimana, dove la verifica regge), in parti uguali, rifatti ogni settimana (dal lunedì)."""
@@ -482,6 +516,9 @@ def studia(log=print, salva=True, sezione=None):
         ris["robot"] = pesi_robot(ris["oggi"], S["scelte"], ris["dati"]["a"])
     else:                                                                       # la rete generale sceglie anche dentro ETF e obbligazioni
         ris["robot_sezioni"] = {k: pesi_robot(ris["oggi"], v["scelte"], ris["dati"]["a"], v["categorie"]) for k, v in SEZIONI.items()}
+        margine, precedenti = _margine_e_precedenti()                     # gli ETF: si cambia solo quando conviene (costi e tasse)
+        ris["robot_sezioni"]["etf"] = pesi_con_isteresi(ris["oggi"], SEZIONI["etf"]["scelte"], ris["dati"]["a"], SEZIONI["etf"]["categorie"],
+                                                        precedenti, margine)
         if salva:
             aggiorna_diario(ris["robot_sezioni"]["etf"], C)
     ris["durata_minuti"] = round((time.time() - t0) / 60, 1)
