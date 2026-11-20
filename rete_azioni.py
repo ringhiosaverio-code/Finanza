@@ -636,6 +636,13 @@ def rigioca(modello, B, margine=None, sedute=SEDUTE_ROBOT, costo=COSTO):
     return chiuse, aperte, {sym: round(float(vantaggio[c, -1]), 6) for c, sym in enumerate(B.simboli)}
 
 
+def borsa_aperta(adesso=None):
+    """La borsa di questo mercato è aperta (giorno feriale, dall'apertura a 10 minuti dopo la chiusura)?"""
+    d = adesso or datetime.datetime.now(ROMA)
+    m = d.hour * 60 + d.minute
+    return d.weekday() < 5 and APRE - 5 <= m <= APRE + BARRE * BARRA + 10
+
+
 def robot(margine=MARGINE_ROBOT, sedute=SEDUTE_ROBOT, log=print):
     """Per il robot dell'app: le operazioni della rete nelle ultime sedute. Se c'è, la rete della probabilità di guadagno
     sceglie le operazioni (compra dove la probabilità stimata arriva alla soglia imparata, anche senza il via libera della
@@ -650,7 +657,7 @@ def robot(margine=MARGINE_ROBOT, sedute=SEDUTE_ROBOT, log=print):
         chiave = max(r["modelli"], key=float)
         modello = rete.da_json(r["modelli"][chiave])
     costo = float(chiave)
-    B = carica(max_age=300, log=lambda m: None)
+    B = carica(max_age=300 if borsa_aperta() else 6 * 3600, log=lambda m: None)   # a borsa chiusa niente download (Yahoo limita)
     chiuse, aperte, vantaggio = rigioca(modello, B, margine, sedute, costo)
     log("[" + NOME + "] per il robot: %d operazioni chiuse, %d aperte nelle ultime %d sedute" % (len(chiuse), len(aperte), sedute))
     prob = modello.get("tipo") == "probabilita"
