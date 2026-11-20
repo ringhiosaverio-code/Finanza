@@ -8,10 +8,14 @@ const {chromium} = require('playwright');
 const BASE = process.argv[2] || 'http://127.0.0.1:8770';
 const URL = BASE + '/?motore=1#giornata';
 const ora = () => new Date().toISOString().slice(0, 19);
+// Se il browser si chiude (o la pagina non si riapre per 3 volte di fila) il motore esce: il guardiano di tempo_reale.sh
+// lo riaccende entro un minuto con un browser nuovo. Prima restava a riprovare per sempre in un browser chiuso.
+const esci = perche => { console.log(ora(), perche + ': esco, il guardiano mi riaccende'); process.exit(1); };
 (async () => {
   const browser = await chromium.launch();
+  browser.on('disconnected', () => esci('browser chiuso'));
   const ctx = await browser.newContext({timezoneId: 'Europe/Rome', locale: 'it-IT'});
-  let page = null, aperta = 0;
+  let page = null, aperta = 0, errori = 0;
   const apri = async () => {
     try { if (page) await page.close(); } catch (e) {}
     page = await ctx.newPage();
@@ -25,8 +29,10 @@ const ora = () => new Date().toISOString().slice(0, 19);
       if (!page || Date.now() - aperta > 900e3) await apri();
       const ok = await page.evaluate(() => typeof LIVE !== 'undefined' && LIVE.fonte === 'locale').catch(() => false);
       if (!ok && Date.now() - aperta > 60e3) await apri();       // server non raggiunto: si riprova
+      errori = 0;
     } catch (e) {
       console.log(ora(), 'riapro:', String(e).slice(0, 150));
+      if (++errori >= 3 || /has been closed/.test(String(e))) esci('la pagina non si riapre');
       await new Promise(r => setTimeout(r, 10e3));
       page = null;
     }
