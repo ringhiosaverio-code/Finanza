@@ -583,6 +583,19 @@ minuti, per le crypto (401 giorni di scambi) dalle barre orarie di Yahoo (2 anni
 decisione. Lo studio dei segnali di ogni rete dice quali contano: sulle azioni italiane in giornata il più legato a
 quello che succede dopo è il petrolio dell'ultimo giorno, poi il giorno della settimana e i futures di Wall Street.
 
+## Il portafoglio con la rete neurale: `portafoglio.py`
+
+Le strategie che hanno funzionato messe insieme, settimana per settimana, con i costi, dal 2021 al 2026: anni che la rete
+non aveva visto (ogni anno impara solo da quelli prima). Il piano con la rete (50 % SWDA, 20 % le scelte settimanali
+della rete sugli ETF, 10 % Faber, 10 % obbligazioni in euro, 10 % crypto in tendenza) ha fatto +13,9 % l'anno, volatilità
+9,4 %, Sharpe 1,44, calo massimo -12,9 %; il solo SWDA +13,1 %, Sharpe 1,01, calo -18,9 %; il classico 80/20 +10,1 %,
+Sharpe 0,95. Le sole scelte della rete sugli ETF: +20,4 % l'anno, Sharpe 1,49, calo -12,3 % (tasse escluse, e vanno
+ruotate ogni settimana). Il robot segue il piano nel conto "Il piano con la rete", ribilanciato ogni lunedì.
+
+```bash
+python3 portafoglio.py     # i pezzi, la rete fuori campione e le combinazioni: portafoglio.json (mezzo minuto)
+```
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo

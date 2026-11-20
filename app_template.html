@@ -1065,6 +1065,17 @@ function probSim(sym) {                                                         
   const h = s.orizzonti.find(o => o.giorni === s.hold); if (!h) return null;
   const p = h.scenari.prudente; return {p: p.p_gain, p10: p.p10, oriz: h.orizzonte};
 }
+function portafoglioHTML() {
+  const P = D.portafoglio; if (!P || !P.combinazioni) return '';
+  const cella = m => m ? `<b class="${m.annuo >= 0 ? 'pos' : 'neg'}">${pc(m.annuo, 1)}</b> l'anno<br><span class="note">Sharpe ${nf(m.sharpe, 2)} · calo <span class="neg">${pc(m.calo_massimo, 0)}</span></span>` : '–';
+  const righe = Object.entries(P.combinazioni).map(([k, x]) => `<tr${k === 'piano_rete' ? ' style="background:var(--accent-soft)"' : ''}><td class="l" style="white-space:normal;min-width:220px"><b>${esc(x.nome)}</b></td><td>${cella(x.tutto)}</td><td>${cella(x.seconda_meta)}</td></tr>`).join('');
+  const pr = P.combinazioni.piano_rete, mo = P.combinazioni.solo_mondo, w = pesiPiano();
+  return `<div class="card" id="portafoglio-piano"><h2>Il portafoglio migliore, con la rete neurale</h2>
+    <p class="sub" style="margin-top:4px">Le strategie che hanno funzionato messe insieme, settimana per settimana, con i costi, dal ${esc(P.da)} al ${esc(P.a)}: anni che la rete neurale non aveva mai visto (ogni anno ha imparato solo da quelli prima).</p>
+    ${pr && mo ? `<div class="verdetto v-cautela" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">!</span><div><b>La rete migliora il portafoglio</b><p>Con il 20 % affidato alle scelte settimanali della rete sugli ETF, il piano ha fatto ${pc(pr.tutto.annuo, 1)} l'anno con un calo massimo di ${pc(pr.tutto.calo_massimo, 0)}, contro ${pc(mo.tutto.annuo, 1)} e ${pc(mo.tutto.calo_massimo, 0)} del solo SWDA: più guadagno con meno rischio (Sharpe ${nf(pr.tutto.sharpe, 2)} contro ${nf(mo.tutto.sharpe, 2)}). Sono sei anni di dati, tasse escluse: un buon segno, non una certezza.</p></div></div></div>` : ''}
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Portafoglio</th><th>Tutto il periodo</th><th>Dal ${esc(P.meta)}</th></tr></thead><tbody>${righe}</tbody></table></div>
+    ${w ? `<p class="note" style="margin-top:8px"><b>Il piano di questa settimana (dal ${esc(w.giorno)}):</b> ${Object.entries(w.pesi).sort((a, b) => b[1] - a[1]).map(([s, x]) => `${esc(tk(s))} ${p100(x)}`).join(' · ')}; il resto in euro. Il robot lo segue nel conto "Il piano con la rete".</p>` : ''}</div>`;
+}
 function renderPiano() {
   const v = $('#v-piano'), M = D.mercati || {}, L = D.rete_lungo, SL = D.strategie_lungo, T = D.crypto_tendenza;
   const nome = sym => esc(((SIM[sym] || {}).name || tk(sym)).slice(0, 30));
@@ -1101,6 +1112,7 @@ function renderPiano() {
   v.innerHTML = `<div><h1>Il piano</h1><p class="sub" style="margin-top:4px">Lo studio che mette insieme tutto quello che l'app ha imparato: le reti neurali, le regole dei libri (Faber, Antonacci, Clenow), la tendenza dei fondi e i consigli di oggi. Si aggiorna da solo con i dati del ${esc((D.aggiornato || '').slice(0, 10))}. Probabilità del passato, non certezze; non è consulenza finanziaria.</p></div>
   <div class="card"><h2>Il mercato adesso</h2><ul class="note" style="margin:6px 0 0;padding-left:18px">${stato.map(x => `<li>${x}</li>`).join('')}</ul></div>
   <div class="card"><h2>Come guadagnare, per orizzonte</h2>${orizzonti}</div>
+  ${portafoglioHTML()}
   <div class="card"><h2>Le occasioni di oggi</h2>
     <h3 style="margin-top:6px">ETF</h3><div class="scroll"><table><thead><tr><th class="l">I migliori per le regole</th><th>Probabilità di guadagno</th><th class="l">Anche scelto da</th></tr></thead><tbody>${etf}</tbody></table></div>
     <h3 style="margin-top:14px">Obbligazioni <span class="note">· dalle più sicure</span></h3><div class="scroll"><table><thead><tr><th class="l">ETF obbligazionario</th><th>Cedola</th><th>Probabilità di guadagno</th><th class="l">Segnali</th></tr></thead><tbody>${bond}</tbody></table></div>
@@ -1109,7 +1121,8 @@ function renderPiano() {
     <h3 style="margin-top:14px">Crypto</h3><p class="note">${crypto} La rete del medio periodo, a un mese: ${reteCr || 'n/d'}${reteCr ? ' (sotto il 50 %: la rete non vede occasioni)' : ''}.</p>
     <p class="note" style="margin-top:6px">Le probabilità delle azioni sono misurate sui titoli che sono negli indici oggi: sono un po' ottimiste.</p></div>
   <div class="card"><h2>In pratica</h2><ol class="note" style="margin:6px 0 0;padding-left:20px;line-height:1.6">
-    <li><b>Base:</b> un ETF globale (SWDA o VWRL), a rate ogni mese, tenuto per anni.</li>
+    <li><b>Base:</b> un ETF globale (SWDA o VWRL), a rate ogni mese, tenuto per anni: circa metà del totale.</li>
+    <li><b>La rete:</b> circa un quinto sulle scelte settimanali della rete sugli ETF (è la parte che nella verifica ha migliorato di più il portafoglio, ma va seguita ogni settimana).</li>
     <li><b>Soldi che servono entro 1-3 anni:</b> titoli di Stato in euro a breve scadenza (per esempio IBGS).</li>
     <li><b>Protezione:</b> una volta al mese controlla la regola di Faber e riduci quello che scende sotto la sua media di 10 mesi.</li>
     <li><b>Azioni singole:</b> al più una piccola parte, preferendo quelle segnalate sia dalle regole sia dalla rete.</li>
@@ -2260,6 +2273,7 @@ const STRATEGIE = {
   giornata: {nome: 'Azioni in seduta (Oops!)', breve: 'Azioni', stato: 'esercitazione', chip: 'bassa'},
   tendenza: {nome: 'Crypto, tendenza come i fondi', breve: 'Tendenza crypto', stato: 'esercitazione', chip: 'media'},
   faber: {nome: 'ETF, media di 10 mesi (Faber)', breve: 'ETF Faber', stato: 'esercitazione', chip: 'media'},
+  piano: {nome: 'Il piano con la rete (portafoglio)', breve: 'Piano', stato: 'esercitazione', chip: 'alta'},
   rete_etf: {nome: 'ETF, rete neurale', breve: 'Rete ETF', stato: 'esercitazione', chip: 'media'},
   rete_obbl: {nome: 'Obbligazioni, rete neurale', breve: 'Rete obbligazioni', stato: 'esercitazione', chip: 'media'},
   segnali: {nome: 'Crypto, ordini sui segnali', breve: 'Segnali crypto', stato: 'esercitazione', chip: 'bassa'},
@@ -2319,6 +2333,10 @@ function senzaRitirate(R) { for (const k of Object.keys(STRATEGIE)) if (STRATEGI
 const PORTAFOGLI = {
   tendenza: {dati: () => D.crypto_tendenza && D.crypto_tendenza.oggi, costo: ROBOT_COSTO_CRYPTO, fonte: 'chiusura del giorno',
     giu: 'tendenza girata: momento a 1, 3 e 12 mesi non più positivo', meno: 'peso ridotto: volatilità salita o tendenza più debole', su: w => `tendenza positiva, peso ${p100(w)} del conto (dalla volatilità)`},
+  // il portafoglio del piano: 50 % SWDA, 20 % le scelte settimanali della rete sugli ETF, 10 % Faber, 10 % obbligazioni in
+  // euro, 10 % crypto in tendenza (portafoglio.py: il migliore guadagno per unità di rischio, sugli anni mai visti)
+  piano: {dati: () => pesiPiano(), costo: 0.001, fonte: 'piano, ogni lunedì',
+    giu: 'uscito dal piano di questa settimana', meno: 'peso ricalcolato a inizio settimana', su: w => `nel piano di questa settimana, peso ${p100(w)}`},
   rete_etf: {dati: () => D.rete_lungo && D.rete_lungo.robot_sezioni && D.rete_lungo.robot_sezioni.etf, costo: 0.001, fonte: 'rete neurale, ogni lunedì',
     giu: 'uscito dai 3 migliori della settimana per la rete neurale', meno: 'peso ricalcolato a inizio settimana', su: w => `tra i 3 ETF più probabili in guadagno a una settimana per la rete, peso ${p100(w)}`},
   rete_obbl: {dati: () => D.rete_lungo && D.rete_lungo.robot_sezioni && D.rete_lungo.robot_sezioni.obbligazioni, costo: 0.001, fonte: 'rete neurale, ogni lunedì',
@@ -2326,6 +2344,19 @@ const PORTAFOGLI = {
   faber: {dati: () => D.strategie_lungo && D.strategie_lungo.mercati && D.strategie_lungo.mercati.etf && D.strategie_lungo.mercati.etf.oggi && D.strategie_lungo.mercati.etf.oggi.faber, costo: 0.001, fonte: 'fine del mese',
     giu: 'sotto la media di 10 mesi (regola di Faber)', meno: 'peso ricalcolato a fine mese', su: w => `sopra la media di 10 mesi (Faber), peso ${p100(w)} del conto`},
 };
+function pesiPiano() {
+  const L = D.rete_lungo, SL = D.strategie_lungo, T = D.crypto_tendenza;
+  const re = L && L.robot_sezioni && L.robot_sezioni.etf; if (!re) return null;
+  const fab = SL && SL.mercati && SL.mercati.etf && SL.mercati.etf.oggi && SL.mercati.etf.oggi.faber.pesi;
+  const P = {}, add = (s, w) => { if (w > 0.0005) P[s] = (P[s] || 0) + w; };
+  add('SWDA.MI', 0.5); add('IEAG.MI', 0.1);
+  Object.entries(re.pesi).forEach(([s, w]) => add(s, 0.2 * w));
+  const fk = Object.entries(fab || {}), fs = fk.reduce((t, [, w]) => t + w, 0);
+  fk.forEach(([s, w]) => add(s, 0.1 * w));                                        // Faber fuori dal mercato: quella parte resta in euro
+  if (T && T.oggi) Object.entries(T.oggi.pesi).forEach(([s, w]) => add(s, 0.1 * w));   // la tendenza crypto: il resto della sua parte in euro
+  Object.keys(P).forEach(s => { P[s] = Math.round(P[s] * 10000) / 10000; });
+  return {giorno: re.giorno, pesi: P};
+}
 const RETI_NOMI = ['rete', 'rete_ita', 'rete_usa', 'segnali'];
 const contoVuoto = (k, attiva) => k === 'crypto' ? {attiva, cassa: ROBOT_CAPITALE, piani: {}, ops: [], n: 0, vinte: 0}
   : RETI_NOMI.includes(k) ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
@@ -2372,6 +2403,7 @@ function perchePerdita(e) {
   const quanto = `Ha perso ${pc(-e.r, 2, false)}, costi compresi. `;
   let perche;
   if (n.includes('protezione')) perche = `Il prezzo è sceso fino alla <b>protezione</b> (lo stop-loss fissato al momento dell'acquisto). Tenere voleva dire lasciare aperta una perdita senza limite: la protezione la ferma a quella messa in conto prima di comprare (come nelle skill trader-exit e trader-risk, al massimo lo 0,5 % del capitale per operazione). Nelle verifiche, togliere la protezione non ha migliorato i risultati e ha reso le perdite peggiori molto più grandi.`;
+  else if (n.includes('uscito dal piano')) perche = `Ogni lunedì il piano si ricalcola: la parte scelta dalla rete neurale cambia con la sua classifica, Faber e la tendenza delle crypto escono da quello che è sceso sotto la sua media o non è più in tendenza. Si vende anche in perdita perché il piano conta come portafoglio intero: nella verifica 2021-2026 ha guadagnato di più di SWDA da solo con meno rischio.`;
   else if (n.includes('migliori della settimana') || n.includes('ricalcolato a inizio settimana')) perche = `Ogni lunedì la rete neurale rifà la classifica e tiene solo i titoli con la probabilità più alta di guadagnare nella settimana (è l'orizzonte in cui la sua verifica regge). Chi esce dalla classifica si vende, anche in perdita: tenerlo vorrebbe dire puntare su un titolo che la rete adesso giudica peggiore degli altri.`;
   else if (n.includes('media di 10 mesi') || n.includes('ricalcolato a fine mese')) perche = `La regola di Mebane Faber tiene un ETF solo finché il suo prezzo è sopra la media degli ultimi 10 mesi, e lo vende quando ci scende sotto: serve a stare fuori dai ribassi lunghi (dal 2017 ha ridotto il calo massimo da -34 % a -14 %). Uscendo si accetta una piccola perdita per evitarne una grande; a volte il prezzo poi risale, è il prezzo dell'assicurazione.`;
   else if (n.includes('tendenza girata') || n.includes('peso ridotto')) perche = `Come fanno i fondi di tendenza (Hurst, Ooi e Pedersen, AQR) si tiene una crypto solo finché il suo momento a 1, 3 e 12 mesi è positivo, e meno quando oscilla di più (Moreira e Muir). ${n.includes('girata') ? 'La tendenza si è girata: tenere voleva dire restare dentro un ribasso, che è proprio quello che la strategia evita (nel 2022 le crypto hanno perso fino all\'80 %).' : 'La volatilità è salita o la tendenza si è indebolita: si riduce la posizione per tenere costante il rischio.'} Ogni singola vendita può essere in perdita: conta il conto nel suo insieme.`;
@@ -2734,7 +2766,7 @@ function robotTendenza(R, adesso, k = 'tendenza') {
   for (const s of tutti) {                                                       // prima le vendite, poi gli acquisti
     const p = C.pos[s], prezzo = prezzoOra(s, p ? p.entrata : null); if (!prezzo || !p) continue;
     const voluto = (pesi[s] || 0) * tot, ora = p.qty * prezzo;
-    if (ora - voluto > Math.max(0.01 * tot, 5)) {
+    if (ora - voluto > Math.max(0.005 * tot, 5)) {
       const q = Math.min(p.qty, (ora - voluto) / prezzo), incasso = q * prezzo * (1 - costo), rr = prezzo * (1 - costo) / (p.entrata * (1 + costo)) - 1;
       C.cassa += incasso; p.qty -= q; C.n++; if (rr > 0) C.vinte++;
       if (p.qty * prezzo < 1) delete C.pos[s];
@@ -2744,7 +2776,7 @@ function robotTendenza(R, adesso, k = 'tendenza') {
   for (const s of Object.keys(pesi)) {
     const p = C.pos[s], prezzo = prezzoOra(s, p ? p.entrata : null); if (!prezzo) continue;
     const voluto = pesi[s] * tot, ora = p ? p.qty * prezzo : 0, spesa = Math.min(voluto - ora, C.cassa);
-    if (spesa > Math.max(0.01 * tot, 5)) {
+    if (spesa > Math.max(0.005 * tot, 5)) {
       const q = spesa * (1 - costo) / prezzo;
       C.pos[s] = p ? {sym: s, qty: p.qty + q, entrata: (p.entrata * p.qty + prezzo * q) / (p.qty + q)} : {sym: s, qty: q, entrata: prezzo};
       C.cassa -= spesa;
@@ -2945,13 +2977,13 @@ function robotHTML() {
       return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(p.sym))}</b> <span class="note">${STRATEGIE[p.k].breve} · dalle ${new Date(p.quando).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'})}</span><br><span class="note">esce ${esc(p.esce)}</span></td><td>${nf(p.entrata, dec(p.entrata))} ${p.cur}</td><td>${nf(p.ora, dec(p.ora))} ${p.cur}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div>
       ${pos.some(p => STRATEGIE[p.k].ritirata) ? '<p class="note" style="margin-top:4px">Le posizioni di notte rimaste da prima di questa versione si chiudono alla prossima apertura: il robot non ne apre di nuove.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
   const tutte = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1);
-  if (!['tutte', 'giornata', 'rete_etf', 'rete_obbl', 'faber', 'tendenza', 'segnali', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
+  if (!['tutte', 'giornata', 'piano', 'rete_etf', 'rete_obbl', 'faber', 'tendenza', 'segnali', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
   const filtrate = tutte.filter(e => (robotFiltro === 'tutte' || e.s === robotFiltro)       // una sezione per strategia
     && (robotVerso === 'tutte' || (robotVerso === 'entrate' ? e.azione === 'compra' : e.azione === 'vende')));
   const reg = filtrate.slice(0, robotLimite);
   const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome'}) + ', in seduta' : oraDi(e.t);
   const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
-  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['rete_etf', 'ETF, rete neurale'], ['rete_obbl', 'Obbligazioni, rete neurale'], ['faber', 'ETF, media di 10 mesi'], ['tendenza', 'Crypto, tendenza come i fondi'], ['segnali', 'Crypto, ordini sui segnali'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
+  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['piano', 'Il piano con la rete'], ['rete_etf', 'ETF, rete neurale'], ['rete_obbl', 'Obbligazioni, rete neurale'], ['faber', 'ETF, media di 10 mesi'], ['tendenza', 'Crypto, tendenza come i fondi'], ['segnali', 'Crypto, ordini sui segnali'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
     <div class="seg" style="margin-top:6px" role="group" aria-label="Entrate o uscite">${[['tutte', 'Entrate e uscite'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([f, t]) => `<button type="button" data-v="${f}" aria-pressed="${robotVerso === f}">${t}</button>`).join('')}</div>`;
   const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span>${perchePerdita(e)}</li>`).join('');
   const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>
