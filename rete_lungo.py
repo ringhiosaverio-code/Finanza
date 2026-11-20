@@ -201,26 +201,59 @@ class Campioni:
 
 # ---------------------------------------------------------------- la rete
 
-def addestra(C, tr, va, epoche=20, seed=0, log=None):
-    """Una rete [n, 32, 16, 3]: la probabilità di chiudere in guadagno a 7, 30 e 91 giorni. Si tiene l'epoca che stima
-    meglio il periodo di scelta (mai visto)."""
+# cosa impara la rete. "assoluto": chiudere in guadagno dopo i costi. "relativo": fare meglio della metà degli altri titoli
+# nella stessa settimana (Gu, Kelly e Xiu, "Empirical Asset Pricing via Machine Learning", Review of Financial Studies
+# 2020: le reti sanno ordinare i titoli tra loro molto meglio che indovinare dove va tutto il mercato)
+OBIETTIVO = "relativo"
+INSIEME = 5                                            # reti con semi diversi, nella media (gli errori del caso si compensano)
+
+
+def bersagli(C, obiettivo=None):
+    """1 dove il campione ha fatto quello che la rete deve imparare, 0 se no (per ogni orizzonte)."""
+    obiettivo = obiettivo or OBIETTIVO
+    if obiettivo == "assoluto":
+        return (C.R > 0).astype(np.float32)
+    chiave = ("_bers", obiettivo)
+    if getattr(C, "_bers", None) is not None and C._bers[0] == chiave:
+        return C._bers[1]
+    Y = np.zeros(C.R.shape, np.float32)
+    for j in range(C.R.shape[1]):
+        for w in np.unique(C.settimana):
+            k = np.flatnonzero((C.settimana == w) & C.OK[:, j])
+            if len(k) >= 4:
+                Y[k, j] = (C.R[k, j] > np.median(C.R[k, j])).astype(np.float32)
+    C._bers = (chiave, Y)
+    return Y
+
+
+def addestra(C, tr, va, epoche=20, seed=0, log=None, insieme=None, obiettivo=None):
+    """Una rete [n, 32, 16, 3] (o la media di `insieme` reti con semi diversi): la probabilità, a 7, 30 e 91 giorni, di
+    chiudere in guadagno ("assoluto") o di fare meglio degli altri titoli ("relativo"). Per ogni rete si tiene l'epoca
+    che stima meglio il periodo di scelta (mai visto)."""
+    insieme = insieme or INSIEME
     media, dev = C.X[tr].mean(axis=0), C.X[tr].std(axis=0) + 1e-6
     norm = lambda X: np.clip((X - media) / dev, -6, 6).astype(np.float32)
-    Xt, Yt, Mt = norm(C.X[tr]), (C.R[tr] > 0).astype(np.float32), C.OK[tr].astype(np.float32)
-    Xv, Yv, Mv = norm(C.X[va]), (C.R[va] > 0).astype(np.float32), C.OK[va].astype(np.float32)
+    Y = bersagli(C, obiettivo)
+    Xt, Yt, Mt = norm(C.X[tr]), Y[tr], C.OK[tr].astype(np.float32)
+    Xv, Yv, Mv = norm(C.X[va]), Y[va], C.OK[va].astype(np.float32)
     base = np.clip((Yt * Mt).sum(axis=0) / np.maximum(Mt.sum(axis=0), 1), 1e-3, 1 - 1e-3)
-    r = rete.Rete([C.X.shape[1], 32, 16, len(ORIZZONTI)], seed)
-    r.b[-1][:] = np.log(base / (1 - base))
-    rng = np.random.default_rng(seed)
-    migliore = None
-    for e in range(epoche):
-        rete.addestra_probabilita(r, Xt, Yt, Mt, 1, lr=1e-3 * 0.9 ** e, wd=3e-4, batch=256, rng=rng)
-        err = float(rete._entropia(rete.sigmoide(r.avanti(Xv)), Yv, Mv).sum() / max(float(Mv.sum()), 1.0)) if len(Xv) else 0.0
-        if log:
-            log("   epoca %2d: errore sul periodo di scelta %.4f" % (e + 1, err))
-        if migliore is None or err < migliore[0]:
-            migliore = (err, e + 1, r.copia())
-    return {"rete": migliore[2], "media": media, "dev": dev, "epoca": migliore[1], "norm": norm}
+    membri, epoche_scelte = [], []
+    for k in range(insieme):
+        r = rete.Rete([C.X.shape[1], 32, 16, len(ORIZZONTI)], seed + 101 * k)
+        r.b[-1][:] = np.log(base / (1 - base))
+        rng = np.random.default_rng(seed + 101 * k)
+        migliore = None
+        for e in range(epoche):
+            rete.addestra_probabilita(r, Xt, Yt, Mt, 1, lr=1e-3 * 0.9 ** e, wd=3e-4, batch=256, rng=rng)
+            err = float(rete._entropia(rete.sigmoide(r.avanti(Xv)), Yv, Mv).sum() / max(float(Mv.sum()), 1.0)) if len(Xv) else 0.0
+            if log:
+                log("   rete %d, epoca %2d: errore sul periodo di scelta %.4f" % (k + 1, e + 1, err))
+            if migliore is None or err < migliore[0]:
+                migliore = (err, e + 1, r.copia())
+        membri.append(migliore[2])
+        epoche_scelte.append(migliore[1])
+    modello = membri[0] if len(membri) == 1 else rete.Insieme(membri)
+    return {"rete": modello, "media": media, "dev": dev, "epoca": int(np.median(epoche_scelte)), "norm": norm}
 
 
 def stima(m, X):
@@ -260,7 +293,7 @@ def riassunto(r):
     return {"n": int(len(r)), "media": float(r.mean()) if len(r) else 0.0, "vinte": float((r > 0).mean()) if len(r) else 0.0}
 
 
-def verifica(C, log=print, quota=QUOTA, minimo=None):
+def verifica(C, log=print, quota=QUOTA, minimo=None, insieme=None, obiettivo=None):
     """Anno per anno: si impara dagli esiti chiusi prima dell'anno, si sceglie durante l'anno."""
     ultimo = datetime.date.fromordinal(int(C.g.max())).year
     P = np.full((len(C.X), len(ORIZZONTI)), np.nan, np.float32)
@@ -275,7 +308,7 @@ def verifica(C, log=print, quota=QUOTA, minimo=None):
         if len(tr) < (minimo or MIN_ADDESTRAMENTO) or len(te) == 0:
             continue
         log("[rete_lungo] verifica %d: impara da %d campioni, sceglie su %d, prova su %d" % (anno, len(tr), len(va), len(te)))
-        m = addestra(C, tr, va)
+        m = addestra(C, tr, va, insieme=insieme, obiettivo=obiettivo)
         P[te] = stima(m, C.X[te])
         anni.append(anno)
     te = np.flatnonzero(~np.isnan(P[:, 0]))
@@ -401,6 +434,26 @@ def studia(log=print, salva=True, sezione=None):
     return ris
 
 
+def confronta(log=print, uscita=None):
+    """La stessa verifica anno per anno con quattro modi di addestrare: cosa impara (guadagno o meglio degli altri) e
+    quante reti nella media. Scrive il confronto in rete_lungo_confronto.json."""
+    C = Campioni(lambda m: None)
+    out = {}
+    for obiettivo in ("assoluto", "relativo"):
+        for n in (1, 5):
+            log("[rete_lungo] confronto: obiettivo %s, %d reti" % (obiettivo, n))
+            v = verifica(C, lambda m: None, insieme=n, obiettivo=obiettivo)
+            out["%s_%d" % (obiettivo, n)] = {h: {"scelte": x["scelte"], "tutti": x["tutti"], "t": x["t"], "auc": x["auc"],
+                                                  "etf": x["sezioni"].get("etf")} for h, x in v["orizzonti"].items()}
+            for h, x in v["orizzonti"].items():
+                log("   %3s giorni: scelte %+.2f %% contro %+.2f %% di tutti (t %.1f, AUC %.3f) · ETF %+.2f %% contro %+.2f %% (t %.1f)" % (
+                    h, 100 * x["scelte"]["media"], 100 * x["tutti"]["media"], x["t"], x["auc"] or 0,
+                    100 * x["sezioni"]["etf"]["scelte"]["media"], 100 * x["sezioni"]["etf"]["tutti"]["media"], x["sezioni"]["etf"]["t"]))
+    with open(uscita or os.path.join(ROOT, "rete_lungo_confronto.json"), "w", encoding="utf-8") as fh:
+        json.dump(rete._pulisci(out), fh, separators=(",", ":"))
+    return out
+
+
 def per_app(sezione=None):
     try:
         with open(os.path.join(ROOT, SEZIONI[sezione]["file"]) if sezione else USCITA, encoding="utf-8") as fh:
@@ -413,7 +466,11 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--sezione", choices=sorted(SEZIONI), help="solo una categoria: etf (con l'oro) o obbligazioni")
     ap.add_argument("--tutte", action="store_true", help="la rete generale e quelle di ETF e obbligazioni")
+    ap.add_argument("--confronta", action="store_true", help="confronta obiettivo assoluto/relativo e 1/5 reti sulla stessa verifica")
     a = ap.parse_args(argv)
+    if a.confronta:
+        confronta()
+        return 0
     if a.tutte:
         for sez in (None, *SEZIONI):
             studia(sezione=sez)

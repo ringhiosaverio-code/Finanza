@@ -66,5 +66,21 @@ class PesiDelRobot(unittest.TestCase):
         self.assertEqual(r["pesi"], {"E1": 0.3333, "E2": 0.3333, "E3": 0.3333})
 
 
+class ObiettivoRelativo(unittest.TestCase):
+    def test_uno_a_chi_fa_meglio_della_meta_degli_altri_nella_settimana(self):
+        C = finti(3, 4)
+        C.R[:, 0] = np.array([1, 2, 3, 4] * 3, np.float32) * (np.repeat([1, -1, 1], 4)).astype(np.float32)
+        Y = L.bersagli(C, "relativo")
+        np.testing.assert_array_equal(Y[:4, 0], [0, 0, 1, 1])                     # settimana in salita: i due migliori
+        np.testing.assert_array_equal(Y[4:8, 0], [1, 1, 0, 0])                    # settimana in calo: chi perde meno
+        np.testing.assert_array_equal(L.bersagli(C, "assoluto")[4:8, 0], [0, 0, 0, 0])
+
+    def test_l_insieme_impara_anche_il_dato_che_conta(self):
+        C = finti(300, 20)
+        m = L.addestra(C, np.arange(0, 4000), np.arange(4000, 5000), epoche=4, insieme=3, obiettivo="relativo")
+        P = L.stima(m, C.X[5000:])
+        self.assertGreater(L.auc(P[:, 1], (C.R[5000:, 1] > 0).astype(int)), 0.6)
+
+
 if __name__ == "__main__":
     unittest.main()
