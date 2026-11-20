@@ -600,6 +600,14 @@ depositato alla SEC. Il codice SEC di ogni titolo si trova confrontando i nomi e
 Con la stessa verifica: azioni USA a un mese +1,35 % contro +1,15 % senza bilanci (la media fa +1,24 %); nel resto
 nessuna differenza oltre il caso. Il piano con la rete: +15,4 % l'anno, Sharpe 1,56, calo massimo -12,8 %.
 
+## La prova più severa: cross-validation epurata
+
+`python3 rete_lungo.py --epurata` (una decina di minuti) divide il tempo dal 2017 in 10 pezzi e stima ognuno con una
+rete addestrata su tutti gli altri, togliendo i dati il cui esito tocca il pezzo di prova e 14 giorni dopo (López de
+Prado, cap. 7): 469 settimane stimate invece di 300. Con i bilanci: a una settimana +0,38 % contro +0,14 % (t 3,9),
+meglio della media in 9 pezzi su 10; le 3 scelte tra gli ETF +0,47 % (t 4,1). Senza bilanci +0,29 % (t 2,4), 7 su 10:
+i bilanci aiutano. A uno e tre mesi nessun vantaggio. I risultati sono in `rete_lungo_epurata.json` e nell'app.
+
 ## Il portafoglio con la rete neurale: `portafoglio.py`
 
 Le strategie che hanno funzionato messe insieme, settimana per settimana, con i costi, dal 2021 al 2026: anni che la rete

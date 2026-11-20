@@ -21,6 +21,7 @@ rilancia questo script. Non è consulenza finanziaria.
 """
 
 import argparse
+import datetime
 import json
 import os
 import sys
@@ -303,10 +304,30 @@ def cambio():
         return None
 
 
+def compatta(x):
+    """I dati dell'app più leggeri per il telefono, senza cambiare quello che si vede: i numeri a 6 cifre significative
+    (i timestamp e i numeri sopra il milione restano interi) e i grafici {dates, close} con le date come giorni dal
+    primo ({d0, gg, close}; la pagina le ricostruisce all'avvio)."""
+    if isinstance(x, float):
+        return x if (x != x or x == 0 or abs(x) >= 1e6) else float("%.6g" % x)
+    if isinstance(x, dict):
+        if set(x) == {"dates", "close"} and isinstance(x["dates"], list) and x["dates"] and isinstance(x["dates"][0], str):
+            try:
+                d0 = datetime.date.fromisoformat(x["dates"][0])
+                return {"d0": x["dates"][0], "gg": [(datetime.date.fromisoformat(d) - d0).days for d in x["dates"]],
+                        "close": [compatta(c) for c in x["close"]]}
+            except ValueError:
+                pass
+        return {k: compatta(v) for k, v in x.items()}
+    if isinstance(x, list):
+        return [compatta(v) for v in x]
+    return x
+
+
 def build(data, out):
     with open(TEMPLATE, encoding="utf-8") as fh:
         page = fh.read()
-    blob = json.dumps(data, separators=(",", ":")).replace("</", "<\\/")
+    blob = json.dumps(compatta(data), separators=(",", ":")).replace("</", "<\\/")
     tmp = out + ".tmp"
     with open(tmp, "w", encoding="utf-8") as fh:                         # prima un file a parte: se si interrompe,
         fh.write(page.replace("__DATA__", blob))                          # l'app di prima resta intera
@@ -352,6 +373,7 @@ def leggero(out, log=print):
     data["rete_usa"] = rete_usa_app(log) or data.get("rete_usa")          # la rete delle azioni USA
     data["rete_usa_robot"] = rete_usa_robot_app(log) or data.get("rete_usa_robot")
     data["rete_lungo"] = rete_lungo_app(log) or data.get("rete_lungo")    # medio e lungo periodo
+    data["rete_lungo_epurata"] = load_json(os.path.join(ROOT, "rete_lungo_epurata.json")) or data.get("rete_lungo_epurata")
     data["segnali_robot"] = segnali_robot_app(log) or data.get("segnali_robot")   # crypto: ordini sui segnali
     data["crypto_tendenza"] = tendenza_app(log) or data.get("crypto_tendenza")    # crypto: tendenza come i fondi
     data["strategie_lungo"] = strategie_lungo_app(log) or data.get("strategie_lungo")   # ETF e azioni: le regole dei libri
@@ -391,6 +413,7 @@ def main(argv=None):
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
             "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(), "rete_lungo": rete_lungo_app(),
+            "rete_lungo_epurata": load_json(os.path.join(ROOT, "rete_lungo_epurata.json")),
             "segnali_robot": segnali_robot_app(), "crypto_tendenza": tendenza_app(), "strategie_lungo": strategie_lungo_app(), "portafoglio": load_json(os.path.join(ROOT, "portafoglio.json")), "notifiche": load_json(os.path.join(ROOT, "notifiche.json")), "diario_rete": load_json(os.path.join(ROOT, "diario_rete.json")), "carry_crypto": load_json(os.path.join(ROOT, "carry_crypto.json")),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),

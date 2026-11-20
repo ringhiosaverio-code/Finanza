@@ -345,6 +345,17 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 <script>
 "use strict";
 const D = JSON.parse(document.getElementById('data').textContent);
+(function scompatta(o) {                                                          // i grafici arrivano con le date come giorni dal primo
+  if (!o || typeof o !== 'object') return;
+  if (Array.isArray(o)) { if (o.length && typeof o[0] === 'object') o.forEach(scompatta); return; }
+  for (const k of Object.keys(o)) {
+    const v = o[k];
+    if (v && typeof v === 'object' && !Array.isArray(v) && v.d0 && Array.isArray(v.gg) && Array.isArray(v.close)) {
+      const t0 = Date.parse(v.d0 + 'T00:00:00Z');
+      o[k] = {dates: v.gg.map(g => new Date(t0 + g * 86400000).toISOString().slice(0, 10)), close: v.close};
+    } else scompatta(v);
+  }
+})(D);
 let mkt = D.mercati.usa ? 'usa' : 'italia';
 let S = D.mercati[mkt];
 function setMkt(m) { if (D.mercati[m]) { mkt = m; S = D.mercati[m]; } }
@@ -1665,6 +1676,15 @@ function strategieLibriHTML() {
     ${oggi ? `<p class="note" style="margin-top:10px"><b>Questo mese (dalla fine di ${esc(oggi.faber.giorno)}):</b> Faber tiene ${Object.keys(oggi.faber.pesi).map(s => esc(tk(s))).join(', ') || 'solo liquidità'}; Antonacci sceglie ${Object.keys(oggi.antonacci.pesi).map(s => esc(tk(s))).join(', ')}. Il robot segue Faber nel conto "ETF, media di 10 mesi".</p>` : ''}
     <p class="note" style="margin-top:6px">Fonti: G. Antonacci, "Dual Momentum Investing" (2014); M. Faber, "A Quantitative Approach to Tactical Asset Allocation" (2007, rivisto nel 2018); A. Clenow, "Stocks on the Move" (2015); Hurst, Ooi e Pedersen, AQR (2017). Non è consulenza finanziaria.</p></div>`;
 }
+function epurataHTML() {
+  const E = D.rete_lungo_epurata, L = D.rete_lungo; if (!E || !E.con_bilanci || !L) return '';
+  const riga = (h, j) => { const a = E.senza_bilanci.orizzonti[h], b = E.con_bilanci.orizzonti[h]; if (!a || !b) return '';
+    const m = x => `${pc(x.tutti.scelte.media, 2)} <span class="note">contro ${pc(x.tutti.tutti.media, 2)} · t ${nf(x.tutti.t, 1)} · meglio in ${x.per_blocco.filter(p => p.scelte > p.tutti).length} su ${x.per_blocco.length}</span>`;
+    return `<tr><td class="l"><b>${esc(L.nomi_orizzonti[j])}</b></td><td>${m(a)}</td><td>${m(b)}</td></tr>`; };
+  return `<h3 style="margin-top:14px">La prova più severa: cross-validation epurata</h3>
+    <p class="note" style="margin-top:2px">Il tempo dal ${esc(E.con_bilanci.orizzonti['7'].per_blocco[0].da)} a oggi diviso in ${E.con_bilanci.blocchi} pezzi: ogni pezzo è stimato da una rete che non lo ha mai visto, togliendo dall'addestramento i dati che lo toccano e ${E.con_bilanci.embargo} giorni dopo (López de Prado, "Advances in Financial Machine Learning", capitolo 7). Così ogni settimana dal primo all'ultimo anno conta, non solo gli ultimi anni.</p>
+    <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Durata</th><th>Senza bilanci</th><th>Con i bilanci delle aziende USA</th></tr></thead><tbody>${L.orizzonti.map((h, j) => riga(String(h), j)).join('')}</tbody></table></div>`;
+}
 function reteLungoHTML(solo) {
   const L = D.rete_lungo; if (!L || !L.verifica || !L.verifica.orizzonti) return '';
   const V = L.verifica, O = L.orizzonti, N = L.nomi_orizzonti;
@@ -1681,6 +1701,7 @@ function reteLungoHTML(solo) {
     <p class="sub" style="margin-top:4px">Ogni settimana, per ognuno dei ${L.dati.titoli} titoli (azioni USA, europee e italiane, ETF di area, di settore e di fattore, obbligazioni, oro, crypto), la rete guarda il titolo (forza di un anno, tre mesi, un mese, una settimana, media di 200 giorni, massimo di 52 settimane, volatilità) e <b>il mondo che lo muove</b> (S&amp;P 500 e FTSE MIB, VIX, tassi USA e curva dei tassi, dollaro, petrolio, oro, credito, euro/dollaro, Fear &amp; Greed), e stima la probabilità di chiudere in guadagno dopo i costi tra 1 settimana, 1 mese e 3 mesi. Dati: chiusure giornaliere dal ${esc(L.dati.da)} al ${esc(L.dati.a)}, ${nf(L.dati.campioni, 0)} casi.</p>
     <div class="verdetto ${buono ? 'v-cautela' : 'v-no'}" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">${buono ? '!' : '✕'}</span><div><b>${buono ? 'Sceglie meglio, con cautela' : 'Non sceglie meglio in modo credibile'}</b><p>Verifica onesta anno per anno (${V.anni.join(', ')}): ogni anno la rete impara solo da quello che era già successo prima, poi ogni settimana sceglie il meglio ${p100(L.quota)} dei titoli. A 1 mese le sue scelte hanno fatto in media ${x30 ? pc(x30.scelte.media, 2) : '–'} dopo i costi, contro ${x30 ? pc(x30.tutti.media, 2) : '–'} di tutti i titoli e ${x30 ? pc(x30.momento.media, 2) : '–'} della regola semplice del momento (i più forti dell'ultimo anno).${x7 ? ` A 1 settimana: ${pc(x7.scelte.media, 2)} contro ${pc(x7.tutti.media, 2)} di tutti e ${pc(x7.stesso_mix || 0, 2)} di titoli a caso con la stessa miscela di categorie (sceglie più crypto, che salgono di più), con t ${nf(x7.t, 1)}${x7.t >= 2 ? ': difficile che sia solo fortuna' : ''}.` : ''}${buono ? ' I costi sono contati; le tasse no, e scegliere ogni settimana vuol dire comprare e vendere spesso.' : ' La differenza non basta a dire che sa scegliere: può essere fortuna.'}</p></div></div></div>
     <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Durata</th><th>AUC<br><span class="note">0,5 = a caso</span></th><th>Scelte della rete</th><th>Tutti i titoli</th><th>Regola del momento</th><th>A caso, stesso mix</th><th>Scarto settimanale</th></tr></thead><tbody>${righe}</tbody></table></div>
+    ${epurataHTML()}
     <h3 style="margin-top:14px">Perché salgono o scendono: i dati più legati a quello che succede dopo</h3>
     <p class="note" style="margin-top:2px">Correlazione per ranghi con il rendimento a 1 mese (positiva: più il dato è alto, più dopo si sale; 0,02-0,05 è già tanto in finanza). "Mondo" sono i mercati che muovono tutti i titoli insieme.</p>
     <div class="scroll" style="margin-top:6px"><table><thead><tr><th class="l">Dato</th><th>Tutti gli anni</th><th>Ultimi 3 anni</th><th>Ultimo anno</th></tr></thead><tbody>${segn}</tbody></table></div>

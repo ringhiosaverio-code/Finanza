@@ -560,6 +560,49 @@ def studia(log=print, salva=True, sezione=None):
     return ris
 
 
+def verifica_epurata(C, blocchi=10, embargo=14, log=print, seme=0):
+    """La cross-validation epurata con embargo (López de Prado, "Advances in Financial Machine Learning", cap. 7): il
+    tempo si divide in `blocchi` pezzi; ogni pezzo fa da prova per una rete addestrata su tutti gli altri, togliendo i
+    campioni il cui esito (fino a 91 giorni) si sovrappone al pezzo di prova e quelli dei `embargo` giorni dopo. Così
+    ogni settimana dal primo all'ultimo anno ha una stima fatta senza conoscerla: più settimane, un t più affidabile.
+    Ritorna le misure per orizzonte (tutti i titoli, ETF con le 3 scelte) e per blocco."""
+    ordine = np.argsort(C.g, kind="stable")
+    pezzi = np.array_split(ordine, blocchi)
+    P = np.full((len(C.X), len(ORIZZONTI)), np.nan, np.float32)
+    rng = np.random.default_rng(seme)
+    fine_esito = C.g + max(ORIZZONTI)
+    for b, te in enumerate(pezzi):
+        g0, g1 = C.g[te].min(), C.g[te].max()
+        fuori = (fine_esito >= g0) & (C.g <= g1 + embargo)                # epurati: l'esito tocca la prova, o sono subito dopo
+        idx = np.flatnonzero(~fuori)
+        va = rng.choice(idx, size=max(1, len(idx) // 7), replace=False)  # per scegliere l'epoca: un settimo, a caso
+        tr = np.setdiff1d(idx, va)
+        log("[rete_lungo] epurata: blocco %d/%d (%s … %s), impara da %d campioni" % (
+            b + 1, blocchi, datetime.date.fromordinal(int(g0)), datetime.date.fromordinal(int(g1)), len(tr)))
+        P[te] = stima(addestra(C, tr, va), C.X[te])
+    te = np.flatnonzero(~np.isnan(P[:, 0]))
+    out = {"blocchi": blocchi, "embargo": embargo, "orizzonti": {}}
+    n_etf = len(set(C.sym[np.isin(C.cat, ("etf", "oro"))].tolist()))
+    for j, H in enumerate(ORIZZONTI):
+        sovr = max(H / 7.0, 1.0)
+        def misura(idx, quota):
+            sc, tu, scarti = scelte_settimanali(C, idx, P[:, j], j, quota)
+            t = float(scarti.mean() / (scarti.std(ddof=1) / math.sqrt(len(scarti) / sovr))) if len(scarti) > 3 else 0.0
+            return {"scelte": riassunto(sc), "tutti": riassunto(tu), "t": t, "settimane": int(len(scarti))}
+        o = {"tutti": misura(te, QUOTA), "etf": misura(te[np.isin(C.cat[te], ("etf", "oro"))], 3.0 / max(n_etf, 1))}
+        o["per_blocco"] = []
+        for p in pezzi:                                                  # quanti blocchi su 10 la rete batte la media
+            sc, tu, _ = scelte_settimanali(C, p, P[:, j], j, QUOTA)
+            if len(sc):
+                o["per_blocco"].append({"da": datetime.date.fromordinal(int(C.g[p].min())).isoformat(), "scelte": float(sc.mean()), "tutti": float(tu.mean())})
+        out["orizzonti"][str(H)] = o
+        log("[rete_lungo] epurata %s: tutti %+.2f %% contro %+.2f %% (t %.1f, %d settimane) · ETF %+.2f %% contro %+.2f %% (t %.1f) · meglio in %d blocchi su %d" % (
+            NOMI_ORIZZONTI[j], 100 * o["tutti"]["scelte"]["media"], 100 * o["tutti"]["tutti"]["media"], o["tutti"]["t"], o["tutti"]["settimane"],
+            100 * o["etf"]["scelte"]["media"], 100 * o["etf"]["tutti"]["media"], o["etf"]["t"],
+            sum(1 for x in o["per_blocco"] if x["scelte"] > x["tutti"]), len(o["per_blocco"])))
+    return out
+
+
 def confronta(log=print, uscita=None):
     """La stessa verifica anno per anno con quattro modi di addestrare: cosa impara (guadagno o meglio degli altri) e
     quante reti nella media. Scrive il confronto in rete_lungo_confronto.json."""
@@ -593,7 +636,18 @@ def main(argv=None):
     ap.add_argument("--sezione", choices=sorted(SEZIONI), help="solo una categoria: etf (con l'oro) o obbligazioni")
     ap.add_argument("--tutte", action="store_true", help="la rete generale e quelle di ETF e obbligazioni")
     ap.add_argument("--confronta", action="store_true", help="confronta obiettivo assoluto/relativo e 1/5 reti sulla stessa verifica")
+    ap.add_argument("--epurata", action="store_true", help="la cross-validation epurata (10 blocchi, embargo 14 giorni), con e senza bilanci: rete_lungo_epurata.json")
     a = ap.parse_args(argv)
+    if a.epurata:
+        global BILANCI
+        ris = {"creato": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")}
+        for nome, b in (("senza_bilanci", False), ("con_bilanci", True)):
+            BILANCI = b
+            print("[rete_lungo] cross-validation epurata, %s" % nome.replace("_", " "))
+            ris[nome] = verifica_epurata(Campioni(lambda m: None))
+        with open(os.path.join(ROOT, "rete_lungo_epurata.json"), "w", encoding="utf-8") as fh:
+            json.dump(rete._pulisci(ris), fh, separators=(",", ":"))
+        return 0
     if a.confronta:
         confronta()
         return 0
