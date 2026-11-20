@@ -298,6 +298,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
     <div class="motore-top"><button type="button" id="rb-motore">⟳ Aggiorna motore</button><span class="note" id="rb-motore-esito">Le operazioni del motore nel cloud: si aggiornano anche da sole ogni minuto.</span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
+      <a href="#piano" data-v="piano">Il piano</a>
       <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
       <a href="#demo" data-v="demo">Esercitati</a>
       <a href="#giornata" data-v="giornata">In giornata</a>
@@ -312,6 +313,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
   <a id="ticker" class="ticker" href="#giornata" hidden></a>
   <div id="live-info" class="card" hidden></div>
   <section class="view" id="v-oggi"></section>
+  <section class="view" id="v-piano" hidden></section>
   <section class="view" id="v-portafoglio" hidden></section>
   <section class="view" id="v-demo" hidden></section>
   <section class="view" id="v-crypto" hidden></section>
@@ -363,7 +365,7 @@ if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
 if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
 /* ---------------- sezioni ---------------- */
-const VIEWS = ['oggi', 'portafoglio', 'demo', 'giornata', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'];
+const VIEWS = ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'];
 let view = null;
 function route() {
   let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'oggi';
@@ -371,12 +373,13 @@ function route() {
   if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
-  ['oggi', 'portafoglio', 'demo', 'giornata', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo', 'libri'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
+  ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo', 'libri'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
   const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'].includes(v) ? 'altro' : v;
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === navv ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
   else if (sec === 'oggi') renderOggi();
+  else if (sec === 'piano') renderPiano();
   else if (sec === 'portafoglio') renderPortafoglio();
   else if (sec === 'demo') renderDemo();
   else if (sec === 'crypto') renderCrypto();
@@ -1055,6 +1058,64 @@ function yieldBox(c, m) {
   if (y == null) return ['n/d', 'dato non disponibile'];
   if (y <= 0) return ['Nessuna', m === 'usa' || m === 'italia' ? 'nessun dividendo negli ultimi 12 mesi' : 'non distribuisce: reinveste (accumulo)'];
   return [pc(y, 1, false) + ' l’anno', 'pagati negli ultimi 12 mesi, sul prezzo di oggi'];
+}
+/* ---------------- il piano: lo studio che mette insieme reti, regole dei libri, tendenza e consigli (si aggiorna da solo) ---------------- */
+function probSim(sym) {                                                          // la probabilità di guadagno della simulazione prudente
+  const s = SIM[sym]; if (!s || !s.orizzonti) return null;
+  const h = s.orizzonti.find(o => o.giorni === s.hold); if (!h) return null;
+  const p = h.scenari.prudente; return {p: p.p_gain, p10: p.p10, oriz: h.orizzonte};
+}
+function renderPiano() {
+  const v = $('#v-piano'), M = D.mercati || {}, L = D.rete_lungo, SL = D.strategie_lungo, T = D.crypto_tendenza;
+  const nome = sym => esc(((SIM[sym] || {}).name || tk(sym)).slice(0, 30));
+  const pr = x => x ? `<b>${p100(x.p)}</b> a ${esc(x.oriz)} <span class="note">· 1 su 10 sotto ${pc(x.p10, 0)}</span>` : '<span class="note">n/d</span>';
+  const reteTop = (cats, n, h = '30') => ((L && L.oggi && L.oggi[h]) || []).filter(o => cats.includes(o.categoria)).slice(0, n);
+  const inRete = (sym, cats) => reteTop(cats, 4).some(o => o.sym === sym);
+  const ETFrete = new Set(Object.keys((L && L.robot_sezioni && L.robot_sezioni.etf && L.robot_sezioni.etf.pesi) || {}));
+  const ETFfaber = new Set(Object.keys((SL && SL.mercati && SL.mercati.etf && SL.mercati.etf.oggi && SL.mercati.etf.oggi.faber.pesi) || {}));
+  const anton = SL && SL.mercati && SL.mercati.etf && SL.mercati.etf.oggi ? Object.keys(SL.mercati.etf.oggi.antonacci.pesi) : [];
+  // lo stato del mercato
+  const usa = M.usa && M.usa.regime, nEtf = SL && SL.mercati && SL.mercati.etf ? SL.mercati.etf.titoli.length : 0;
+  const stato = [usa ? `Borsa USA ${usa.sopra_media200 ? 'sopra' : 'sotto'} la sua media di 200 giorni (${pc(usa.vs_media200, 2)})` : '',
+    ETFfaber.size ? `${ETFfaber.size} ETF su ${nEtf} sopra la media di 10 mesi: la regola di Faber dice ${ETFfaber.size >= nEtf / 2 ? 'di restare investiti' : 'prudenza'}` : '',
+    T && T.oggi ? `crypto: la tendenza tiene il ${p100(T.oggi.in_euro)} in euro${T.oggi.in_euro > 0.8 ? ', quasi tutto fuori' : ''}` : ''].filter(Boolean);
+  // i numeri verificati per ogni orizzonte
+  const x7 = L && L.verifica && L.verifica.orizzonti && L.verifica.orizzonti[String(L.orizzonti[0])];
+  const E = SL && SL.mercati && SL.mercati.etf, fab = E && E.strategie.faber.tutto, mondo = E && E.strategie.mondo.tutto;
+  const tv = T && T.strategie && T.strategie.tendenza_vol.tutto, tu = T && T.strategie && T.strategie.tutte_uguali.tutto;
+  const orizzonti = `<div class="scroll"><table><thead><tr><th class="l">Orizzonte</th><th class="l">Il modo migliore secondo i dati</th><th class="l">Quanto, nella verifica</th></tr></thead><tbody>
+    <tr><td class="l"><b>Breve</b><br><span class="note">giorni, 1 settimana</span></td><td class="l" style="white-space:normal">Non comprare e vendere in giornata: tutte le reti in giornata perdono dopo i costi, come oltre il 90 % dei trader privati negli studi. L'unico vantaggio verificato: le scelte settimanali della rete del medio periodo.</td><td class="l" style="white-space:normal">${x7 ? `${pc(x7.scelte.media, 2)} a settimana contro ${pc(x7.tutti.media, 2)} della media (t ${nf(x7.t, 1)}), prima di tasse e costi di rotazione` : 'n/d'}</td></tr>
+    <tr><td class="l"><b>Medio</b><br><span class="note">1-12 mesi</span></td><td class="l" style="white-space:normal">Le regole di tendenza: ETF solo se sopra la media di 10 mesi (Faber); crypto solo in tendenza, con la volatilità obiettivo (come i fondi).</td><td class="l" style="white-space:normal">${fab ? `Faber ${pc(fab.annuo, 1)} l'anno, calo massimo ${pc(fab.calo_massimo, 0)} (SWDA ${pc(mondo.calo_massimo, 0)})` : ''}${tv ? `<br>crypto ${pc(tv.annuo, 0)} l'anno, calo ${pc(tv.calo_massimo, 0)} (tutte: ${pc(tu.calo_massimo, 0)})` : ''}</td></tr>
+    <tr><td class="l"><b>Lungo</b><br><span class="note">anni</span></td><td class="l" style="white-space:normal">Un ETF globale diversificato, comprato un po' ogni mese e tenuto: il metodo che ha guadagnato di più, accettando cali temporanei.</td><td class="l" style="white-space:normal">${mondo ? `SWDA ${pc(mondo.annuo, 1)} l'anno dal ${esc(E.da.slice(0, 4))}, calo massimo ${pc(mondo.calo_massimo, 0)}` : ''}</td></tr></tbody></table></div>`;
+  // le occasioni di oggi
+  const etf = ((M.etf && M.etf.candidates) || []).slice(0, 6).map(c => { const segni = [ETFrete.has(c.symbol) ? 'rete neurale' : '', ETFfaber.has(c.symbol) ? 'Faber' : '', anton.includes(c.symbol) ? 'Antonacci' : ''].filter(Boolean);
+    return `<tr><td class="l"><b>${esc(tk(c.symbol))}</b> <span class="note">${nome(c.symbol)}</span></td><td>${pr(probSim(c.symbol))}</td><td class="l">${segni.length ? segni.join(', ') : '–'}</td></tr>`; }).join('');
+  const bondC = (M.bond && M.bond.candidates) || [];
+  const bond = bondC.slice().sort((a, b) => ((probSim(b.symbol) || {}).p10 || -1) - ((probSim(a.symbol) || {}).p10 || -1)).slice(0, 6).map(c => { const q = probSim(c.symbol);
+    return `<tr><td class="l"><b>${esc(tk(c.symbol))}</b> <span class="note">${nome(c.symbol)}</span></td><td>${c.rendimento ? pc(c.rendimento, 1, false) : '–'}</td><td>${pr(q)}</td><td class="l">${inRete(c.symbol, ['bond']) ? 'rete neurale' : '–'}</td></tr>`; }).join('');
+  const azioni = mer => ((M[mer] && M[mer].candidates) || []).slice(0, 5).map(c => `<tr><td class="l"><b>${esc(tk(c.symbol))}</b> <span class="note">${nome(c.symbol)}</span></td><td>${pr(probSim(c.symbol))}</td><td>${c.rendimento ? pc(c.rendimento, 1, false) : '–'}</td><td class="l">${inRete(c.symbol, [mer]) ? 'anche la rete' : '–'}</td></tr>`).join('');
+  const reteAz = mer => reteTop([mer], 4).map(o => `${esc(tk(o.sym))} ${p100(o.probabilita)}`).join(' · ');
+  const tabAz = (titolo, mer) => M[mer] ? `<h3 style="margin-top:14px">${titolo}</h3><div class="scroll"><table><thead><tr><th class="l">Regole (forza e regolarità)</th><th>Probabilità di guadagno</th><th>Dividendo</th><th class="l">Segnali</th></tr></thead><tbody>${azioni(mer)}</tbody></table></div><p class="note" style="margin-top:4px">La rete del medio periodo, a un mese: ${reteAz(mer) || 'n/d'}.</p>` : '';
+  const crypto = T && T.oggi ? (Object.keys(T.oggi.pesi).length ? `In tendenza: ${Object.entries(T.oggi.pesi).map(([s, w]) => `${esc(tk(s))} ${p100(w)}`).join(', ')}; il resto (${p100(T.oggi.in_euro)}) in euro.` : 'Nessuna crypto in tendenza: tutto in euro.') : '';
+  const reteCr = reteTop(['crypto'], 3).map(o => `${esc(tk(o.sym))} ${p100(o.probabilita)}`).join(' · ');
+  v.innerHTML = `<div><h1>Il piano</h1><p class="sub" style="margin-top:4px">Lo studio che mette insieme tutto quello che l'app ha imparato: le reti neurali, le regole dei libri (Faber, Antonacci, Clenow), la tendenza dei fondi e i consigli di oggi. Si aggiorna da solo con i dati del ${esc((D.aggiornato || '').slice(0, 10))}. Probabilità del passato, non certezze; non è consulenza finanziaria.</p></div>
+  <div class="card"><h2>Il mercato adesso</h2><ul class="note" style="margin:6px 0 0;padding-left:18px">${stato.map(x => `<li>${x}</li>`).join('')}</ul></div>
+  <div class="card"><h2>Come guadagnare, per orizzonte</h2>${orizzonti}</div>
+  <div class="card"><h2>Le occasioni di oggi</h2>
+    <h3 style="margin-top:6px">ETF</h3><div class="scroll"><table><thead><tr><th class="l">I migliori per le regole</th><th>Probabilità di guadagno</th><th class="l">Anche scelto da</th></tr></thead><tbody>${etf}</tbody></table></div>
+    <h3 style="margin-top:14px">Obbligazioni <span class="note">· dalle più sicure</span></h3><div class="scroll"><table><thead><tr><th class="l">ETF obbligazionario</th><th>Cedola</th><th>Probabilità di guadagno</th><th class="l">Segnali</th></tr></thead><tbody>${bond}</tbody></table></div>
+    <p class="note" style="margin-top:4px">Le obbligazioni in dollari, sterline o valute emergenti hanno anche il rischio del cambio: se l'euro si rafforza, una parte del guadagno sparisce. Per i soldi che servono entro 1-3 anni, i titoli di Stato in euro a breve scadenza.</p>
+    ${tabAz('Azioni USA', 'usa')}${tabAz('Azioni italiane', 'italia')}
+    <h3 style="margin-top:14px">Crypto</h3><p class="note">${crypto} La rete del medio periodo, a un mese: ${reteCr || 'n/d'}${reteCr ? ' (sotto il 50 %: la rete non vede occasioni)' : ''}.</p>
+    <p class="note" style="margin-top:6px">Le probabilità delle azioni sono misurate sui titoli che sono negli indici oggi: sono un po' ottimiste.</p></div>
+  <div class="card"><h2>In pratica</h2><ol class="note" style="margin:6px 0 0;padding-left:20px;line-height:1.6">
+    <li><b>Base:</b> un ETF globale (SWDA o VWRL), a rate ogni mese, tenuto per anni.</li>
+    <li><b>Soldi che servono entro 1-3 anni:</b> titoli di Stato in euro a breve scadenza (per esempio IBGS).</li>
+    <li><b>Protezione:</b> una volta al mese controlla la regola di Faber e riduci quello che scende sotto la sua media di 10 mesi.</li>
+    <li><b>Azioni singole:</b> al più una piccola parte, preferendo quelle segnalate sia dalle regole sia dalla rete.</li>
+    <li><b>Crypto:</b> solo con la regola della tendenza, al più il 5-10 % del totale.</li>
+    <li><b>Mai</b> comprare e vendere in giornata con soldi veri: costi e tasse si mangiano tutto.</li></ol>
+    <p class="note" style="margin-top:8px">Prima di decidere, parla con un consulente finanziario indipendente: conosce la tua situazione, i tuoi tempi e quanto rischio puoi sopportare.</p></div>`;
 }
 function renderOggi() {
   const v = $('#v-oggi'), all = oggiItems(), ref = D.mercati[CAT[0][0]];

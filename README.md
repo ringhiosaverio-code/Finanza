@@ -583,6 +583,14 @@ minuti, per le crypto (401 giorni di scambi) dalle barre orarie di Yahoo (2 anni
 decisione. Lo studio dei segnali di ogni rete dice quali contano: sulle azioni italiane in giornata il più legato a
 quello che succede dopo è il petrolio dell'ultimo giorno, poi il giorno della settimana e i futures di Wall Street.
 
+## Il piano (pagina dell'app)
+
+La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo
+stato del mercato (borsa USA rispetto alla media di 200 giorni, quanti ETF sono sopra la media di 10 mesi, quanto la
+tendenza delle crypto tiene in euro), il modo migliore per guadagnare a breve, medio e lungo termine con i numeri della
+verifica, e le occasioni di oggi per ETF, obbligazioni (dalle più sicure), azioni USA e italiane e crypto, segnando
+quando regole, rete neurale e libri sono d'accordo.
+
 ## Come guadagnano i professionisti, e cosa ne abbiamo preso
 
 Dalle fonti verificate: quasi tutti quelli che comprano e vendono in giornata perdono (Barber, Lee, Liu e Odean su
