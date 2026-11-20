@@ -1065,6 +1065,30 @@ function probSim(sym) {                                                         
   const h = s.orizzonti.find(o => o.giorni === s.hold); if (!h) return null;
   const p = h.scenari.prudente; return {p: p.p_gain, p10: p.p10, oriz: h.orizzonte};
 }
+// il calcolatore dell'obiettivo: quanto capitale serve per guadagnare X euro a settimana, al netto delle tasse
+let obiettivoSett = 300;
+function obiettivoRighe(euro) {
+  const P = D.portafoglio && D.portafoglio.combinazioni, sett = 52, tassa = 0.26, out = [];
+  const add = (nome, annuo, vol, nota, t = tassa) => { if (annuo == null) return;
+    const netto = annuo * (1 - t), cap = netto > 0 ? euro * sett / netto : null;
+    out.push({nome, annuo, cap, oscilla: cap ? cap * vol / Math.sqrt(sett) : null, nota}); };
+  if (P) {
+    const x = (k, nome, nota) => P[k] && add(nome, P[k].tutto.annuo, P[k].tutto.volatilita, nota);
+    x('rete_sola', 'Solo le scelte settimanali della rete sugli ETF', 'il più alto, ma da ruotare ogni settimana');
+    x('piano_rete', 'Il piano con la rete', 'il miglior equilibrio tra guadagno e rischio');
+    x('solo_mondo', 'Un ETF sul mondo (SWDA), tenuto', 'il più semplice');
+  }
+  add('Conto deposito o BOT, circa 2,5 % l\'anno', 0.025, 0.002, 'quasi senza rischio', 0.125);
+  return out;
+}
+function obiettivoHTML() {
+  const righe = obiettivoRighe(obiettivoSett).map(r => `<tr><td class="l" style="white-space:normal"><b>${esc(r.nome)}</b><br><span class="note">${esc(r.nota)} · rendimento usato ${pc(r.annuo, 1)} l'anno</span></td><td><b>${r.cap ? nf(Math.round(r.cap / 100) * 100, 0) + ' €' : '–'}</b></td><td>${r.oscilla ? '± ' + nf(Math.round(r.oscilla / 10) * 10, 0) + ' €' : '–'}</td></tr>`).join('');
+  return `<div class="card" id="obiettivo"><h2>Quanto serve per guadagnare una cifra a settimana</h2>
+    <p class="sub" style="margin-top:4px">Scrivi quanto vorresti guadagnare in media a settimana: il calcolo dice quanto capitale serve con ogni strategia, ai rendimenti della verifica, al netto delle tasse (26 %, 12,5 % sui titoli di Stato).</p>
+    <label class="f" for="ob-euro" style="margin-top:10px">Euro a settimana<input id="ob-euro" type="number" min="10" step="10" value="${obiettivoSett}" inputmode="numeric"></label>
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Strategia</th><th>Capitale che serve</th><th>Quanto oscilla in una settimana normale</th></tr></thead><tbody id="ob-righe">${righe}</tbody></table></div>
+    <p class="note" style="margin-top:6px">È una media: in una settimana il conto può salire o scendere di molto di più (la colonna a destra è una settimana normale; nei crolli si perde di più). Nessuna strategia dà una cifra fissa ogni settimana: chi la promette sta vendendo qualcosa, spesso una truffa.</p></div>`;
+}
 function portafoglioHTML() {
   const P = D.portafoglio; if (!P || !P.combinazioni) return '';
   const cella = m => m ? `<b class="${m.annuo >= 0 ? 'pos' : 'neg'}">${pc(m.annuo, 1)}</b> l'anno<br><span class="note">Sharpe ${nf(m.sharpe, 2)} · calo <span class="neg">${pc(m.calo_massimo, 0)}</span></span>` : '–';
@@ -1109,10 +1133,12 @@ function renderPiano() {
   const tabAz = (titolo, mer) => M[mer] ? `<h3 style="margin-top:14px">${titolo}</h3><div class="scroll"><table><thead><tr><th class="l">Regole (forza e regolarità)</th><th>Probabilità di guadagno</th><th>Dividendo</th><th class="l">Segnali</th></tr></thead><tbody>${azioni(mer)}</tbody></table></div><p class="note" style="margin-top:4px">La rete del medio periodo, a un mese: ${reteAz(mer) || 'n/d'}.</p>` : '';
   const crypto = T && T.oggi ? (Object.keys(T.oggi.pesi).length ? `In tendenza: ${Object.entries(T.oggi.pesi).map(([s, w]) => `${esc(tk(s))} ${p100(w)}`).join(', ')}; il resto (${p100(T.oggi.in_euro)}) in euro.` : 'Nessuna crypto in tendenza: tutto in euro.') : '';
   const reteCr = reteTop(['crypto'], 3).map(o => `${esc(tk(o.sym))} ${p100(o.probabilita)}`).join(' · ');
+  const vecchio = v.querySelector('#ob-euro'); if (vecchio) obiettivoSett = Number(vecchio.value) || obiettivoSett;
   v.innerHTML = `<div><h1>Il piano</h1><p class="sub" style="margin-top:4px">Lo studio che mette insieme tutto quello che l'app ha imparato: le reti neurali, le regole dei libri (Faber, Antonacci, Clenow), la tendenza dei fondi e i consigli di oggi. Si aggiorna da solo con i dati del ${esc((D.aggiornato || '').slice(0, 10))}. Probabilità del passato, non certezze; non è consulenza finanziaria.</p></div>
   <div class="card"><h2>Il mercato adesso</h2><ul class="note" style="margin:6px 0 0;padding-left:18px">${stato.map(x => `<li>${x}</li>`).join('')}</ul></div>
   <div class="card"><h2>Come guadagnare, per orizzonte</h2>${orizzonti}</div>
   ${portafoglioHTML()}
+  ${obiettivoHTML()}
   <div class="card"><h2>Le occasioni di oggi</h2>
     <h3 style="margin-top:6px">ETF</h3><div class="scroll"><table><thead><tr><th class="l">I migliori per le regole</th><th>Probabilità di guadagno</th><th class="l">Anche scelto da</th></tr></thead><tbody>${etf}</tbody></table></div>
     <h3 style="margin-top:14px">Obbligazioni <span class="note">· dalle più sicure</span></h3><div class="scroll"><table><thead><tr><th class="l">ETF obbligazionario</th><th>Cedola</th><th>Probabilità di guadagno</th><th class="l">Segnali</th></tr></thead><tbody>${bond}</tbody></table></div>
@@ -1129,7 +1155,11 @@ function renderPiano() {
     <li><b>Crypto:</b> solo con la regola della tendenza, al più il 5-10 % del totale.</li>
     <li><b>Mai</b> comprare e vendere in giornata con soldi veri: costi e tasse si mangiano tutto.</li></ol>
     <p class="note" style="margin-top:8px">Prima di decidere, parla con un consulente finanziario indipendente: conosce la tua situazione, i tuoi tempi e quanto rischio puoi sopportare.</p></div>`;
+  const ob = v.querySelector('#ob-euro');
+  if (ob) ob.addEventListener('input', () => { obiettivoSett = Math.max(0, Number(ob.value) || 0); const t = v.querySelector('#ob-righe');
+    if (t) t.innerHTML = obiettivoRighe(obiettivoSett).map(r => `<tr><td class="l" style="white-space:normal"><b>${esc(r.nome)}</b><br><span class="note">${esc(r.nota)} · rendimento usato ${pc(r.annuo, 1)} l'anno</span></td><td><b>${r.cap ? nf(Math.round(r.cap / 100) * 100, 0) + ' €' : '–'}</b></td><td>${r.oscilla ? '± ' + nf(Math.round(r.oscilla / 10) * 10, 0) + ' €' : '–'}</td></tr>`).join(''); });
 }
+
 function renderOggi() {
   const v = $('#v-oggi'), all = oggiItems(), ref = D.mercati[CAT[0][0]];
   const filtered = all.filter(x => (oggiSt.cat === 'tutti' || x.m === oggiSt.cat) && (!oggiSt.cedola || (x.c.rendimento || 0) > 0));
