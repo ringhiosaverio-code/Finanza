@@ -1074,6 +1074,7 @@ function diarioReteHTML() {
   const righe = G.voci.slice(-12).reverse().map(x => `<tr><td class="l">${esc(x.giorno)}</td><td class="l">${x.scelte.map(s => esc(tk(s))).join(', ')}</td><td class="${x.esito == null ? '' : x.esito >= 0 ? 'pos' : 'neg'}">${x.esito == null ? '<span class="note">in corso</span>' : pc(x.esito, 2)}</td><td>${x.tutti == null ? '–' : pc(x.tutti, 2)}</td></tr>`).join('');
   return `<div class="card" id="diario-rete"><h2>La rete dal vivo: com'è andata davvero</h2>
     <p class="sub" style="margin-top:4px">Ogni lunedì la rete sceglie 3 ETF; una settimana dopo si guarda il risultato vero, contro la media di tutti gli ETF. È la prova più onesta: dati che nessuno poteva conoscere quando la rete ha scelto.</p>
+    ${G.controllo ? `<div class="verdetto ${G.controllo.stato === 'tolta dal piano' || G.controllo.stato === 'ridotta' ? 'v-no' : 'v-cautela'}" style="margin-top:10px"><div class="vh"><span class="vi" aria-hidden="true">!</span><div><b>Il controllo dal vivo: peso della rete nel piano ${nf(100 * G.controllo.peso, 0)} % (${esc(G.controllo.stato)})</b><p>${esc(G.controllo.messaggio)} La regola è fissata prima: meno di 8 settimane, 20 %; t fino a -2, fuori dal piano; fino a -1, 10 %; da +1, 25 %; da +2, 30 %. Il resto va su SWDA e ricevi un avviso quando cambia.</p></div></div></div>` : ''}
     ${fatte.length ? `<p class="note" style="margin-top:6px"><b>Finora:</b> ${fatte.length} settimane chiuse, in media ${pc(mR, 2)} a settimana contro ${mT != null ? pc(mT, 2) : '–'} della media; meglio della media in ${vinte} su ${fatte.length}. ${fatte.length < 20 ? 'Servono almeno 20-30 settimane per dire qualcosa.' : ''}</p>` : '<p class="note" style="margin-top:6px">Il diario è appena cominciato: il primo risultato arriva tra una settimana.</p>'}
     <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Settimana dal</th><th class="l">Scelte</th><th>Risultato</th><th>Media ETF</th></tr></thead><tbody>${righe}</tbody></table></div></div>`;
 }
@@ -2485,8 +2486,9 @@ function pesiPiano() {
   const re = L && L.robot_sezioni && L.robot_sezioni.etf; if (!re) return null;
   const fab = SL && SL.mercati && SL.mercati.etf && SL.mercati.etf.oggi && SL.mercati.etf.oggi.faber.pesi;
   const P = {}, add = (s, w) => { if (w > 0.0005) P[s] = (P[s] || 0) + w; };
-  add('SWDA.MI', 0.5); add('IEAG.MI', 0.1);
-  Object.entries(re.pesi).forEach(([s, w]) => add(s, 0.2 * w));
+  const ctl = D.diario_rete && D.diario_rete.controllo, pr = ctl && ctl.peso != null ? ctl.peso : 0.2;   // il peso della rete, deciso dal vivo
+  add('SWDA.MI', 0.5 + (0.2 - pr)); add('IEAG.MI', 0.1);
+  Object.entries(re.pesi).forEach(([s, w]) => add(s, pr * w));
   const fk = Object.entries(fab || {}), fs = fk.reduce((t, [, w]) => t + w, 0);
   fk.forEach(([s, w]) => add(s, 0.1 * w));                                        // Faber fuori dal mercato: quella parte resta in euro
   if (T && T.oggi) Object.entries(T.oggi.pesi).forEach(([s, w]) => add(s, 0.1 * w));   // la tendenza crypto: il resto della sua parte in euro

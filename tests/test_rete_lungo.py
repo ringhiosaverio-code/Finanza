@@ -115,5 +115,21 @@ class Isteresi(unittest.TestCase):
         self.assertGreater(v1[-1], v0[-1])                                           # e restano più soldi dopo costi e tasse
 
 
+class ControlloDalVivo(unittest.TestCase):
+    def voci(self, scarti):
+        return [{"esito": 0.01 + d, "tutti": 0.01} for d in scarti]
+
+    def test_la_regola_fissata_prima(self):
+        self.assertEqual(L.controllo_peso(self.voci([0.01] * 5))["peso"], 0.20)            # poche settimane: in prova
+        rng = np.random.default_rng(0)
+        meglio = list(0.004 + 0.002 * rng.standard_normal(20))
+        peggio = list(-0.004 + 0.002 * rng.standard_normal(20))
+        pari = [0.001, -0.001] * 10
+        self.assertEqual(L.controllo_peso(self.voci(meglio))["peso"], 0.30)
+        self.assertEqual(L.controllo_peso(self.voci(peggio))["peso"], 0.0)
+        self.assertEqual(L.controllo_peso(self.voci(pari))["peso"], 0.20)
+        self.assertEqual(L.controllo_peso(self.voci(peggio))["stato"], "tolta dal piano")
+
+
 if __name__ == "__main__":
     unittest.main()

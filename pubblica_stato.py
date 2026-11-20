@@ -90,6 +90,15 @@ def avvisi(adesso=None):
         else:
             v["attesa"].append(riga)
         v["ultimo"] = max(v["ultimo"], e.get("t", ""))
+    try:                                                                # il controllo dal vivo ha cambiato il peso della rete nel piano?
+        with open(os.path.join(ROOT, "diario_rete.json"), encoding="utf-8") as fh:
+            ctl = json.load(fh).get("controllo") or {}
+        if ctl and v.get("peso_rete") is not None and abs(ctl.get("peso", 0.2) - v["peso_rete"]) > 1e-9:
+            manda("Piano: la rete passa al %d %%" % round(100 * ctl["peso"]), ctl.get("messaggio", ""), argomento)
+        if ctl:
+            v["peso_rete"] = ctl.get("peso", 0.2)
+    except (OSError, ValueError):
+        pass
     if v["attesa"] and time.time() - v["riassunto"] > 3600:
         try:
             manda("Robot: %d operazioni nell'ultima ora" % len(v["attesa"]), "\n".join(v["attesa"][-12:]) + ("\n…" if len(v["attesa"]) > 12 else ""), argomento)

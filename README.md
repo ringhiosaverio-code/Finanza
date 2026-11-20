@@ -632,6 +632,13 @@ vere: cambiando ogni settimana +29,1 % lordo diventa +10,4 % netto (127 cambi l'
 netto). Tenendo un ETF finché la sua probabilità resta entro un margine dal terzo migliore (margine scelto ogni anno
 sugli anni prima, di solito 1-2 punti) resta +15,0 % l'anno netto con 84 cambi. Il robot usa il margine imparato.
 
+## Il controllo dal vivo della rete
+
+Il diario della rete dal vivo (`diario_rete.json`) decide da solo quanto pesa la rete nel piano, con una regola fissata
+prima di vedere i risultati: sulle ultime settimane chiuse (al più 26) lo scarto medio tra le scelte della rete e la
+media degli ETF e il suo t. Meno di 8 settimane: 20 %; t fino a -2: fuori dal piano; fino a -1: 10 %; da +1: 25 %; da
++2: 30 %. Il resto va su SWDA, e quando il peso cambia arriva un avviso sul telefono.
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo

@@ -455,6 +455,36 @@ def pesi_robot(o, scelte, giorno, categorie=None, orizzonte="7"):
 DIARIO = os.path.join(ROOT, "diario_rete.json")
 
 
+PESO_RETE = 0.20                                       # il peso della rete nel piano finché il diario non dice altro
+
+
+def controllo_peso(voci, ultime=26, minimo=8):
+    """Il controllo dal vivo, con una regola fissata prima di vedere i risultati: sulle ultime settimane chiuse del diario
+    (al più 26) lo scarto medio tra le scelte della rete e la media degli ETF, e il suo t. Meno di 8 settimane: peso di
+    partenza. t <= -2: fuori dal piano; <= -1: 10 %; >= 1: 25 %; >= 2: 30 %; altrimenti 20 %. Il resto va su SWDA."""
+    fatte = [v for v in voci if v.get("esito") is not None and v.get("tutti") is not None][-ultime:]
+    n = len(fatte)
+    if n < minimo:
+        return {"n": n, "peso": PESO_RETE, "t": None, "scarto": None, "stato": "in prova",
+                "messaggio": "Il diario ha %d settimane chiuse: ne servono almeno %d per giudicare la rete dal vivo." % (n, minimo)}
+    d = np.array([v["esito"] - v["tutti"] for v in fatte])
+    sd = d.std(ddof=1)
+    t = float(d.mean() / (sd / math.sqrt(n))) if sd > 0 else 0.0
+    if t <= -2:
+        peso, stato = 0.0, "tolta dal piano"
+    elif t <= -1:
+        peso, stato = 0.10, "ridotta"
+    elif t >= 2:
+        peso, stato = 0.30, "aumentata"
+    elif t >= 1:
+        peso, stato = 0.25, "aumentata un po'"
+    else:
+        peso, stato = PESO_RETE, "normale"
+    return {"n": n, "peso": peso, "t": t, "scarto": float(d.mean()), "stato": stato,
+            "messaggio": "Nelle ultime %d settimane le scelte della rete hanno fatto in media %+.2f %% a settimana rispetto alla media degli ETF (t %.1f): peso nel piano %d %%." % (
+                n, 100 * d.mean(), t, round(100 * peso))}
+
+
 def aggiorna_diario(scelta, C, percorso=None):
     """Il diario della rete dal vivo: le scelte sugli ETF di ogni lunedì con i prezzi di entrata, e una settimana dopo
     il risultato vero (media delle scelte) contro la media di tutti gli ETF e dell'oro. Solo dati arrivati dopo la scelta."""
@@ -485,6 +515,7 @@ def aggiorna_diario(scelta, C, percorso=None):
         if sc and len(r) >= 5:
             v["esito"], v["tutti"] = float(np.mean(sc)), float(np.mean(list(r.values())))
     G["voci"] = G["voci"][-104:]
+    G["controllo"] = controllo_peso(G["voci"])                            # il peso della rete nel piano, deciso dal vivo
     with open(percorso, "w", encoding="utf-8") as fh:
         json.dump(G, fh, separators=(",", ":"))
     return G
