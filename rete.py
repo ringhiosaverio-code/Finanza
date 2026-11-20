@@ -725,6 +725,7 @@ class Dati:
         self.R, self.LK, self.FE, self.OK = etichette(M, self.K, self.sig, costo)
         self.C, self.N = self.X.shape[:2]
         self.giorni = M.n / 1440.0
+        self.orizzonte_max = ORIZZONTE_MAX_PROB                         # la probabilità: solo durate fino a 4 ore
 
     def con_costo(self, costo):
         """Gli stessi dati con un altro costo per lato: l'esito è (1-c)^2 x (rapporto dei prezzi) - 1, quindi si rifà
@@ -946,9 +947,19 @@ def addestra_probabilita(rete, X, Y, Mk, epoche, lr=1e-3, wd=1e-4, batch=2048, r
     return perdite
 
 
+ORIZZONTE_MAX_PROB = 240          # crypto: la rete della probabilità impara e sceglie solo durate fino a 4 ore (come le usa il robot)
+
+
+def _orizzonti_ok(D):
+    """Le durate che la rete della probabilità può scegliere: per le crypto fino a ORIZZONTE_MAX_PROB, per le azioni tutte."""
+    om = getattr(D, "orizzonte_max", None)
+    return np.array([om is None or h <= om for h in _oriz(D)])
+
+
 def _bersagli_probabilita(D, i0, i1):
-    """1 se l'operazione (comprare all'istante, tenere l'orizzonte) chiude in guadagno dopo i costi, 0 se no."""
-    R, OK = D.R[:, i0:i1], D.OK[:, i0:i1]
+    """1 se l'operazione (comprare all'istante, tenere l'orizzonte) chiude in guadagno dopo i costi, 0 se no. Le durate
+    non permesse non contano nell'addestramento."""
+    R, OK = D.R[:, i0:i1], D.OK[:, i0:i1] & _orizzonti_ok(D)[None, None, :]
     n = R.shape[0] * R.shape[1]
     return (R > 0).reshape(n, -1).astype(np.float32), OK.reshape(n, -1).astype(np.float32)
 
@@ -956,7 +967,8 @@ def _bersagli_probabilita(D, i0, i1):
 def probabilita(modello, D, i0, i1):
     """Le probabilità di chiudere in guadagno, per crypto (o titolo), istante e orizzonte: array (C, istanti, orizzonti)."""
     X = D.norm(su_misura(D.X[:, i0:i1], modello), modello["media"], modello["dev"]).reshape(D.C * (i1 - i0), -1)
-    return sigmoide(modello["rete"].avanti(X)).reshape(D.C, i1 - i0, -1)
+    P = sigmoide(modello["rete"].avanti(X)).reshape(D.C, i1 - i0, -1)
+    return np.where(_orizzonti_ok(D)[None, None, :], P, 0.0).astype(np.float32)
 
 
 def politica_probabilita(P, soglia):

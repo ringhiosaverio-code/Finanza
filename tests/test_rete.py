@@ -557,7 +557,9 @@ class ProbabilitaDiGuadagno(unittest.TestCase):
         self.assertIsInstance(m["fuori"], bool)
         P = R.probabilita(m, D, *w["test"])
         self.assertEqual(P.shape, (2, w["test"][1] - w["test"][0], len(R.ORIZZONTI)))
-        self.assertTrue(((P > 0) & (P < 1)).all())
+        ok = np.array([h <= R.ORIZZONTE_MAX_PROB for h in R.ORIZZONTI])
+        self.assertTrue(((P[..., ok] > 0) & (P[..., ok] < 1)).all())             # le durate permesse: probabilità vere
+        self.assertTrue((P[..., ~ok] == 0).all())                                # oltre le 4 ore: mai scelte
 
     def test_verifica_a_finestre_e_riassunto(self):
         D = R.Dati(mondo_casuale(giorni=40, seme=12, monete=2))
