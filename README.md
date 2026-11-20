@@ -583,6 +583,14 @@ minuti, per le crypto (401 giorni di scambi) dalle barre orarie di Yahoo (2 anni
 decisione. Lo studio dei segnali di ogni rete dice quali contano: sulle azioni italiane in giornata il più legato a
 quello che succede dopo è il petrolio dell'ultimo giorno, poi il giorno della settimana e i futures di Wall Street.
 
+## L'universo allargato della rete del medio periodo: `universo_esteso.py`
+
+La rete del medio periodo impara da 368 titoli invece di 188: in più il Nasdaq 100, circa 90 grandi azioni europee
+(euro, Regno Unito, Svizzera, nord Europa; costi 0,3 % per le tasse sulle transazioni) e 26 ETF di settore, di fattore e
+di area quotati a Milano. Con 5 reti nella media (una sola dipendeva troppo dal caso: +0,45 % o +0,66 % a settimana con
+due partenze diverse), sugli anni mai visti: tutti i titoli a una settimana +0,38 % contro +0,14 % (t 3,4); le 3 scelte
+settimanali tra 40 ETF +0,53 % contro +0,16 % (t 4,4); il piano con la rete +15,8 % l'anno, Sharpe 1,56, calo -14,3 %.
+
 ## Il portafoglio con la rete neurale: `portafoglio.py`
 
 Le strategie che hanno funzionato messe insieme, settimana per settimana, con i costi, dal 2021 al 2026: anni che la rete

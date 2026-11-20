@@ -42,8 +42,10 @@ SEZIONI = {"etf": {"categorie": ("etf", "oro"), "file": "rete_lungo_etf.json", "
 MIN_ADDESTRAMENTO = 5000                               # campioni minimi per una finestra della verifica (meno per categoria)
 ORIZZONTI = (7, 30, 91)                                # giorni di calendario
 NOMI_ORIZZONTI = ("1 settimana", "1 mese", "3 mesi")
-CATEGORIE = ("usa", "italia", "etf", "bond", "oro", "crypto")
-COSTO = {"usa": 0.001, "italia": 0.002, "etf": 0.001, "bond": 0.001, "oro": 0.001, "crypto": 0.004}   # andata e ritorno
+CATEGORIE = ("usa", "italia", "etf", "bond", "oro", "crypto", "europa")
+COSTO = {"usa": 0.001, "italia": 0.002, "etf": 0.001, "bond": 0.001, "oro": 0.001, "crypto": 0.004,
+         "europa": 0.003}                              # andata e ritorno (Europa: le tasse sulle transazioni di Francia e Regno Unito)
+UNIVERSO_ESTESO = True                                 # più esempi: Nasdaq 100, grandi azioni europee, ETF di settore e di fattore
 STORIA = 260                                           # righe di storia prima del primo campione
 QUOTA = 0.10                                           # ogni settimana, il meglio 10 % dei titoli
 ANNI_VERIFICA = 5
@@ -80,6 +82,12 @@ def titoli():
         M = settimana.MERCATI[m]
         out += [(s, m, M["fuso"], (M["chiusura"][0], M["chiusura"][1] + 5)) for s in M["universo"]]
     out += [(s, "crypto", "UTC", (23, 59)) for s in simula.CRYPTO]
+    if UNIVERSO_ESTESO:
+        import universo_esteso as U
+        gia = {x[0] for x in out}
+        out += [(s, "usa", "America/New_York", (16, 5)) for s in U.NASDAQ if s not in gia]
+        out += [(s, "europa", "Europe/Rome", (17, 35)) for s in U.EUROPA if s not in gia]
+        out += [(s, "etf", "Europe/Rome", (17, 35)) for s in U.ETF if s not in gia]
     return out
 
 
@@ -205,7 +213,7 @@ class Campioni:
 # nella stessa settimana (Gu, Kelly e Xiu, "Empirical Asset Pricing via Machine Learning", Review of Financial Studies
 # 2020: le reti sanno ordinare i titoli tra loro molto meglio che indovinare dove va tutto il mercato)
 OBIETTIVO = "assoluto"                                  # il confronto (rete_lungo.py --confronta) non ha trovato di meglio
-INSIEME = 1                                            # più reti nella media: nel confronto non ha aiutato
+INSIEME = 5                                            # 5 reti nella media: con una sola il risultato dipende molto dal caso (+0,45 % o +0,66 % a settimana con due partenze diverse)
 
 
 def bersagli(C, obiettivo=None):
@@ -344,8 +352,9 @@ def verifica(C, log=print, quota=QUOTA, minimo=None, insieme=None, obiettivo=Non
         o["sezioni"] = {}
         for nome_s, S in SEZIONI.items():
             ks = te[np.isin(C.cat[te], S["categorie"])]
-            if len(ks):
-                s1, t1, sc1 = scelte_settimanali(C, ks, P[:, j], j, S["quota"])
+            n_sez = len(set(C.sym[np.isin(C.cat, S["categorie"])].tolist()))
+            if len(ks):                                                     # come il robot: le migliori `scelte` della settimana
+                s1, t1, sc1 = scelte_settimanali(C, ks, P[:, j], j, S["scelte"] / max(n_sez, 1))
                 o["sezioni"][nome_s] = {"scelte": riassunto(s1), "tutti": riassunto(t1),
                                         "t": float(sc1.mean() / (sc1.std(ddof=1) / math.sqrt(len(sc1) / max(H / 7.0, 1.0)))) if len(sc1) > 3 and sc1.std() > 0 else 0.0}
         # il confronto giusto: titoli a caso con la stessa miscela di categorie delle scelte (le crypto salgono di più)
@@ -460,6 +469,8 @@ def studia(log=print, salva=True, sezione=None):
     va = np.flatnonzero((C.g >= C.g.max() - 365 - max(ORIZZONTI)) & C.OK[:, 0])
     m = addestra(C, tr if len(tr) > (800 if S else MIN_ADDESTRAMENTO) else np.flatnonzero(C.OK[:, 0]), va)
     ris["oggi"] = oggi(C, m)
+    ris["prezzi"] = {u[0]: round(float(u[3]), 6) for u in C.ultimi}          # gli ultimi prezzi: il robot li usa per i titoli fuori dall'app
+    ris["nomi_categorie"] = {"europa": "Azioni europee"}
     if S:
         ris["robot"] = pesi_robot(ris["oggi"], S["scelte"], ris["dati"]["a"])
     else:                                                                       # la rete generale sceglie anche dentro ETF e obbligazioni
