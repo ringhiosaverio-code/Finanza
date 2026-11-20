@@ -252,7 +252,17 @@ def rete_lungo_app(log=print):
     """La rete del medio e lungo periodo (python3 rete_lungo.py), o None."""
     try:
         import rete_lungo
-        return rete_lungo.per_app()
+        r = rete_lungo.per_app()
+        if r and r.get("oggi"):                                         # all'app bastano i primi 25 di ogni categoria
+            for k, lista in list(r["oggi"].items()):
+                if isinstance(lista, list):
+                    conta, tenuti = {}, []
+                    for x in lista:
+                        conta[x["categoria"]] = conta.get(x["categoria"], 0) + 1
+                        if conta[x["categoria"]] <= 25:
+                            tenuti.append({c: x[c] for c in ("sym", "categoria", "probabilita")})
+                    r["oggi"][k] = tenuti
+        return r
     except Exception as e:
         log("[app] rete del medio e lungo periodo saltata: %s" % str(e)[:160])
         return None

@@ -647,6 +647,13 @@ prima di vedere i risultati: sulle ultime settimane chiuse (al più 26) lo scart
 media degli ETF e il suo t. Meno di 8 settimane: 20 %; t fino a -2: fuori dal piano; fino a -1: 10 %; da +1: 25 %; da
 +2: 30 %. Il resto va su SWDA, e quando il peso cambia arriva un avviso sul telefono.
 
+## Più veloce sul telefono
+
+L'app pesa 4,0 MB invece di 4,8 (0,97 MB compressa): i numeri dei dati a 6 cifre significative, le date dei grafici
+come giorni dal primo (ricostruite solo quando si apre il grafico di quel titolo), solo i primi 25 di ogni categoria
+nelle classifiche della rete; i formattatori di numeri e date si creano una volta sola. Su un telefono simulato con il
+processore 4 volte più lento si apre in circa 1,1 secondi invece di 1,4.
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo

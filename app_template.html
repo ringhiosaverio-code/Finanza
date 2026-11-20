@@ -345,29 +345,29 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 <script>
 "use strict";
 const D = JSON.parse(document.getElementById('data').textContent);
-(function scompatta(o) {                                                          // i grafici arrivano con le date come giorni dal primo
-  if (!o || typeof o !== 'object') return;
-  if (Array.isArray(o)) { if (o.length && typeof o[0] === 'object') o.forEach(scompatta); return; }
-  for (const k of Object.keys(o)) {
-    const v = o[k];
-    if (v && typeof v === 'object' && !Array.isArray(v) && v.d0 && Array.isArray(v.gg) && Array.isArray(v.close)) {
-      const t0 = Date.parse(v.d0 + 'T00:00:00Z');
-      o[k] = {dates: v.gg.map(g => new Date(t0 + g * 86400000).toISOString().slice(0, 10)), close: v.close};
-    } else scompatta(v);
-  }
-})(D);
+// i grafici arrivano con le date come giorni dal primo: si ricostruiscono solo quando servono (all'avvio costerebbe troppo)
+function graficoDi(s) {
+  const g = s && s.grafico; if (!g) return null;
+  if (g.dates) return g;
+  const t0 = Date.parse(g.d0 + 'T00:00:00Z');
+  s.grafico = {dates: g.gg.map(x => new Date(t0 + x * 86400000).toISOString().slice(0, 10)), close: g.close};
+  return s.grafico;
+}
 let mkt = D.mercati.usa ? 'usa' : 'italia';
 let S = D.mercati[mkt];
 function setMkt(m) { if (D.mercati[m]) { mkt = m; S = D.mercati[m]; } }
 const $ = (s, r = document) => r.querySelector(s);
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const nf = (x, d = 2) => Number(x).toLocaleString('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d});
+const NF_CACHE = {};                                                           // un solo formattatore per numero di decimali (crearlo ogni volta è lento)
+const nf = (x, d = 2) => (NF_CACHE[d] || (NF_CACHE[d] = new Intl.NumberFormat('it-IT', {minimumFractionDigits: d, maximumFractionDigits: d}))).format(Number(x));
 const pc = (x, d = 1, sign = true) => { if (x == null) return 'n/d'; let v = x * 100; if (Math.abs(v) < 0.5 * Math.pow(10, -d)) v = 0; return (sign && v > 0 ? '+' : '') + nf(v, d) + ' %'; };
 const p100 = x => x == null ? 'n/d' : Math.round(x * 100) + ' %';
 const usd = x => x == null ? '–' : nf(x, 2) + ' $';
 const money = x => x == null ? '–' : nf(x, Math.abs(x) < 10 ? 3 : 2) + ' ' + S.mercato.valuta;
 const tk = s => String(s).replace(/\.MI$|-EUR$/, '');
-const dt = (s, o) => new Date(s + 'T12:00:00Z').toLocaleDateString('it-IT', Object.assign({timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'}, o || {}));
+const DT_CACHE = {};
+const dt = (s, o) => { const k = o ? JSON.stringify(o) : '', f = DT_CACHE[k] || (DT_CACHE[k] = new Intl.DateTimeFormat('it-IT', Object.assign({timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'}, o || {})));
+  return f.format(new Date(s + 'T12:00:00Z')); };
 const dtl = s => dt(s, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
@@ -1021,7 +1021,7 @@ function drawSim(s) {
   const labels = bands.map((_, m) => m ? '+' + m + (m === 1 ? ' mese' : ' mesi') : 'oggi');
   fanChart($('#sim-fan'), bands, labels, {entry: P, entryLabel: 'Oggi ', stop: null, target: null}, 'Ventaglio dei prezzi possibili tra un anno',
     {every: m => m === 0 || m % 3 === 0, tip: m => m ? `Tra ${m} ${m === 1 ? 'mese' : 'mesi'}` : 'Oggi'});
-  lineChart($('#sim-line'), s.grafico.dates, s.grafico.close, s.currency);
+  const gr = graficoDi(s); lineChart($('#sim-line'), gr.dates, gr.close, s.currency);
 }
 function lineChart(box, dates, vals, c) {
   const H = Math.max(200, Math.min(260, (box.clientWidth || 600) * .5));
@@ -3250,7 +3250,7 @@ function aggiornaRobot() {
 /* i grafici dei conti: ogni conto giorno per giorno (blu) contro SWDA, il mondo intero, nello stesso periodo (grigio) */
 function prezzoSwda(d, voce) {                                                    // il prezzo di SWDA quel giorno: dallo storico o dal grafico dell'app
   if (voce && voce._swda) return voce._swda;
-  const g = SIM['SWDA.MI'] && SIM['SWDA.MI'].grafico; if (!g || !g.dates) return null;
+  const g = graficoDi(SIM['SWDA.MI']); if (!g || !g.dates) return null;
   let j = -1; for (let i = 0; i < g.dates.length && g.dates[i] <= d; i++) j = i;
   return j >= 0 ? g.close[j] : null;
 }
