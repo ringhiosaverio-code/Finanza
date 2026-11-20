@@ -45,8 +45,12 @@ python3 settimana.py --mercato etf                # anche: bond, oro
 python3 settimana.py --asof 2025-06-30           # cosa avrebbe consigliato a quella data
 ```
 
-Sezioni: Oggi, Il mio portafoglio, Esercitati, Crypto, Cerca un titolo, Altro (Azioni, Funziona?,
-Come funziona, esempio di day trade). L'app si aggiorna da sola ogni ora: alle 18 e alle 22 dei giorni
+Sezioni: Oggi, Il piano, Il mio portafoglio, Il robot (i conti finti in diretta, i grafici contro SWDA, Alpaca e le
+reti in giornata), Crypto, Cerca un titolo, Altro (Esercitati, Le prove di prima, Azioni, Funziona?, Dai libri, Come
+funziona, esempio di day trade, installare l'app). "Le prove di prima" raccoglie le regole e i piani provati e messi da
+parte, che prima stavano in mezzo alle pagine: la regola della notte, perché in giornata è così difficile, il gioco per
+rigiocare una giornata, le regole in giornata su 25 anni, gli studi sulle crypto a lungo termine, gli ordini crypto di
+ogni ora e i due piani al giorno. L'app si aggiorna da sola ogni ora: alle 18 e alle 22 dei giorni
 di borsa (ora italiana, dopo la chiusura di Milano e di New York) tutto, nelle altre ore solo crypto e reti
 neurali con `python3 app.py --leggero`, che riparte dall'ultima app generata (meno di un minuto).
 

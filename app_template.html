@@ -312,8 +312,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
       <a href="#oggi" data-v="oggi">Oggi</a>
       <a href="#piano" data-v="piano">Il piano</a>
       <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
-      <a href="#demo" data-v="demo">Esercitati</a>
-      <a href="#giornata" data-v="giornata">In giornata</a>
+      <a href="#giornata" data-v="giornata">Il robot</a>
       <a href="#crypto" data-v="crypto">Crypto</a>
       <a href="#simula" data-v="simula">Cerca un titolo</a>
       <a href="#altro" data-v="altro">Altro</a>
@@ -337,6 +336,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
   <section class="view" id="v-metodo" hidden></section>
   <section class="view" id="v-libri" hidden></section>
   <section class="view" id="v-giornata" hidden></section>
+  <section class="view" id="v-prove" hidden></section>
 </main>
 <datalist id="all-list"></datalist>
 <div id="toast" class="toast" role="status" hidden></div>
@@ -390,7 +390,7 @@ if (!S.rules.styles.some(s => s.id === st.style)) st.style = DEF.style;
 if (!S.rules.holds.includes(st.hold)) st.hold = DEF.hold;
 
 /* ---------------- sezioni ---------------- */
-const VIEWS = ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'];
+const VIEWS = ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'simula', 'altro', 'consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri', 'prove'];
 let view = null;
 function route() {
   let v = VIEWS.includes(location.hash.slice(1)) ? location.hash.slice(1) : 'oggi';
@@ -398,8 +398,8 @@ function route() {
   if (v === 'consigli' && !D.mercati.usa) v = 'italia';
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
-  ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo', 'libri'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
-  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri'].includes(v) ? 'altro' : v;
+  ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo', 'libri', 'prove'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
+  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri', 'prove', 'demo'].includes(v) ? 'altro' : v;
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === navv ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
@@ -413,6 +413,7 @@ function route() {
   else if (sec === 'daytrade') renderDay();
   else if (sec === 'libri') renderLibri();
   else if (sec === 'giornata') renderGiornata();
+  else if (sec === 'prove') renderProve();
   else renderMetodo();
   if (typeof mostraLive === 'function') { mostraLive(); if (LIVE.fonte === 'locale') setTimeout(giroLive, 50); }
   $('#meta').textContent = !['consigli', 'verifica'].includes(sec) ? (D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))}, ${D.aggiornato.slice(11, 16)}` : '') : `Dati alla chiusura di ${dt(S.asof, {year: 'numeric'})} · ${S.mercato.nome}`;
@@ -1787,19 +1788,17 @@ function renderCrypto() {
     .sort((a, b) => b.h.scenari.prudente.p_gain - a.h.scenari.prudente.p_gain);
   const btc = SIM['BTC-EUR'], w = SIM['SWDA.MI'];
   v.innerHTML = `
-  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-lungo">medio e lungo termine</button>, <button type="button" class="linkb" data-vai="crypto-rete">la rete neurale</button> e <button type="button" class="linkb" data-vai="crypto-ore">gli ordini di ogni ora</button>.</p></div>
+  <div><h1>Crypto</h1><p class="sub" style="margin-top:4px">Le ${list.length} crypto principali in euro, con le stesse regole di tutto il resto: probabilità di guadagno alla durata scelta per ognuna (simulazione prudente), rischio, calo massimo nella loro storia e giudizio. Si scambiano tutti i giorni, weekend compresi. Più sotto: <button type="button" class="linkb" data-vai="crypto-tendenza">la tendenza come i fondi</button>, <button type="button" class="linkb" data-vai="crypto-rete">la rete neurale</button> e <button type="button" class="linkb" data-vai="crypto-carry">il carry</button>.</p></div>
   ${btc && w ? `<div class="alert" role="note"><div class="ic">!</div><p><b>Molto più rischiose di azioni ed ETF.</b> Bitcoin oscilla del ${pc(btc.volatilita, 0, false)} in un anno, un ETF sul mondo intero (SWDA) del ${pc(w.volatilita, 0, false)}. Nella sua storia Bitcoin ha perso fino al ${pc(-btc.calo_massimo, 0, false)} dal picco. Una crypto non è un'azienda: non ha utili né dividendi, il prezzo dipende solo da domanda e offerta. Se le compri, solo con soldi che puoi permetterti di perdere.</p></div>` : ''}
   <div class="scroll card"><table>
     <thead><tr><th class="l">Crypto</th><th>Prezzo</th><th>Ultimo anno</th><th>Oscilla in un anno</th><th>Calo massimo</th><th>In guadagno alla durata</th><th>1 su 10 sotto</th><th class="l">Giudizio</th></tr></thead>
     <tbody>${list.map(({s, g, h}) => { const m = h.scenari.prudente;
       return `<tr class="clk" data-q="${esc(s.symbol)}" tabindex="0"><td class="l"><b>${esc(s.name)}</b> <span class="note">${esc(s.symbol.replace('-EUR', ''))}</span></td><td>${nf(s.prezzo, dec(s.prezzo))} €${liveSpan(s.symbol)}</td><td class="${(s.stato.anno || 0) >= 0 ? 'pos' : 'neg'}">${pc(s.stato.anno, 0)}</td><td>${pc(s.volatilita, 0, false)}</td><td class="neg">${pc(s.calo_massimo, 0)}</td><td><b>${p100(m.p_gain)}</b> <span class="note">a ${esc(h.orizzonte)}</span></td><td class="neg">${pc(m.p10, 0)}</td><td class="l"><span class="chip ${g.livello === 'si' ? 'alta' : g.livello === 'no' ? 'bassa' : 'media'}">${g.titolo.replace(', ha buone probabilità', '')}</span></td></tr>`; }).join('')}</tbody></table></div>
   ${cryptoTendenzaHTML()}
-  ${carryHTML()}
-  ${cryptoLungoHTML()}
   ${reteLungoHTML('crypto')}
   ${reteHTML()}
-  ${ordiniOreHTML()}
-  <details style="margin-top:12px"><summary><b>Come eravamo partiti</b>: due piani al giorno, ognuno valido 24 ore</summary>${intradayHTML()}</details>
+  ${carryHTML()}
+  <a class="card lk" href="#prove" style="display:block;text-decoration:none"><b>Le prove di prima</b><span class="note" style="display:block;margin-top:4px">Gli studi sulle crypto a medio e lungo termine (compra e tieni, medie di 200 e 50 giorni, quanto tenere), gli ordini rinnovati ogni ora e i due piani al giorno di prima: provati e messi da parte.</span></a>
   <p class="note">Tocca una riga della prima tabella per la simulazione completa e il perché. Probabilità calcolate con una crescita prudente (quella passata, ridotta di molto: con oscillazioni così ampie, pochi anni di storia non dicono quanto cresceranno). Senza costi né tasse. Non è consulenza finanziaria.</p>`;
   v.querySelectorAll('tr.clk').forEach(r => { const go = () => { simSt.q = r.dataset.q; location.hash = 'simula'; };
     r.addEventListener('click', go); r.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }); });
@@ -2113,6 +2112,8 @@ function verifica25HTML() {
 function renderAltro() {
   $('#v-altro').innerHTML = `<div><h1>Altro</h1><p class="sub" style="margin-top:4px">Gli strumenti per chi vuole andare più a fondo.</p></div>
   <div class="links">
+    <a class="card lk" href="#demo"><b>Esercitati</b><span>Il tuo conto finto: compri e vendi tu, a mano, con i prezzi veri, e vedi come va.</span></a>
+    <a class="card lk" href="#prove"><b>Le prove di prima</b><span>Le regole e i piani provati e messi da parte: la regola della notte, il gioco per rigiocare una giornata, le regole in giornata su 25 anni, gli ordini crypto di ogni ora.</span></a>
     <a class="card lk" href="#consigli"><b>Azioni: scegli tu la regola</b><span>Le azioni USA e italiane, con durata e protezione a tua scelta, quante azioni comprare, grafici e simulazione.</span></a>
     <a class="card lk" href="#verifica"><b>Funziona?</b><span>La verifica su anni che l'algoritmo non aveva visto: le probabilità dette sono quelle vere?</span></a>
     <a class="card lk" href="#libri"><b>Dai libri di trading</b><span>Candele giapponesi, rotture, RSI, momenti di entrata: le regole dei libri più famosi provate sui prezzi veri. Quali reggono.</span></a>
@@ -2285,12 +2286,12 @@ function giocoEventi() {
     gSt.esito = Object.assign(x, {compra});
     GIOCO.giocate++; GIOCO.visti = GIOCO.visti.concat([gSt.i]).slice(-R.length);
     if (compra) { GIOCO.comprate++; GIOCO.somma += x.r; if (x.r > 0) GIOCO.vinte++; }
-    salvaGioco(); renderGiornata(true);
+    salvaGioco(); rifaiGioco();
   };
   $('#g-compra')?.addEventListener('click', () => gioca(true));
   $('#g-passa')?.addEventListener('click', () => gioca(false));
-  $('#g-nuova')?.addEventListener('click', () => { gSt.i = giornoNuovo(); gSt.esito = null; renderGiornata(true); });
-  $('#g-reset')?.addEventListener('click', () => { GIOCO = giocoVuoto(); salvaGioco(); renderGiornata(true); });
+  $('#g-nuova')?.addEventListener('click', () => { gSt.i = giornoNuovo(); gSt.esito = null; rifaiGioco(); });
+  $('#g-reset')?.addEventListener('click', () => { GIOCO = giocoVuoto(); salvaGioco(); rifaiGioco(); });
 }
 /* ---------------- i segnali dalla ricerca: quali sono legati a quello che succede dopo ---------------- */
 const NOMI_SEGNALI = {
@@ -2411,14 +2412,11 @@ function reteAzioniHTML(m) {
     <p class="note" style="margin-top:8px">Riaddestrala con <code>python3 ${usa ? 'rete_usa' : 'rete_azioni'}.py --studia</code>. Non è consulenza finanziaria: il conto è finto.</p></div>`;
 }
 
-function renderGiornata(soloGioco) {
+function renderGiornata() {
   const v = $('#v-giornata'), B = D.libri, G = D.giornata;
-  if (soloGioco && $('#gioco')) { $('#gioco').outerHTML = giocoHTML(); giocoEventi(); return; }
   const R = (B && B.giornata) || [], ogni = R.find(r => r.id === 'ogni'), gap = R.find(r => r.id === 'gapgiu'), oops = R.find(r => r.id === 'oops');
-  const N = (B && B.notte) || {}, tagl = B ? new Date(B.taglio).getFullYear() : 2016;
+  const tagl = B ? new Date(B.taglio).getFullYear() : 2016;
   const regge = R.filter(r => r.regge && r.id !== 'ogni');
-  const cG = s => s && s.n >= 30 ? `<b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b> <span class="note">(t ${nf(s.t, 1)})</span><br><span class="note">${p100(s.p_gain)} in guadagno · ${nf(s.n, 0)} op.</span>` : '<span class="note">pochi dati</span>';
-  const tile = (m, nome) => { const x = N[m] && N[m].dopo; return x ? `<div class="stat"><div class="k">${nome}, dal ${tagl}</div><div class="v"><span class="pos">${pc(x.notte, 0)}</span> <span class="note">di notte</span></div><div class="d">e <b class="${x.giorno >= 0 ? 'pos' : 'neg'}">${pc(x.giorno, 0)}</b> di giorno, in un anno (in salita il ${p100(x.notte_su)} delle notti, il ${p100(x.giorno_su)} dei giorni)</div></div>` : ''; };
   const P = (G && G.piani) || [];
   const riga = p => { const s = p.storia || {}, cur = p.valuta;
     return `<tr><td class="l"><b>${esc(tk(p.symbol))}</b> <span class="note">${esc(((SIM[p.symbol] || {}).name || '').slice(0, 24))}</span></td><td>${nf(p.chiusura, dec(p.chiusura))} ${cur}${liveSpan(p.symbol)}</td><td><b>${nf(p.minimo, dec(p.minimo))} ${cur}</b><br><span class="note">${pc(p.distanza, 1)}</span><span class="lvq" data-livello="${esc(p.symbol)}" data-liv="${p.minimo}" data-dal="${p.data}"></span></td><td class="l" style="white-space:normal;min-width:150px">${s.n ? `${nf(s.n, 0)} volte dal ${new Date(s.da).getFullYear()} (${p100(s.frequenza)} delle sedute)<br>in guadagno ${p100(s.p_gain)} · media <b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b>` : 'n/d'}</td></tr>`; };
@@ -2426,35 +2424,53 @@ function renderGiornata(soloGioco) {
     return `<h3 style="margin-top:12px">${m === 'usa' ? 'Azioni USA' : 'Azioni italiane'} <span class="note">· apre alle ${esc(L[0].apertura)}, vendi entro le ${esc(L[0].vendi_entro)} · livelli dalla seduta del ${dt(L[0].data, {year: 'numeric'})}</span></h3>
       <div class="scroll"><table><thead><tr><th class="l">Titolo</th><th>Ultima chiusura</th><th>Livello (minimo)</th><th class="l">Su questo titolo, dopo i costi</th></tr></thead><tbody>${L.map(riga).join('')}</tbody></table></div>`; };
   const ex = P.find(p => p.mercato === 'usa') || P[0];
-  v.innerHTML = `<div><h1>In giornata</h1><p class="sub" style="margin-top:4px">Comprare e vendere nella stessa seduta: le regole dei libri messe alla prova su 25 anni, il piano per la prossima seduta e un gioco per esercitarti su giornate vere.</p></div>
-  ${ogni ? `<div class="verdetto v-${regge.length ? 'cautela' : 'no'}"><div class="vh"><span class="vi" aria-hidden="true">${regge.length ? '!' : '✕'}</span><div><b>${regge.length ? 'Con cautela' : 'Per ora no'}</b>
-    <p>${regge.length ? `Regge: ${regge.map(r => esc(r.nome)).join(', ')}.` : `In ${new Date(B.generato).getFullYear() - 2001} anni di azioni USA, italiane ed ETF, comprare all'apertura e vendere in chiusura ha reso in media <b>${pc(ogni.dopo.media, 2)}</b> a operazione dopo i costi (in guadagno il ${p100(ogni.dopo.p_gain)} delle volte). Nessuna delle ${R.length - 1} regole provate è rimasta in guadagno in entrambi i periodi${gap ? `: la migliore fino al ${tagl - 1}, comprare i gap giù all'apertura (${pc(gap.prima.media, 2)}), dal ${tagl} ha perso (${pc(gap.dopo.media, 2)})` : ''}. Lo stesso sulle candele orarie di crypto e azioni USA, anche con le strategie pubblicate di recente (titoli in gioco, zona di rumore).`} L'unica regola breve che regge è <b>di notte</b>, qui sotto, e solo con costi molto bassi. Per guadagnare con i costi normali, i dati dicono di tenere più a lungo, come <a href="#oggi" style="color:var(--accent)">il pacchetto di Oggi</a>.</p></div></div></div>` : ''}
+  v.innerHTML = `<div><h1>Il robot</h1><p class="sub" style="margin-top:4px">Conti finti che comprano e vendono da soli nel motore del cloud, giorno e notte: le operazioni in diretta, i conti contro SWDA, il conto di prova su Alpaca e, più sotto, le reti neurali e la regola che il robot usa in giornata. Le regole provate e messe da parte sono in <a href="#prove" style="color:var(--accent)">Altro, Le prove di prima</a>.</p></div>
   ${robotHTML()}
   ${graficiRobotHTML()}
   ${alpacaHTML()}
+  <div style="margin-top:22px"><h2>In giornata</h2><p class="sub" style="margin-top:4px">Comprare e vendere nella stessa seduta: le reti neurali e la regola Oops! che il robot usa nei conti in giornata, con la verifica su anni mai visti.</p></div>
+  ${ogni ? `<div class="verdetto v-${regge.length ? 'cautela' : 'no'}"><div class="vh"><span class="vi" aria-hidden="true">${regge.length ? '!' : '✕'}</span><div><b>${regge.length ? 'Con cautela' : 'Per ora no'}</b>
+    <p>${regge.length ? `Regge: ${regge.map(r => esc(r.nome)).join(', ')}.` : `In ${new Date(B.generato).getFullYear() - 2001} anni di azioni USA, italiane ed ETF, comprare all'apertura e vendere in chiusura ha reso in media <b>${pc(ogni.dopo.media, 2)}</b> a operazione dopo i costi (in guadagno il ${p100(ogni.dopo.p_gain)} delle volte). Nessuna delle ${R.length - 1} regole provate è rimasta in guadagno in entrambi i periodi${gap ? `: la migliore fino al ${tagl - 1}, comprare i gap giù all'apertura (${pc(gap.prima.media, 2)}), dal ${tagl} ha perso (${pc(gap.dopo.media, 2)})` : ''}. Lo stesso sulle candele orarie di crypto e azioni USA, anche con le strategie pubblicate di recente (titoli in gioco, zona di rumore).`} L'unica regola breve che regge è <b>di notte</b> (in <a href="#prove" style="color:var(--accent)">Le prove di prima</a>), e solo con costi molto bassi. Per guadagnare con i costi normali, i dati dicono di tenere più a lungo, come <a href="#oggi" style="color:var(--accent)">il pacchetto di Oggi</a>.</p></div></div></div>` : ''}
   ${reteItaHTML()}
   ${reteAzioniHTML('usa')}
-  ${notteHTML()}
-  ${N.usa ? `<div class="card"><h2>Perché in giornata è così difficile</h2>
-    <p class="sub" style="margin-top:4px">Le azioni guadagnano soprattutto <b>di notte</b>, tra la chiusura e l'apertura del giorno dopo, quando chi compra e vende in giornata non ha niente in mano. Di giorno il movimento medio è quasi zero, e ogni operazione paga i costi (0,1-0,2 % tra entrata e uscita, più la differenza tra prezzo di acquisto e di vendita).</p>
-    <div class="tiles">${tile('usa', 'Azioni USA')}${tile('italia', 'Azioni italiane')}${tile('etf', 'ETF a Milano')}</div>
-    <p class="note" style="margin-top:6px">Rendimenti medi di tutti i titoli dell'app, prezzi corretti per i dividendi. I prezzi di apertura di Yahoo per Milano possono essere imprecisi, ma la direzione è la stessa ovunque ed è nota negli studi ("overnight anomaly").</p></div>` : ''}
   ${P.length ? `<div class="card"><h2>Il piano per la prossima seduta</h2>
     <p class="sub" style="margin-top:4px">La regola <b>Oops!</b> di Larry Williams, la più vicina al pareggio tra quelle provate (${oops ? `${pc(oops.prima.media, 2)} e ${pc(oops.dopo.media, 2)} a operazione dopo i costi, prima e dopo il ${tagl}` : 'in perdita dopo i costi'}), sui titoli più scambiati. <b>Se la seduta apre sotto il livello</b> (il minimo dell'ultima seduta), metti un ordine di acquisto "stop" al livello: scatta solo se il prezzo risale fin lì. <b>Vendi in chiusura</b>, in ogni caso. Se apre sopra il livello, niente operazione.</p>
     ${ex ? `<p class="note" style="margin-top:6px">Esempio: se ${esc(tk(ex.symbol))} apre a ${nf(ex.minimo * .995, dec(ex.minimo))} ${ex.valuta}, sotto ${nf(ex.minimo, dec(ex.minimo))} ${ex.valuta}, l'ordine stop a ${nf(ex.minimo, dec(ex.minimo))} ${ex.valuta} compra solo se il prezzo torna lì; alle ${esc(ex.vendi_entro.split(' ')[0])} vendi.</p>` : ''}
     ${blocco('usa')}${blocco('italia')}
     <p class="note" style="margin-top:8px">La colonna a destra è la storia della regola su quel titolo: anche dove è positiva, la differenza da zero sta nel rumore. Usa il piano per esercitarti a seguire una regola precisa, non per guadagnare. Non è consulenza finanziaria.</p></div>` : ''}
+  <a class="card lk" href="#prove" style="display:block;text-decoration:none"><b>Le prove di prima</b><span class="note" style="display:block;margin-top:4px">La regola della notte, perché in giornata è così difficile, il gioco per rigiocare una giornata vera e tutte le regole provate e messe da parte.</span></a>`;
+  robotEventi();
+  graficiEventi();
+}
+
+/* ---------------- le prove di prima: le regole e i piani provati e messi da parte ---------------- */
+function renderProve() {
+  const v = $('#v-prove'), B = D.libri;
+  const R = (B && B.giornata) || [], N = (B && B.notte) || {}, tagl = B ? new Date(B.taglio).getFullYear() : 2016;
+  const cG = s => s && s.n >= 30 ? `<b class="${s.media >= 0 ? 'pos' : 'neg'}">${pc(s.media, 2)}</b> <span class="note">(t ${nf(s.t, 1)})</span><br><span class="note">${p100(s.p_gain)} in guadagno · ${nf(s.n, 0)} op.</span>` : '<span class="note">pochi dati</span>';
+  const tile = (m, nome) => { const x = N[m] && N[m].dopo; return x ? `<div class="stat"><div class="k">${nome}, dal ${tagl}</div><div class="v"><span class="pos">${pc(x.notte, 0)}</span> <span class="note">di notte</span></div><div class="d">e <b class="${x.giorno >= 0 ? 'pos' : 'neg'}">${pc(x.giorno, 0)}</b> di giorno, in un anno (in salita il ${p100(x.notte_su)} delle notti, il ${p100(x.giorno_su)} dei giorni)</div></div>` : ''; };
+  v.innerHTML = `<div><h1>Le prove di prima</h1><p class="sub" style="margin-top:4px">Le regole e i piani che l'app ha provato e messo da parte: restano qui con i loro numeri, per chi vuole vedere perché. Il robot non li usa più, tranne la regola Oops! nel conto "Azioni in seduta" (nella pagina <a href="#giornata" style="color:var(--accent)">Il robot</a>).</p></div>
+  <div style="margin-top:18px"><h2>Azioni in giornata e di notte</h2></div>
+  ${notteHTML()}
+  ${N.usa ? `<div class="card"><h2>Perché in giornata è così difficile</h2>
+    <p class="sub" style="margin-top:4px">Le azioni guadagnano soprattutto <b>di notte</b>, tra la chiusura e l'apertura del giorno dopo, quando chi compra e vende in giornata non ha niente in mano. Di giorno il movimento medio è quasi zero, e ogni operazione paga i costi (0,1-0,2 % tra entrata e uscita, più la differenza tra prezzo di acquisto e di vendita).</p>
+    <div class="tiles">${tile('usa', 'Azioni USA')}${tile('italia', 'Azioni italiane')}${tile('etf', 'ETF a Milano')}</div>
+    <p class="note" style="margin-top:6px">Rendimenti medi di tutti i titoli dell'app, prezzi corretti per i dividendi. I prezzi di apertura di Yahoo per Milano possono essere imprecisi, ma la direzione è la stessa ovunque ed è nota negli studi ("overnight anomaly").</p></div>` : ''}
   ${giocoHTML()}
   ${R.length ? `<div class="card"><h2>Le regole provate</h2>
     <p class="sub" style="margin-top:4px">Comprate e vendute nella stessa seduta, su fino a 25 anni di candele giornaliere di azioni USA, italiane ed ETF. Media per operazione dopo i costi; t: quanto è solido (almeno 2 per contare).</p>
     <div class="scroll" style="margin-top:10px"><table><thead><tr><th class="l">Regola</th><th>Fino al ${tagl - 1}</th><th>Dal ${tagl}</th></tr></thead>
       <tbody>${R.map(r => `<tr><td class="l" style="white-space:normal;min-width:240px"><b>${esc(r.nome)}</b> <span class="note">· ${esc(r.fonte)}</span><br><span class="note">${esc(r.desc)}</span></td><td>${cG(r.prima)}</td><td>${cG(r.dopo)}</td></tr>`).join('')}</tbody></table></div>
     ${recentiHTML()}
-    <p class="note" style="margin-top:8px">Sulle candele orarie (primo intervallo, momento della giornata, rotture, figure, RSI) il risultato è lo stesso: vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>. Per le crypto c'è la verifica degli ordini di ogni ora (perdono) nella sezione <a href="#crypto" style="color:var(--accent)">Crypto</a> e, sul tuo computer, <code>python3 crypto_live.py</code> con i prezzi ogni secondo.</p></div>` : ''}`;
+    <p class="note" style="margin-top:8px">Sulle candele orarie (primo intervallo, momento della giornata, rotture, figure, RSI) il risultato è lo stesso: vedi <a href="#libri" style="color:var(--accent)">Dai libri</a>. Per le crypto c'è la verifica degli ordini di ogni ora (perdono) qui sotto e, sul tuo computer, <code>python3 crypto_live.py</code> con i prezzi ogni secondo.</p></div>` : ''}
+  <div style="margin-top:18px"><h2>Crypto</h2></div>
+  ${cryptoLungoHTML()}
+  ${ordiniOreHTML()}
+  <details style="margin-top:12px"><summary><b>Come eravamo partiti</b>: due piani al giorno, ognuno valido 24 ore</summary>${intradayHTML()}</details>`;
   giocoEventi();
-  robotEventi();
-  graficiEventi();
 }
+// il gioco si rifà da solo, senza ridisegnare tutta la pagina
+function rifaiGioco() { const g = $('#gioco'); if (g) { g.outerHTML = giocoHTML(); giocoEventi(); } }
 
 /* ---------------- come funziona ---------------- */
 function renderMetodo() {
@@ -3223,10 +3239,8 @@ function robotModulo(primo) {
     <div style="margin-top:10px;display:grid;gap:6px">${Object.entries(STRATEGIE).filter(([, S]) => !S.ritirata).map(([k, S]) => `<label><input type="checkbox" id="rb-${k}" checked> ${S.nome} <span class="chip ${S.chip}">${S.stato}</span></label>`).join('')}</div>`;
 }
 function robotAttese() {
-  const oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops'), O = D.intraday && D.intraday.ore, vo = O && O.verifica;
-  const medie = vo ? O.livelli.map(l => vo[l.id].anno2.media) : [];
-  const crypto = vo ? `da ${pc(Math.min(...medie), 2)} a ${pc(Math.max(...medie), 2)} a operazione nel secondo anno, dopo i costi, con ordini che nella realtà potrebbero non eseguirsi sempre al livello (vedi la sezione Crypto)` : 'in perdita dopo i costi';
-  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>azioni in seduta (Oops!)</b> ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione in media negli ultimi anni' : 'in perdita dopo i costi'}; <b>crypto, ordini ogni ora</b> ${crypto}; <b>le due reti neurali</b> comprano solo le operazioni che stimano più probabili in guadagno, ma nella verifica su periodi mai visti non hanno ancora saputo distinguerle (vedi le sezioni Crypto e In giornata). Le azioni non si comprano di notte: la strategia di notte, che regge con costi bassi, è verificata nella sezione Dai libri e non fa più parte del robot. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
+  const oops = D.libri && (D.libri.giornata || []).find(r => r.id === 'oops');
+  return `<p class="note" style="margin-top:8px">Cosa aspettarsi, dalle verifiche: <b>i conti in giornata</b> (azioni in seduta con la regola Oops!, ${oops && oops.dopo ? pc(oops.dopo.media, 2) + ' a operazione negli ultimi anni' : 'in perdita dopo i costi'}; le reti neurali su crypto, azioni italiane e USA; gli ordini crypto sui segnali) sono esercitazioni: nelle verifiche su periodi mai visti, dopo i costi, restano vicino allo zero o in perdita, e comprano spesso, quindi pagano molti costi. <b>I conti di medio periodo</b> (il piano con la rete, gli ETF e le obbligazioni con la rete, Faber, la tendenza crypto) seguono le regole che nelle verifiche hanno retto: si muovono poco e vanno giudicati in mesi, non in giorni. Il robot serve a vederlo succedere, operazione per operazione.</p>`;
 }
 const quandoBreve = t => new Date(t).toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
 function robotHTML() {
@@ -3397,7 +3411,7 @@ function aggiornaGrafici() {                                                    
   el.replaceWith(nuovo); graficiEventi();
 }
 function robotDemoHTML() {
-  if (!ROBOT) return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b><span class="note" style="display:block;margin-top:4px">Conti finti che comprano e vendono da soli: azioni USA e italiane durante la seduta, e crypto 24 ore su 24 (esercitazioni: in media perdono). Lo avvii in In giornata.</span></a>`;
+  if (!ROBOT) return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b><span class="note" style="display:block;margin-top:4px">Conti finti che comprano e vendono da soli: azioni USA e italiane durante la seduta, e crypto 24 ore su 24 (esercitazioni: in media perdono). Lo trovi nella pagina Il robot.</span></a>`;
   const usati = Object.keys(STRATEGIE).filter(k => (!STRATEGIE[k].ritirata || ROBOT.conti[k].aperta) && (ROBOT.conti[k].attiva || ROBOT.conti[k].n)), tot = usati.reduce((t, k) => t + valoreConto(ROBOT, k), 0);
   return `<a class="card lk" href="#giornata" style="display:block;text-decoration:none"><b>Il robot automatico</b> <span class="note">· ${ROBOT.sessione && ROBOT.sessione.aperta ? 'sessione aperta' : 'sessione chiusa'}</span>
     <span class="note" style="display:block;margin-top:4px">${usati.map(k => { const v = valoreConto(ROBOT, k); return `${STRATEGIE[k].breve} <b class="${Math.round(v * 100) >= ROBOT_CAPITALE * 100 ? 'pos' : 'neg'}">${pc(v / ROBOT_CAPITALE - 1, 2)}</b>`; }).join(' · ')}${usati.length ? ` · in tutto ${eur(tot)}` : ''}. Tocca per vederlo.</span></a>`;
