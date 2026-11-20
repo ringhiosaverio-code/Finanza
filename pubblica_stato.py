@@ -31,7 +31,9 @@ RAMO = "robot-stato"
 NOTIFICHE = os.path.join(ROOT, "notifiche.json")
 VISTI = os.path.join(ROOT, "trader", "ntfy_visti.json")
 RESOCONTO = os.path.join(ROOT, "trader", "resoconto.json")   # l'ultimo resoconto, anche per l'app (ramo robot-stato)
-ALPACA = os.path.join(ROOT, "trader", "alpaca.json")         # il conto di prova su Alpaca, per l'app (alpaca_paper.py)
+ALPACA = os.path.join(ROOT, "trader", "alpaca.json")
+AVVISI = os.path.join(ROOT, "trader", "avvisi.json")         # gli ultimi avvisi, anche quelli non partiti: l'app li mostra
+CODA = os.path.join(ROOT, "trader", "ntfy_coda.json")        # gli avvisi rifiutati da ntfy, da rimandare         # il conto di prova su Alpaca, per l'app (alpaca_paper.py)
 IMPORTANTI = ("piano", "rete_etf", "rete_obbl", "faber", "tendenza")      # questi subito; gli altri in un riassunto ogni ora
 NOMI = {"piano": "Il piano con la rete", "rete_etf": "ETF, rete neurale", "rete_obbl": "Obbligazioni, rete neurale",
         "faber": "ETF, media di 10 mesi", "tendenza": "Crypto, tendenza", "segnali": "Crypto, segnali", "rete": "Crypto, rete neurale",
@@ -43,11 +45,79 @@ GIORNI = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
 MESI = ("gen", "feb", "mar", "apr", "mag", "giu", "lug", "ago", "set", "ott", "nov", "dic")
 
 
-def manda(titolo, testo, argomento, etichetta="chart_with_upwards_trend"):
-    titolo = titolo.encode("latin-1", "ignore").decode("latin-1")           # le intestazioni HTTP: solo latin-1
-    req = urllib.request.Request("https://ntfy.sh/" + argomento, data=testo.encode("utf-8"),
-                                 headers={"Title": titolo, "Tags": etichetta}, method="POST")
-    urllib.request.urlopen(req, timeout=20).read()
+def _leggi(percorso, vuoto):
+    try:
+        with open(percorso, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return vuoto
+
+
+def _scrivi(percorso, x):
+    with open(percorso, "w", encoding="utf-8") as fh:
+        json.dump(x, fh, ensure_ascii=False)
+
+
+def _registra(titolo, testo, mandato):
+    """Gli ultimi 60 avvisi, partiti o no: vanno nel ramo robot-stato e l'app li mostra (e li fa suonare se è aperta)."""
+    L = _leggi(AVVISI, [])
+    ora = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stesso = next((x for x in reversed(L[-20:]) if x["titolo"] == titolo and x["testo"] == testo), None)
+    if stesso:                                                        # lo stesso avviso riprovato: si aggiorna
+        stesso["mandato"] = stesso["mandato"] or mandato
+    else:
+        L.append({"t": ora, "titolo": titolo, "testo": testo, "mandato": mandato})
+    _scrivi(AVVISI, L[-60:])
+
+
+def manda(titolo, testo, argomento, etichetta="chart_with_upwards_trend", coda=True):
+    """Manda un avviso con ntfy. Con un account ntfy personale il limite di messaggi è solo tuo: il token si mette tra i
+    segreti di rete dell'ambiente per ntfy.sh (il proxy lo aggiunge) o nella variabile NTFY_TOKEN. Se ntfy rifiuta,
+    l'avviso resta nell'app e (coda) si rimanda più tardi."""
+    t = titolo.encode("latin-1", "ignore").decode("latin-1")               # le intestazioni HTTP: solo latin-1
+    h = {"Title": t, "Tags": etichetta}
+    if os.environ.get("NTFY_TOKEN"):
+        h["Authorization"] = "Bearer " + os.environ["NTFY_TOKEN"]
+    req = urllib.request.Request("https://ntfy.sh/" + argomento, data=testo.encode("utf-8"), headers=h, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=20).read()
+    except Exception:
+        _registra(titolo, testo, False)
+        if coda:
+            C = _leggi(CODA, [])
+            C.append({"titolo": titolo, "testo": testo, "etichetta": etichetta})
+            _scrivi(CODA, C[-30:])
+        raise
+    _registra(titolo, testo, True)
+
+
+def riprova_coda(adesso=None):
+    """Ogni 10 minuti rimanda gli avvisi che ntfy aveva rifiutato (limite di messaggi), dal più vecchio; si ferma al
+    primo che non parte."""
+    adesso = adesso or time.time()
+    v = _leggi(VISTI, {})
+    if adesso - float(v.get("coda_prova") or 0) < 600:
+        return 0
+    C = _leggi(CODA, [])
+    if not C:
+        return 0
+    v["coda_prova"] = adesso
+    _scrivi(VISTI, v)
+    try:
+        argomento = _leggi(NOTIFICHE, {})["argomento"]
+    except KeyError:
+        return 0
+    fatti = 0
+    while C:
+        x = C[0]
+        try:
+            manda(x["titolo"], x["testo"], argomento, x.get("etichetta", "chart_with_upwards_trend"), coda=False)
+        except Exception:
+            break
+        C.pop(0)
+        fatti += 1
+    _scrivi(CODA, C)
+    return fatti
 
 
 def _num(x, decimali=0):
@@ -156,7 +226,7 @@ def resoconto(adesso=None, subito=False):
         return False
     mandato = True
     try:
-        manda(r[0], r[1], argomento, "memo")
+        manda(r[0], r[1], argomento, "memo", coda=False)
     except Exception as e:
         mandato = False
         print(time.strftime("%H:%M:%S"), "resoconto non mandato:", str(e)[:120], flush=True)
@@ -248,7 +318,7 @@ def avvisi(adesso=None):
         pass
     if v["attesa"] and time.time() - v["riassunto"] > 3600:
         try:
-            manda("Robot: %d operazioni nell'ultima ora" % len(v["attesa"]), "\n".join(v["attesa"][-12:]) + ("\n…" if len(v["attesa"]) > 12 else ""), argomento)
+            manda("Robot: %d operazioni nell'ultima ora" % len(v["attesa"]), "\n".join(v["attesa"][-12:]) + ("\n…" if len(v["attesa"]) > 12 else ""), argomento, coda=False)
             v["attesa"], v["riassunto"] = [], time.time()
         except Exception:
             pass
@@ -299,13 +369,14 @@ def una_volta(ultimo):
     if not os.path.exists(STATO):
         return ultimo
     m = (os.path.getmtime(STATO), os.path.getmtime(APP) if os.path.exists(APP) else 0.0,
-         os.path.getmtime(RESOCONTO) if os.path.exists(RESOCONTO) else 0.0, os.path.getmtime(ALPACA) if os.path.exists(ALPACA) else 0.0)
+         os.path.getmtime(RESOCONTO) if os.path.exists(RESOCONTO) else 0.0, os.path.getmtime(ALPACA) if os.path.exists(ALPACA) else 0.0,
+         os.path.getmtime(AVVISI) if os.path.exists(AVVISI) else 0.0)
     if m == ultimo:
         return ultimo
     prepara()
     shutil.copy(STATO, os.path.join(DIR, "robot.json"))
     git("add", "robot.json")
-    for f in (RESOCONTO, ALPACA):                          # l'ultimo resoconto della settimana e il conto Alpaca, per l'app
+    for f in (RESOCONTO, ALPACA, AVVISI):                          # l'ultimo resoconto della settimana e il conto Alpaca, per l'app
         if os.path.exists(f):
             shutil.copy(f, os.path.join(DIR, os.path.basename(f)))
             git("add", os.path.basename(f))
@@ -332,6 +403,7 @@ def main():
             comandi()
             resoconto()
             alpaca()
+            riprova_coda()
         except Exception as e:                                   # rete o git: si riprova al giro dopo
             print(time.strftime("%H:%M:%S"), "errore:", str(e)[:200], flush=True)
         time.sleep(60)

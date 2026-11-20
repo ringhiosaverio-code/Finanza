@@ -1112,7 +1112,10 @@ function avvisiHTML() {
     <ol class="note" style="margin:8px 0 0;padding-left:20px;line-height:1.6"><li>Installa l'app gratuita <b>ntfy</b> (App Store o Google Play).</li><li>Tocca <b>+</b> e iscriviti all'argomento <b>${esc(N.argomento)}</b> (server ntfy.sh).</li><li>Fatto: gli avvisi arrivano da soli.</li></ol>
     <p class="note" style="margin-top:8px"><b>Ogni lunedì alle 8</b> arriva anche il resoconto della settimana: quanto ha fatto ogni conto del robot da lunedì a domenica, SWDA per confronto, le operazioni (quante in guadagno), il diario della rete dal vivo, il suo peso nel piano e le sue scelte.</p>
     <p style="margin-top:8px"><button type="button" class="more" id="rs-adesso">Mandami il resoconto adesso</button> <span class="note" id="rs-esito" aria-live="polite"></span></p>
-    <p class="note" style="margin-top:6px">Il servizio gratuito ha un limite di messaggi al giorno, condiviso con gli altri utenti del cloud: in qualche giorno gli avvisi possono non arrivare. Con un account ntfy personale gratuito il limite diventa tuo. Chi conosce il nome dell'argomento può leggere gli avvisi: non condividerlo.</p></div>`;
+    <p class="note" style="margin-top:6px">Il servizio gratuito ha un limite di messaggi al giorno, condiviso con gli altri utenti del cloud: quando ntfy rifiuta, l'avviso resta qui sotto e il motore lo rimanda ogni 10 minuti. Con un account ntfy personale gratuito il limite diventa solo tuo: il suo token va nelle impostazioni dell'ambiente del cloud, tra i segreti di rete, per l'host ntfy.sh (mai in chat). Chi conosce il nome dell'argomento può leggere gli avvisi: non condividerlo.</p>
+    <h3 style="margin-top:12px">Gli ultimi avvisi</h3>
+    <div id="avvisi-lista">${avvisiListaHTML()}</div>
+    <p style="margin-top:8px"><button type="button" class="more" id="avvisi-qui">Fai arrivare gli avvisi anche dall'app</button> <span class="note" id="avvisi-qui-esito" aria-live="polite"></span></p></div>`;
 }
 // il futuro: migliaia di futuri possibili ricampionando a blocchi le settimane vere del portafoglio (2021-2026)
 let futuroSt = {cap: 1000, mese: 100, anni: 10};
@@ -1284,6 +1287,7 @@ function renderPiano() {
     futuroSt = {cap: Number(v.querySelector('#fu-cap').value) || 0, mese: Number(v.querySelector('#fu-mese').value) || 0, anni: Math.min(40, Math.max(1, Number(v.querySelector('#fu-anni').value) || 1))};
     const t = v.querySelector('#fu-righe'); if (t) t.innerHTML = futuroRighe(); }); });
   const rs = v.querySelector('#rs-adesso'); if (rs) rs.addEventListener('click', resocontoAdesso);
+  const aq = v.querySelector('#avvisi-qui'); if (aq) aq.addEventListener('click', avvisiQui);
 }
 // l'ultimo resoconto della settimana (ogni lunedì alle 8): il motore lo scrive nel ramo robot-stato, così si legge qui
 // anche quando l'avviso sul telefono non arriva (limite di ntfy)
@@ -1339,6 +1343,33 @@ async function caricaResoconto() {
     RESOCONTO = v;
     const c = $('#resoconto'); if (c) c.outerHTML = resocontoHTML();
   } catch (e) {}
+}
+// gli ultimi avvisi del motore (trader/avvisi.json nel ramo robot-stato), anche quelli che ntfy ha rifiutato; con l'app
+// aperta (o installata) i nuovi arrivano anche come notifiche del telefono, se le hai permesse
+let AVVISI_LISTA = null, AVVISI_VISTI = null;
+function avvisiListaHTML() {
+  const L = AVVISI_LISTA;
+  if (!L) return '<p class="note">Si caricano dal motore nel cloud (sul sito GitHub e su claude.ai).</p>';
+  if (!L.length) return '<p class="note">Ancora nessun avviso.</p>';
+  return `<ul class="note" style="margin:6px 0 0;padding-left:18px">${L.slice(-10).reverse().map(x => `<li><b>${esc(x.titolo)}</b> · ${esc(orario(x.t))}${x.mandato ? '' : ' · <span class="neg">non arrivato sul telefono</span>'}<br>${esc(x.testo).replace(/\n/g, '<br>')}</li>`).join('')}</ul>`;
+}
+async function caricaAvvisi() {
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/avvisi.json?t=' + Math.floor(Date.now() / 60e3), {cache: 'no-store'});
+    if (!r.ok) return;
+    const L = await r.json(); if (!Array.isArray(L)) return;
+    const prima = AVVISI_VISTI;
+    AVVISI_LISTA = L; AVVISI_VISTI = L.length ? L[L.length - 1].t : '';
+    if (prima !== null && 'Notification' in window && Notification.permission === 'granted')
+      L.filter(x => x.t > prima).slice(-3).forEach(x => { try { new Notification(x.titolo, {body: x.testo, icon: 'icona-192.png', tag: x.t}); } catch (e) {} });
+    const c = $('#avvisi-lista'); if (c) c.innerHTML = avvisiListaHTML();
+  } catch (e) {}
+}
+async function avvisiQui() {
+  const e = $('#avvisi-qui-esito');
+  if (!('Notification' in window)) { if (e) e.textContent = 'Questo browser non mostra notifiche: usa ntfy.'; return; }
+  const p = await Notification.requestPermission().catch(() => 'denied');
+  if (e) e.textContent = p === 'granted' ? 'Fatto: con l\'app aperta i nuovi avvisi arrivano anche come notifiche. Ad app chiusa servono ntfy.' : 'Permesso negato: lo puoi cambiare dalle impostazioni del browser.';
 }
 // il resoconto della settimana subito sul telefono: lo chiede al motore nel cloud con ntfy, come il "Ricomincia da capo"
 async function resocontoAdesso() {
@@ -3631,6 +3662,7 @@ async function avviaLive() {
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
   if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) {                            // il resoconto del lunedì e il conto Alpaca
     caricaResoconto(); caricaAlpaca(); setInterval(() => { caricaResoconto(); caricaAlpaca(); }, 1800e3);
+    caricaAvvisi(); setInterval(caricaAvvisi, 120e3);                               // gli avvisi: ogni 2 minuti
   }
   // su claude.ai: se la pagina può leggere GitHub, segue il motore nel cloud ogni minuto (senza token); se no, il suo archivio
   if (window.claude && !MOTORE_PAGINA) {

@@ -676,6 +676,35 @@ GitHub (o con `?pwa=1` in prova), mai su claude.ai né nel motore del cloud. Con
 larghezza del telefono (`<meta name="viewport">`), che su claude.ai mette la cornice dell'artefatto: senza, il telefono
 mostrava il sito largo 980 pixel e rimpicciolito.
 
+## Il motore sempre acceso
+
+Il motore (server `live.py`, robot `robot_motore.js`, pubblicazione `pubblica_stato.py`, dati ogni 5 minuti, guardiano)
+gira nel contenitore della sessione cloud, che si spegne quando la sessione resta inattiva: allora il robot si ferma
+finché qualcosa non riaccende la sessione (l'aggiornamento serale delle 18:22 lancia `tempo_reale.sh`). Se il browser
+del motore si chiude, il motore esce e il guardiano lo riaccende entro un minuto. Per non fermarsi mai, due strade:
+
+- un compito programmato che ogni ora riapre la sessione e lancia `bash tempo_reale.sh` (consuma un po' di utilizzo);
+- il motore su un computer sempre acceso (il tuo, o un piccolo server): serve Python 3 con numpy, Node.js con
+  Playwright e Chromium (`npm install playwright && npx playwright install chromium`) e git con il permesso di scrivere
+  sul repository (il ramo `robot-stato`). Poi, nella cartella del progetto:
+
+```bash
+git clone https://github.com/ringhiosaverio-code/Finanza.git && cd Finanza
+python3 -m pip install numpy
+git fetch origin robot-stato && git show origin/robot-stato:robot.json > robot_ripresa.json   # riparte dallo stato del cloud
+bash tempo_reale.sh robot_ripresa.json
+```
+
+Lo stato del robot arriva al sito e all'app dal ramo `robot-stato` come prima: telefono e sito non cambiano.
+
+## Avvisi che non si perdono
+
+Ogni avviso, partito o no, finisce in `trader/avvisi.json` (ramo `robot-stato`): la pagina Il piano mostra gli ultimi
+10, segnando quelli che ntfy ha rifiutato, e con l'app aperta li fa arrivare anche come notifiche del telefono (pulsante
+"Fai arrivare gli avvisi anche dall'app"). Gli avvisi rifiutati per il limite di messaggi restano in coda
+(`trader/ntfy_coda.json`) e il motore li rimanda ogni 10 minuti. Con un account ntfy personale gratuito il limite è
+solo tuo: il token si mette tra i segreti di rete dell'ambiente per `ntfy.sh` (o nella variabile `NTFY_TOKEN`).
+
 ## Il resoconto del lunedì
 
 Ogni lunedì dalle 8 (ora italiana) il motore nel cloud (`pubblica_stato.py`) manda sul telefono, con ntfy, il resoconto

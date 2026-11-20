@@ -92,7 +92,7 @@ class Invio(unittest.TestCase):
                       mock.patch.object(P, "VISTI", os.path.join(d, "visti.json")),
                       mock.patch.object(P, "RESOCONTO", os.path.join(d, "resoconto.json")),
                       mock.patch.object(P, "ROOT", d),
-                      mock.patch.object(P, "manda", lambda titolo, testo, argomento, etichetta="": self.mandati.append((titolo, argomento)))]
+                      mock.patch.object(P, "manda", lambda titolo, testo, argomento, etichetta="", coda=True: self.mandati.append((titolo, argomento)))]
         for p in self.patch:
             p.start()
 
@@ -125,6 +125,58 @@ class Invio(unittest.TestCase):
         self.assertTrue(P.resoconto(datetime.datetime(2030, 1, 14, 8, 32, tzinfo=P.ROMA)))
         with open(P.RESOCONTO, encoding="utf-8") as fh:
             self.assertTrue(json.load(fh)["mandato"])
+
+
+class Coda(unittest.TestCase):
+    """Gli avvisi rifiutati da ntfy restano nell'app e si rimandano più tardi, una volta sola."""
+    def setUp(self):
+        self.dir = tempfile.TemporaryDirectory()
+        d = self.dir.name
+        with open(os.path.join(d, "notifiche.json"), "w", encoding="utf-8") as fh:
+            json.dump({"argomento": "prova"}, fh)
+        self.patch = [mock.patch.object(P, n, os.path.join(d, f)) for n, f in
+                      (("NOTIFICHE", "notifiche.json"), ("VISTI", "visti.json"), ("AVVISI", "avvisi.json"), ("CODA", "coda.json"))]
+        for p in self.patch:
+            p.start()
+        self.rete = True
+        self.partiti = []
+
+        def urlopen(req, timeout=0):
+            if not self.rete:
+                raise OSError("429")
+            self.partiti.append(req.get_header("Title"))
+            return mock.MagicMock()
+        self.u = mock.patch.object(P.urllib.request, "urlopen", urlopen)
+        self.u.start()
+
+    def tearDown(self):
+        self.u.stop()
+        for p in self.patch:
+            p.stop()
+        self.dir.cleanup()
+
+    def test_rifiutato_poi_rimandato(self):
+        self.rete = False
+        with self.assertRaises(OSError):
+            P.manda("Robot: Faber", "Compra SWDA", "prova")
+        with open(P.AVVISI, encoding="utf-8") as fh:
+            self.assertEqual([(x["titolo"], x["mandato"]) for x in json.load(fh)], [("Robot: Faber", False)])
+        self.assertEqual(P.riprova_coda(1000.0), 0)                       # ntfy rifiuta ancora
+        self.rete = True
+        self.assertEqual(P.riprova_coda(1300.0), 0)                       # troppo presto: ogni 10 minuti
+        self.assertEqual(P.riprova_coda(1700.0), 1)
+        self.assertEqual(self.partiti, ["Robot: Faber"])
+        self.assertEqual(P.riprova_coda(2400.0), 0)                       # una volta sola
+        with open(P.AVVISI, encoding="utf-8") as fh:
+            L = json.load(fh)
+        self.assertEqual([(x["titolo"], x["mandato"]) for x in L], [("Robot: Faber", True)])   # niente doppioni
+
+    def test_senza_coda_non_si_rimanda(self):
+        self.rete = False
+        with self.assertRaises(OSError):
+            P.manda("Resoconto", "testo", "prova", coda=False)
+        self.rete = True
+        self.assertEqual(P.riprova_coda(5000.0), 0)
 
 
 if __name__ == "__main__":
