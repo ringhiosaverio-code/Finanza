@@ -231,7 +231,7 @@ def tendenza_app(log=print):
     """La tendenza come i fondi sulle crypto (crypto_tendenza.py), rifatta con i prezzi di oggi, o None."""
     try:
         import crypto_tendenza
-        return crypto_tendenza.studia(log=lambda m: None)
+        return crypto_tendenza.studia(log=lambda m: None, salva=False)
     except Exception as e:
         log("[app] tendenza crypto saltata: %s" % str(e)[:160])
         return None
@@ -241,7 +241,7 @@ def strategie_lungo_app(log=print):
     """Le strategie dei libri (Antonacci, Faber, Clenow) sui mercati dell'app (strategie_lungo.py), o None."""
     try:
         import strategie_lungo
-        return strategie_lungo.studia(log=lambda m: None)
+        return strategie_lungo.studia(log=lambda m: None, salva=False)
     except Exception as e:
         log("[app] strategie dei libri saltate: %s" % str(e)[:160])
         return None
