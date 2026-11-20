@@ -369,6 +369,8 @@ const DT_CACHE = {};
 const dt = (s, o) => { const k = o ? JSON.stringify(o) : '', f = DT_CACHE[k] || (DT_CACHE[k] = new Intl.DateTimeFormat('it-IT', Object.assign({timeZone: 'UTC', weekday: 'short', day: 'numeric', month: 'short'}, o || {})));
   return f.format(new Date(s + 'T12:00:00Z')); };
 const dtl = s => dt(s, {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+const ORARIO = new Intl.DateTimeFormat('it-IT', {timeZone: 'Europe/Rome', weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'});
+const orario = iso => { const d = new Date(iso); return isNaN(d) ? '' : ORARIO.format(d); };   // un istante (ISO) in ora italiana
 const esc = s => String(s).replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
 
 /* ---------------- stato (ricordato solo in questo browser) ---------------- */
@@ -1288,10 +1290,44 @@ let RESOCONTO = null;
 function resocontoHTML() {
   const R = RESOCONTO;
   if (!R || !R.testo) return '<div id="resoconto" hidden></div>';
-  const quando = new Date(R.quando);
   return `<div class="card" id="resoconto"><h2>${esc(R.titolo || 'Resoconto della settimana')}</h2>
-    <p class="note" style="margin-top:4px">${isNaN(quando) ? '' : 'Scritto ' + esc(quando.toLocaleString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'})) + ' · '}${R.mandato ? 'arrivato anche sul telefono' : 'non arrivato sul telefono (ntfy ha rifiutato: limite di messaggi)'}</p>
+    <p class="note" style="margin-top:4px">${orario(R.quando) ? 'Scritto ' + esc(orario(R.quando)) + ' · ' : ''}${R.mandato ? 'arrivato anche sul telefono' : 'non arrivato sul telefono (ntfy ha rifiutato: limite di messaggi)'}</p>
     <p style="margin-top:8px;white-space:pre-line;font-size:.95rem;line-height:1.55">${esc(R.testo)}</p></div>`;
+}
+// il robot con un broker vero: il conto di prova su Alpaca (alpaca_paper.py), letto dal ramo robot-stato
+let ALPACA = null;
+function alpacaHTML() {
+  const A = ALPACA, ok = A && A.stato === 'ok' && A.conto;
+  const passi = `<ol class="note" style="margin:8px 0 0;padding-left:20px;line-height:1.6">
+      <li>Crea un account gratuito su <b>alpaca.markets</b>: il conto di prova (<b>Paper</b>) è subito attivo, con soldi finti.</li>
+      <li>Nel pannello del conto Paper genera le chiavi API: <b>Key ID</b> e <b>Secret Key</b>.</li>
+      <li>Nelle impostazioni dell'ambiente del cloud <b>Finanza</b> (menu dell'ambiente nella barra del titolo della sessione, poi Modifica), tra i <b>segreti di rete</b> (Network secrets), aggiungi per l'host <b>paper-api.alpaca.markets</b> due segreti: intestazione <b>APCA-API-KEY-ID</b> con la Key ID e <b>APCA-API-SECRET-KEY</b> con la Secret Key. Non scriverle in chat né qui.</li>
+      <li>Da quel momento, nei giorni feriali a borsa USA aperta, il motore nel cloud porta il conto di prova sul piano; qui vedi conto, posizioni e ordini.</li></ol>`;
+  const intro = `<p class="sub" style="margin-top:4px">Lo stesso piano con la rete del conto "Il piano con la rete", ma con ordini veri sul mercato simulato di Alpaca (prezzi veri, soldi finti). Alpaca tratta solo titoli americani e crypto: al posto degli ETF di Borsa Italiana usa i loro equivalenti USA (SWDA diventa URTH, CSNDX diventa QQQM, SJPA diventa EWJ…). Ribilancia al più una volta al giorno, e solo le parti che si sono spostate abbastanza.</p>`;
+  if (!ok) return `<div class="card" id="alpaca"><h2>Il robot con un broker vero: Alpaca, conto di prova</h2>${intro}
+    ${A && A.messaggio ? `<p class="note" style="margin-top:8px"><b>Adesso:</b> ${esc(A.messaggio)}</p>` : ''}
+    <h3 style="margin-top:12px">Come collegarlo</h3>${passi}
+    <p class="note" style="margin-top:8px">Il programma parla solo con il conto di prova (paper-api.alpaca.markets): non può toccare soldi veri. Non è consulenza finanziaria.</p></div>`;
+  const C = A.conto, usd = x => nf(x, 2) + ' $';
+  const righe = (A.posizioni || []).map(p => `<tr><td class="l"><b>${esc(p.simbolo)}</b>${p.da && p.da.length ? ` <span class="note">al posto di ${esc(p.da.map(tk).join(', '))}</span>` : ''}</td><td>${usd(p.valore)}</td><td>${p100(p.peso)}</td><td>${p.obiettivo ? p100(p.obiettivo) : '–'}</td></tr>`).join('');
+  const ord = (A.ordini || []).slice(-8).reverse().map(o => `<li>${esc(orario(o.t))} · ${o.lato === 'compra' ? 'compra' : o.lato === 'vende_tutto' ? 'vende tutto' : 'vende'} <b>${esc(o.simbolo)}</b> per ${usd(o.importo)} <span class="note">(${esc(o.esito || '')})</span></li>`).join('');
+  return `<div class="card" id="alpaca"><h2>Il robot con un broker vero: Alpaca, conto di prova</h2>${intro}
+    <div class="tiles"><div class="stat"><div class="k">Patrimonio</div><div class="v">${usd(C.patrimonio)}</div></div>
+      <div class="stat"><div class="k">Da ieri</div><div class="v ${C.patrimonio >= C.ieri ? 'pos' : 'neg'}">${C.ieri ? pc(C.patrimonio / C.ieri - 1, 2) : '–'}</div></div>
+      <div class="stat"><div class="k">Contanti</div><div class="v">${usd(C.contanti)}</div></div></div>
+    <p class="note" style="margin-top:6px">Aggiornato ${esc(orario(A.aggiornato))} · piano del ${esc(A.piano && A.piano.giorno ? dt(A.piano.giorno) : '–')}, rete al ${A.piano ? nf(100 * A.piano.peso_rete, 0) : '–'} %${A.fuori && A.fuori.length ? ` · non su Alpaca, in contanti: ${esc(A.fuori.map(tk).join(', '))}` : ''}</p>
+    ${righe ? `<div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">Posizione</th><th>Valore</th><th>Peso</th><th>Nel piano</th></tr></thead><tbody>${righe}</tbody></table></div>` : '<p class="note" style="margin-top:8px">Ancora nessuna posizione: il primo ribilanciamento arriva a borsa USA aperta.</p>'}
+    ${ord ? `<h3 style="margin-top:12px">Gli ultimi ordini</h3><ul class="note" style="margin:6px 0 0;padding-left:18px">${ord}</ul>` : ''}</div>`;
+}
+async function caricaAlpaca() {
+  try {
+    const r = await fetch('https://raw.githubusercontent.com/ringhiosaverio-code/Finanza/robot-stato/alpaca.json?t=' + Math.floor(Date.now() / 600e3), {cache: 'no-store'});
+    if (!r.ok) return;
+    const v = await r.json();
+    if (!v || (ALPACA && ALPACA.aggiornato === v.aggiornato)) return;
+    ALPACA = v;
+    const c = $('#alpaca'); if (c) c.outerHTML = alpacaHTML();
+  } catch (e) {}
 }
 async function caricaResoconto() {
   try {
@@ -2395,6 +2431,7 @@ function renderGiornata(soloGioco) {
     <p>${regge.length ? `Regge: ${regge.map(r => esc(r.nome)).join(', ')}.` : `In ${new Date(B.generato).getFullYear() - 2001} anni di azioni USA, italiane ed ETF, comprare all'apertura e vendere in chiusura ha reso in media <b>${pc(ogni.dopo.media, 2)}</b> a operazione dopo i costi (in guadagno il ${p100(ogni.dopo.p_gain)} delle volte). Nessuna delle ${R.length - 1} regole provate è rimasta in guadagno in entrambi i periodi${gap ? `: la migliore fino al ${tagl - 1}, comprare i gap giù all'apertura (${pc(gap.prima.media, 2)}), dal ${tagl} ha perso (${pc(gap.dopo.media, 2)})` : ''}. Lo stesso sulle candele orarie di crypto e azioni USA, anche con le strategie pubblicate di recente (titoli in gioco, zona di rumore).`} L'unica regola breve che regge è <b>di notte</b>, qui sotto, e solo con costi molto bassi. Per guadagnare con i costi normali, i dati dicono di tenere più a lungo, come <a href="#oggi" style="color:var(--accent)">il pacchetto di Oggi</a>.</p></div></div></div>` : ''}
   ${robotHTML()}
   ${graficiRobotHTML()}
+  ${alpacaHTML()}
   ${reteItaHTML()}
   ${reteAzioniHTML('usa')}
   ${notteHTML()}
@@ -3572,7 +3609,9 @@ async function caricaDaGitHub(fresco) {
 async function avviaLive() {
   const bm = $('#rb-motore'); if (bm && !bm.dataset.ok) { bm.dataset.ok = 1; bm.addEventListener('click', aggiornaDalMotore); }
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
-  if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) { caricaResoconto(); setInterval(caricaResoconto, 1800e3); }   // il resoconto del lunedì
+  if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) {                            // il resoconto del lunedì e il conto Alpaca
+    caricaResoconto(); caricaAlpaca(); setInterval(() => { caricaResoconto(); caricaAlpaca(); }, 1800e3);
+  }
   // su claude.ai: se la pagina può leggere GitHub, segue il motore nel cloud ogni minuto (senza token); se no, il suo archivio
   if (window.claude && !MOTORE_PAGINA) {
     const prima = ROBOT;

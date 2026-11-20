@@ -5,7 +5,8 @@ ogni 15 minuti). Il sito GitHub Pages li legge da lì (index.html carica app.htm
 nuovi arrivano sul telefono senza passare da Claude. Gira da solo (lo avvia tempo_reale.sh).
 
 Ogni lunedì dalle 8 (ora italiana) manda anche il resoconto della settimana: i conti del robot contro SWDA, le
-operazioni, il diario della rete dal vivo e le sue scelte.
+operazioni, il diario della rete dal vivo e le sue scelte. Nei giorni feriali, a borsa USA aperta, ribilancia una volta
+il conto di prova su Alpaca (alpaca_paper.py), se ci sono le chiavi.
 
     python3 pubblica_stato.py                       # il giro di ogni minuto (lo avvia tempo_reale.sh)
     python3 pubblica_stato.py --resoconto           # scrive il resoconto della settimana, senza mandarlo
@@ -30,6 +31,7 @@ RAMO = "robot-stato"
 NOTIFICHE = os.path.join(ROOT, "notifiche.json")
 VISTI = os.path.join(ROOT, "trader", "ntfy_visti.json")
 RESOCONTO = os.path.join(ROOT, "trader", "resoconto.json")   # l'ultimo resoconto, anche per l'app (ramo robot-stato)
+ALPACA = os.path.join(ROOT, "trader", "alpaca.json")         # il conto di prova su Alpaca, per l'app (alpaca_paper.py)
 IMPORTANTI = ("piano", "rete_etf", "rete_obbl", "faber", "tendenza")      # questi subito; gli altri in un riassunto ogni ora
 NOMI = {"piano": "Il piano con la rete", "rete_etf": "ETF, rete neurale", "rete_obbl": "Obbligazioni, rete neurale",
         "faber": "ETF, media di 10 mesi", "tendenza": "Crypto, tendenza", "segnali": "Crypto, segnali", "rete": "Crypto, rete neurale",
@@ -254,6 +256,28 @@ def avvisi(adesso=None):
         json.dump(v, fh)
 
 
+def alpaca(adesso=None):
+    """Il robot con un broker vero (Alpaca, conto di prova): nei giorni feriali tra le 16 e le 21 ora italiana (borsa USA
+    aperta) ribilancia una volta sul piano con alpaca_paper.py. Senza chiavi scrive solo come collegarlo e riprova il
+    giorno dopo."""
+    adesso = adesso or datetime.datetime.now(ROMA)
+    if adesso.weekday() > 4 or not 16 <= adesso.hour < 21:
+        return False
+    try:
+        with open(VISTI, encoding="utf-8") as fh:
+            v = json.load(fh)
+    except (OSError, ValueError):
+        v = {}
+    if v.get("alpaca") == adesso.date().isoformat():
+        return False
+    v["alpaca"] = adesso.date().isoformat()
+    with open(VISTI, "w", encoding="utf-8") as fh:
+        json.dump(v, fh)
+    r = subprocess.run([sys.executable, os.path.join(ROOT, "alpaca_paper.py"), "--ribilancia"], capture_output=True, text=True, timeout=180)
+    print(time.strftime("%H:%M:%S"), "alpaca:", (r.stdout.strip().splitlines() or ["fatto"])[-1][:160], flush=True)
+    return True
+
+
 def git(*a, cwd=DIR):
     return subprocess.run(["git", *a], cwd=cwd, capture_output=True, text=True, timeout=120)
 
@@ -275,15 +299,16 @@ def una_volta(ultimo):
     if not os.path.exists(STATO):
         return ultimo
     m = (os.path.getmtime(STATO), os.path.getmtime(APP) if os.path.exists(APP) else 0.0,
-         os.path.getmtime(RESOCONTO) if os.path.exists(RESOCONTO) else 0.0)
+         os.path.getmtime(RESOCONTO) if os.path.exists(RESOCONTO) else 0.0, os.path.getmtime(ALPACA) if os.path.exists(ALPACA) else 0.0)
     if m == ultimo:
         return ultimo
     prepara()
     shutil.copy(STATO, os.path.join(DIR, "robot.json"))
     git("add", "robot.json")
-    if os.path.exists(RESOCONTO):                                              # l'ultimo resoconto della settimana, per l'app
-        shutil.copy(RESOCONTO, os.path.join(DIR, "resoconto.json"))
-        git("add", "resoconto.json")
+    for f in (RESOCONTO, ALPACA):                          # l'ultimo resoconto della settimana e il conto Alpaca, per l'app
+        if os.path.exists(f):
+            shutil.copy(f, os.path.join(DIR, os.path.basename(f)))
+            git("add", os.path.basename(f))
     if os.path.exists(APP) and os.path.getsize(APP) > 100_000:                 # l'app intera, per il sito
         shutil.copy(APP, os.path.join(DIR, "app.html"))
         git("add", "app.html")
@@ -306,6 +331,7 @@ def main():
             avvisi()
             comandi()
             resoconto()
+            alpaca()
         except Exception as e:                                   # rete o git: si riprova al giro dopo
             print(time.strftime("%H:%M:%S"), "errore:", str(e)[:200], flush=True)
         time.sleep(60)

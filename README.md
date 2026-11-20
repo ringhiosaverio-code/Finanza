@@ -688,6 +688,28 @@ python3 pubblica_stato.py --resoconto             # lo scrive, senza mandarlo
 python3 pubblica_stato.py --resoconto --manda     # e lo manda subito
 ```
 
+## Il robot con un broker vero: Alpaca in modalità di prova (`alpaca_paper.py`)
+
+Lo stesso piano del conto "Il piano con la rete" (SWDA, obbligazioni, le scelte della rete sugli ETF con il peso deciso
+dal vivo, Faber e la tendenza crypto), ma con ordini veri sul mercato simulato di Alpaca: prezzi veri, soldi finti.
+Alpaca tratta solo titoli americani e crypto, quindi al posto degli ETF di Borsa Italiana usa gli equivalenti USA (SWDA
+diventa URTH, IEAG diventa BNDX, CSNDX diventa QQQM, SJPA diventa EWJ, VHYL diventa VYM più VYMI...); le crypto che
+Alpaca non tratta restano in contanti. Nei giorni feriali, a borsa USA aperta, il motore nel cloud (`pubblica_stato.py`)
+ribilancia una volta al giorno, solo le parti spostate di più del 2 % del conto o del 20 % del loro peso, e scrive
+`trader/alpaca.json` (ramo `robot-stato`): la pagina del robot mostra conto, posizioni e ultimi ordini.
+
+```bash
+python3 alpaca_paper.py --prova --capitale 1000   # senza chiavi e senza rete: i pesi e gli ordini che farebbe
+python3 alpaca_paper.py --conto                   # il conto di prova (servono le chiavi)
+python3 alpaca_paper.py --ribilancia              # gli ordini sul conto di prova
+```
+
+Per collegarlo serve un account gratuito su alpaca.markets (il conto di prova Paper è subito attivo) e le sue chiavi API
+del conto Paper. Le chiavi non vanno mai nel codice né in chat: nelle impostazioni dell'ambiente del cloud, tra i
+segreti di rete, per l'host `paper-api.alpaca.markets` si aggiungono l'intestazione `APCA-API-KEY-ID` (Key ID) e
+`APCA-API-SECRET-KEY` (Secret Key); il proxy del cloud le aggiunge da solo alle richieste. In alternativa le variabili
+d'ambiente `APCA_API_KEY_ID` e `APCA_API_SECRET_KEY`. Il programma parla solo con il conto di prova.
+
 ## Il piano (pagina dell'app)
 
 La pagina "Il piano" mette insieme tutto quello che l'app ha imparato e si aggiorna da sola a ogni aggiornamento: lo
@@ -783,7 +805,7 @@ la leva fino a 20 volte, che moltiplica anche le perdite.
 ## Test
 
 ```bash
-python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali, regole_libri, bilanci, pwa e resoconto, offline
+python3 -m unittest discover -s tests                         # settimana, simula, intraday, crypto_live, libri, giornata, notte, robot, crypto_lungo, live, app, rete, rete_live, rete_azioni, segnali, regole_libri, bilanci, pwa, resoconto e alpaca, offline
 cd .claude/skills && python3 -m unittest discover -s tests    # le skill trader-*
 ```
 
