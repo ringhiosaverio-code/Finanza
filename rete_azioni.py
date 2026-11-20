@@ -43,6 +43,10 @@ MERCATI_RETE = {
                 universo=settimana.MERCATI["usa"]["universo"], modello="rete_usa_modello.json",
                 notizie=("wall_street", '("Wall Street" OR "S&P 500" OR "Nasdaq" OR "Dow Jones") sourcelang:english')),
 }
+# le stesse borse sulle barre orarie di Yahoo: 2 anni di storia (circa 500 sedute) invece di 60 giorni a 5 minuti.
+# Milano: barre dalle 9:00 alle 17:00 (l'ultima fino alle 17:30); New York: dalle 9:30 alle 15:30.
+MERCATI_RETE["italia_ore"] = dict(MERCATI_RETE["italia"], nome="rete_azioni_ore", barra=60, barre=9, modello="rete_azioni_ore_modello.json")
+MERCATI_RETE["usa_ore"] = dict(MERCATI_RETE["usa"], nome="rete_usa_ore", barra=60, barre=7, modello="rete_usa_ore_modello.json")
 MERCATO = globals().get("MERCATO_SCELTO", "italia")
 CFG = MERCATI_RETE[MERCATO]
 NOME = CFG["nome"]
@@ -50,18 +54,20 @@ CACHE = os.path.join(ROOT, "trader", "cache", NOME)
 MODELLO = os.path.join(ROOT, CFG["modello"])
 UA = "Mozilla/5.0 (finanza-rete-azioni)"
 ROMA = ZoneInfo(CFG["fuso"])                    # il fuso della borsa (per Milano, Roma)
-BARRA = 5                                       # minuti per barra
+BARRA = CFG.get("barra", 5)                     # minuti per barra: 5, oppure 60 per le reti orarie
+PB = 60 // BARRA                                # barre in un'ora
+INTERVALLO, PERIODO = ("5m", "60d") if BARRA == 5 else ("1h", "730d")   # le barre di Yahoo: 60 giorni a 5 minuti, 2 anni a 1 ora
 BARRE = CFG["barre"]                            # barre in una seduta: Milano 09:00-17:30 (102), New York 09:30-16:00 (78)
 APRE = CFG["apre"][0] * 60 + CFG["apre"][1]     # minuti dalla mezzanotte, ora della borsa
 ORE_SEDUTA = BARRE * BARRA / 60.0
-PRIMA = 2                                       # si decide dalla terza barra (09:10): servono due barre di oggi
+PRIMA = 2 if BARRA == 5 else 1                 # si decide dalla terza barra (09:10), o dalla seconda ora
 SEDUTE_STORIA = 5                               # sedute di storia per le caratteristiche
-ORIZZONTI = (5, 15, 30, 60, 120, 240, BARRE * BARRA)   # minuti; l'ultimo = fino alla chiusura (Milano 510)
+ORIZZONTI = tuple(h for h in (5, 15, 30, 60, 120, 240) if h >= BARRA and h < BARRE * BARRA) + (BARRE * BARRA,)   # minuti; l'ultimo = fino alla chiusura
 CHIUSURA = ORIZZONTI[-1]
 COSTO = CFG["costo"]                            # per lato: commissione e spread
 SLIP = 0.0005                                   # la protezione si esegue un po' peggio del livello
 SIGMA_MIN = 0.0005
-RITARDI = (1, 3, 6, 12, 24, 48, BARRE, 2 * BARRE, 5 * BARRE)  # in barre: da 5 minuti a 5 sedute
+RITARDI = ((1, 3, 6, 12, 24, 48) if BARRA == 5 else (1, 2, 3, 6)) + (BARRE, 2 * BARRE, 5 * BARRE)  # in barre: dalla più breve a 5 sedute
 NOMI_FEATURE = (["rend_%d" % L for L in RITARDI] + ["log_sigma_ora", "vol_2h_su_5g", "oggi", "salto", "pos_oggi",
                  "da_ieri", "minuti", "minuti_sin", "minuti_cos", "sett_sin", "sett_cos", "volume_1h", "mercato_1h",
                  "mercato_seduta", "relativo_seduta"]
@@ -81,14 +87,15 @@ MOTORI, NOMI_MOTORI = segnali.MOTORI, segnali.NOMI_MOTORI
 NOMI_FEATURE = NOMI_FEATURE + NOMI_MOTORI
 N_FEATURE = len(NOMI_FEATURE)
 N_BASE = NOMI_FEATURE.index("sopra_or")
-BARRE_OR = 3                                    # opening range: i primi 15 minuti
+BARRE_OR = max(1, 15 // BARRA)                  # opening range: i primi 15 minuti (o la prima ora)
 SEDUTE_STAGIONE = 10                            # stagionalità e volume relativo: le ultime 10 sedute
 
 
 # ---------------------------------------------------------------- dati: barre da 5 minuti di Yahoo
 
-def scarica(sym, max_age=600, intervallo="5m", periodo="60d"):
+def scarica(sym, max_age=600, intervallo=None, periodo=None):
     """Le barre di Yahoo (aperture in secondi UTC, apertura, massimo, minimo, chiusura, volume), dalla cache se recente."""
+    intervallo, periodo = intervallo or INTERVALLO, periodo or PERIODO
     os.makedirs(CACHE, exist_ok=True)
     path = os.path.join(CACHE, "%s-%s.json" % (sym, intervallo))
     if not os.path.exists(path) or time.time() - os.path.getmtime(path) > max_age:
@@ -104,7 +111,7 @@ def scarica(sym, max_age=600, intervallo="5m", periodo="60d"):
     q = res["indicators"]["quote"][0]
     righe = [(t, o, h, l, c, v or 0) for t, o, h, l, c, v in zip(res["timestamp"], q["open"], q["high"], q["low"], q["close"], q["volume"])
              if None not in (o, h, l, c)]
-    return archivia(sym, righe) if intervallo == "5m" else righe
+    return archivia(sym, righe) if intervallo == INTERVALLO else righe
 
 
 def archivia(sym, righe, cartella=None):
@@ -240,11 +247,12 @@ def segnali_azioni(B, G, sig, lc, s0, hi, lo, vc):
     minuti = np.maximum(j * BARRA, BARRA)
     out.append(np.where(vol_oggi > 0, np.clip(np.log(cK / np.maximum(vwap, 1e-12)) / (sig * np.sqrt(minuti / 60.0)), -8, 8), 0.0))
     # prima mezz'ora (Gao, Han, Li e Zhou): dalle 9:30 in poi, il rendimento delle 9:00-9:30
-    pm = np.where(j >= 6, lc[:, np.minimum(s0 + 5, B.n - 1)] - np.log(B.o[:, s0]), 0.0)
+    m30 = max(1, 30 // BARRA)                                                     # barre nella prima mezz'ora (o la prima ora)
+    pm = np.where(j >= m30, lc[:, np.minimum(s0 + m30 - 1, B.n - 1)] - np.log(B.o[:, s0]), 0.0)
     out.append(np.clip(pm / (sig * math.sqrt(0.5)), -8, 8))
     # stagionalità (Heston, Korajczyk e Sadka): la mezz'ora che comincia adesso, nelle ultime sedute
     somma, quante = np.zeros((C, N)), np.zeros(N)
-    fine = np.minimum(j + 5, BARRE - 1)
+    fine = np.minimum(j + m30 - 1, BARRE - 1)
     for d in range(1, SEDUTE_STAGIONE + 1):
         a = s0 - d * BARRE
         ok = a >= 0
@@ -287,6 +295,8 @@ def motori(B, G):
     per quanto si muove di solito (segnali.movimenti: solo barre già chiuse prima di G; zero se manca o è vecchio)."""
     if getattr(B, "_motori", None) is None:
         B._motori = {n: serie_motore(sym) for n, sym, _ in MOTORI}
+    if BARRA != 5:                                                                # reti orarie: i mercati guida dalle barre orarie
+        return segnali.tabella_motori(B.T[np.asarray(G)], "1h")
     return segnali.tabella_motori(B.T[np.asarray(G)], "5m", B._motori)
 
 
@@ -317,8 +327,9 @@ def caratteristiche(B, G):
     r1_seduta = np.where(primo_di_seduta[None, :], 0.0, r1)                      # la volatilità senza i salti della notte
     r2 = _cum(r1_seduta ** 2)
     ult = G - 1
-    sig = np.maximum(np.sqrt(np.maximum((r2[:, G] - r2[:, G - 5 * BARRE]) / (5.0 * BARRE) * 12.0, 0.0)), SIGMA_MIN)
-    s2h = np.sqrt(np.maximum((r2[:, G] - r2[:, G - 24]) / 24.0 * 12.0, 0.0))
+    sig = np.maximum(np.sqrt(np.maximum((r2[:, G] - r2[:, G - 5 * BARRE]) / (5.0 * BARRE) * PB, 0.0)), SIGMA_MIN)
+    b2h = 2 * PB
+    s2h = np.sqrt(np.maximum((r2[:, G] - r2[:, G - b2h]) / b2h * PB, 0.0))
     cols, z = [], {}
     for L in RITARDI:
         z[L] = np.clip((lc[:, ult] - lc[:, ult - L]) / (sig * math.sqrt(L * BARRA / 60.0)), -8, 8)
@@ -340,10 +351,10 @@ def caratteristiche(B, G):
     for f in (fase, np.sin(2 * np.pi * fase), np.cos(2 * np.pi * fase), np.sin(giorno), np.cos(giorno)):
         cols.append(np.broadcast_to(f, (B.C, len(G))))
     vc = _cum(B.v)
-    v12 = vc[:, G] - vc[:, G - 12]
-    v5s = (vc[:, G] - vc[:, G - 5 * BARRE]) / (5.0 * BARRE) * 12.0
+    v12 = vc[:, G] - vc[:, G - PB]
+    v5s = (vc[:, G] - vc[:, G - 5 * BARRE]) / (5.0 * BARRE) * PB
     cols.append(np.log((v12 + 1.0) / (v5s + 1.0)))
-    m12, m1s = z[12].mean(axis=0), z[BARRE].mean(axis=0)
+    m12, m1s = z[PB].mean(axis=0), z[BARRE].mean(axis=0)
     cols += [np.broadcast_to(m12, (B.C, len(G))), np.broadcast_to(m1s, (B.C, len(G))), z[BARRE] - m1s]
     cols += segnali_azioni(B, G, sig, lc, s0, hi, lo, vc)
     X = np.stack(cols, axis=-1).astype(np.float32)
@@ -404,7 +415,7 @@ def regole(D):
     """Tre regole semplici fissate prima di guardare, per confronto: compra all'apertura (09:10) e vendi in chiusura;
     compra dopo un'ora in ribasso (sotto -2 volatilità) e tieni un'ora; compra dopo un'ora in rialzo (sopra +2) e tieni un'ora."""
     ih, ic = ORIZZONTI.index(60), ORIZZONTI.index(CHIUSURA)
-    z = NOMI_FEATURE.index("rend_12")
+    z = NOMI_FEATURE.index("rend_%d" % PB)
 
     def apertura(D, i0, i1):
         az = np.zeros((D.C, i1 - i0), dtype=int)
@@ -421,7 +432,7 @@ def regole(D):
         az[D.X[:, i0:i1, z] > 2.0] = 1 + ih
         return az
     F = NOMI_FEATURE.index
-    ic, i30, i60 = ORIZZONTI.index(CHIUSURA), ORIZZONTI.index(30), ORIZZONTI.index(60)
+    ic, i30, i60 = ORIZZONTI.index(CHIUSURA), ORIZZONTI.index(min(h for h in ORIZZONTI if h >= 30)), ORIZZONTI.index(60)
 
     def quando(D, i0, i1, condizione, h):
         az = np.zeros((D.C, i1 - i0), dtype=int)
@@ -433,11 +444,11 @@ def regole(D):
 
     def orb(D, i0, i1):                    # Zarattini e Aziz; Crabel: rottura del range dei primi 15 minuti, titolo "in play"
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
-        return quando(D, i0, i1, (j >= BARRE_OR) & (j <= 6) & (X[..., F("volume_relativo")] > 1.0) & (X[..., F("sopra_or")] > 0), ic)
+        return quando(D, i0, i1, (j >= BARRE_OR) & (j <= max(BARRE_OR, 30 // BARRA)) & (X[..., F("volume_relativo")] > 1.0) & (X[..., F("sopra_or")] > 0), ic)
 
     def momento_intraday(D, i0, i1):       # Gao, Han, Li e Zhou: alle 17:00, se la prima mezz'ora è salita, tieni fino alla chiusura
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
-        return quando(D, i0, i1, (j == BARRE - 6) & (X[..., F("prima_mezzora")] > 0.5), ic)
+        return quando(D, i0, i1, (j == BARRE - max(1, 30 // BARRA)) & (X[..., F("prima_mezzora")] > 0.5), ic)
 
     def buy_on_gap(D, i0, i1):             # Chan: aperto più di un ATR sotto la chiusura di ieri, compra alle 9:10 e vendi in chiusura
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
@@ -445,7 +456,7 @@ def regole(D):
 
     def vwap_ritorno(D, i0, i1):           # Aziz: molto sotto il VWAP di oggi, tieni un'ora
         X, j = D.X[:, i0:i1], barra(D, i0, i1)
-        return quando(D, i0, i1, (X[..., F("vwap_oggi")] < -2.0) & (j < BARRE - 12), i60)
+        return quando(D, i0, i1, (X[..., F("vwap_oggi")] < -2.0) & (j < BARRE - PB), i60)
 
     def stagione(D, i0, i1):               # Heston, Korajczyk e Sadka: la stessa mezz'ora è salita nelle ultime sedute
         X = D.X[:, i0:i1]
