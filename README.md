@@ -583,6 +583,27 @@ minuti, per le crypto (401 giorni di scambi) dalle barre orarie di Yahoo (2 anni
 decisione. Lo studio dei segnali di ogni rete dice quali contano: sulle azioni italiane in giornata il più legato a
 quello che succede dopo è il petrolio dell'ultimo giorno, poi il giorno della settimana e i futures di Wall Street.
 
+## Come guadagnano i professionisti, e cosa ne abbiamo preso
+
+Dalle fonti verificate: quasi tutti quelli che comprano e vendono in giornata perdono (Barber, Lee, Liu e Odean su
+Taiwan: meno dell'1 % guadagna in modo affidabile dopo i costi; in Brasile il 97 % perde). Chi fa soldi in giornata sono
+i market maker (Virtu: un solo giorno in perdita su 1.238), con costi minimi, sconti dalle borse e tecnologia, non una
+strategia copiabile. I fondi istituzionali guadagnano soprattutto con le tendenze di settimane e mesi (AQR: un secolo di
+prove), tenendo il rischio costante (Moreira e Muir, Journal of Finance 2017); sulle crypto il momento è uno dei tre
+fattori (Liu, Tsyvinski e Wu, Journal of Finance 2022) e il carry tra futures e pronti può superare il 40 % l'anno, ma
+precede i crolli (BIS, working paper 1087).
+
+`crypto_tendenza.py` prova la tendenza come i fondi sulle crypto: ogni giorno, per ogni crypto, la media di tre momenti
+(1, 3 e 12 mesi positivi), peso = segnale x volatilità obiettivo / volatilità dell'ultimo mese, il resto in euro, solo
+acquisti, 0,2 % di costi sulla parte scambiata. Dal 2017 al 2026 sulle 12 crypto: +21 % l'anno, volatilità 22 %, Sharpe
+0,99, calo massimo -43 % (tutte in parti uguali: -87 %; solo Bitcoin: -83 %). Nella metà recente (2022-2026): +11,8 %
+l'anno, Sharpe 0,69, calo massimo -24 %, meglio di Bitcoin (Sharpe 0,58, -52 %) e del paniere (0,39, -70 %). Il robot la
+segue nel conto "Crypto, tendenza come i fondi", ribilanciato una volta al giorno.
+
+```bash
+python3 crypto_tendenza.py     # chiusure giornaliere, studio e pesi di oggi: crypto_tendenza.json
+```
+
 ## Medio e lungo periodo con la rete neurale: `rete_lungo.py`
 
 Ogni settimana, per 188 titoli (azioni USA e italiane, ETF azionari e obbligazionari, oro, crypto), la rete vede il titolo
