@@ -604,6 +604,20 @@ segue nel conto "Crypto, tendenza come i fondi", ribilanciato una volta al giorn
 python3 crypto_tendenza.py     # chiusure giornaliere, studio e pesi di oggi: crypto_tendenza.json
 ```
 
+## Le strategie dei libri migliori: `strategie_lungo.py`
+
+Le regole di tendenza e momento dei libri più apprezzati, provate dal 2017 al 2026 sui mercati dell'app con i costi:
+Antonacci ("Dual Momentum Investing"), Faber ("A Quantitative Approach to Tactical Asset Allocation"), Clenow ("Stocks
+on the Move") e la tendenza dei fondi AQR con volatilità obiettivo. In questi anni di borse in salita comprare e tenere
+un paniere diversificato ha guadagnato di più (ETF in parti uguali +10,4 % l'anno, azioni USA in parti uguali +15,7 %),
+ma con cali fino al -34/-39 %. Le regole dei libri tagliano le perdite: Faber sugli ETF +7,4 % l'anno con calo massimo
+-14 % (SWDA -34 %) e Sharpe 0,87 contro 0,82; Clenow sulle azioni italiane calo -9 % contro -42 % dell'indice. Il robot
+segue Faber nel conto "ETF, media di 10 mesi", ribilanciato a fine mese.
+
+```bash
+python3 strategie_lungo.py     # 10 anni di chiusure giornaliere, strategie e pesi del mese: strategie_lungo.json
+```
+
 ## Medio e lungo periodo con la rete neurale: `rete_lungo.py`
 
 Ogni settimana, per 188 titoli (azioni USA e italiane, ETF azionari e obbligazionari, oro, crypto), la rete vede il titolo

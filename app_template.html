@@ -1103,6 +1103,7 @@ function renderOggi() {
     </article>`; }).join('') : '<div class="card empty">Nessuno strumento con questi filtri oggi.</div>'}</div>
   ${!oggiSt.tutti && filtered.length > 10 ? `<button type="button" class="go" id="o-tutti" style="justify-self:center">Mostra tutti (${filtered.length})</button>` : ''}
   ${reteLungoHTML()}
+  ${strategieLibriHTML()}
   <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (prezzi corretti per dividendi e split, tasse escluse). Anche con il ${all.length ? p100(all[0].p) : '70 %'} di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
   v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
   $('#o-ced').addEventListener('change', e => { oggiSt.cedola = e.target.checked; renderOggi(); });
@@ -1415,6 +1416,24 @@ function renderDemo() {
 /* ---------------- crypto ---------------- */
 /* ---------------- medio e lungo periodo con la rete neurale (rete_lungo.py) ---------------- */
 const CAT_LUNGO = {usa: 'Azioni USA', italia: 'Azioni italiane', etf: 'ETF azionari', bond: 'ETF obbligazionari', oro: 'Oro e materie prime', crypto: 'Crypto'};
+function strategieLibriHTML() {
+  const S = D.strategie_lungo; if (!S || !S.mercati) return '';
+  const NOMI = {antonacci: 'Antonacci, "Dual Momentum Investing": ogni mese azioni USA o europee, la più forte in 12 mesi; se nessuna sale, obbligazioni',
+    faber: 'Faber, "A Quantitative Approach to Tactical Asset Allocation": ogni ETF solo se sopra la media di 10 mesi',
+    tendenza_vol: 'La tendenza dei fondi (AQR) con volatilità obiettivo del 10 %', mondo: 'Comprare e tenere SWDA (mondo intero)', uguali: 'Tutti in parti uguali, ribilanciati ogni mese',
+    clenow: 'Clenow, "Stocks on the Move": le tendenze più forti e regolari, solo con l\'indice sopra la media di 200 giorni, peso dalla volatilità',
+    indice: "Comprare e tenere l'indice"};
+  const cella = m => m ? `<b class="${m.annuo >= 0 ? 'pos' : 'neg'}">${pc(m.annuo, 1)}</b><br><span class="note">Sharpe ${nf(m.sharpe, 2)} · calo <span class="neg">${pc(m.calo_massimo, 0)}</span></span>` : '–';
+  const tab = (titolo, M) => !M ? '' : `<h3 style="margin-top:14px">${titolo} <span class="note">· dal ${esc(M.da)} al ${esc(M.a)}</span></h3>
+    <div class="scroll"><table><thead><tr><th class="l">Strategia</th><th>All'anno, tutto</th><th>Prima metà</th><th>Seconda metà</th></tr></thead><tbody>${Object.entries(M.strategie).map(([k, x]) => `<tr><td class="l" style="white-space:normal;min-width:220px"><b>${NOMI[k] || k}</b><br><span class="note">investito in media ${p100(x.esposizione_media)}</span></td><td>${cella(x.tutto)}</td><td>${cella(x.prima_meta)}</td><td>${cella(x.seconda_meta)}</td></tr>`).join('')}</tbody></table></div>`;
+  const E = S.mercati.etf, oggi = E && E.oggi;
+  return `<div class="card" id="strategie-libri"><h2>Le strategie dei libri migliori, messe alla prova</h2>
+    <p class="sub" style="margin-top:4px">Le regole di tendenza e momento dei libri più apprezzati, provate sui mercati dell'app con i costi, e confrontate con il semplice comprare e tenere. Sharpe: guadagno per unità di rischio; calo: la perdita massima dal punto più alto.</p>
+    <div class="verdetto v-cautela" style="margin-top:12px"><div class="vh"><span class="vi" aria-hidden="true">!</span><div><b>Cosa dicono i dati</b><p>In questi anni di borse in salita, comprare e tenere un paniere diversificato ha guadagnato di più. Le regole dei libri guadagnano meno ma tagliano molto le perdite: Faber sugli ETF ha avuto un calo massimo di ${E ? pc(E.strategie.faber.tutto.calo_massimo, 0) : '–'} contro ${E ? pc(E.strategie.mondo.tutto.calo_massimo, 0) : '–'} di SWDA, con più guadagno per unità di rischio. Servono a non farsi male nei crolli, non a battere il mercato. Le azioni sono quelle di oggi negli indici: il passato è più bello di com'era.</p></div></div></div>
+    ${tab('ETF a Milano', E)}${tab('Azioni USA (S&P 100)', S.mercati.usa)}${tab('Azioni italiane (FTSE MIB)', S.mercati.italia)}
+    ${oggi ? `<p class="note" style="margin-top:10px"><b>Questo mese (dalla fine di ${esc(oggi.faber.giorno)}):</b> Faber tiene ${Object.keys(oggi.faber.pesi).map(s => esc(tk(s))).join(', ') || 'solo liquidità'}; Antonacci sceglie ${Object.keys(oggi.antonacci.pesi).map(s => esc(tk(s))).join(', ')}. Il robot segue Faber nel conto "ETF, media di 10 mesi".</p>` : ''}
+    <p class="note" style="margin-top:6px">Fonti: G. Antonacci, "Dual Momentum Investing" (2014); M. Faber, "A Quantitative Approach to Tactical Asset Allocation" (2007, rivisto nel 2018); A. Clenow, "Stocks on the Move" (2015); Hurst, Ooi e Pedersen, AQR (2017). Non è consulenza finanziaria.</p></div>`;
+}
 function reteLungoHTML(solo) {
   const L = D.rete_lungo; if (!L || !L.verifica || !L.verifica.orizzonti) return '';
   const V = L.verifica, O = L.orizzonti, N = L.nomi_orizzonti;
@@ -2161,6 +2180,7 @@ const ROBOT_CAPITALE = 10000, ROBOT_PIANI = 36, ROBOT_COSTO_CRYPTO = 0.002, TOBI
 const STRATEGIE = {
   giornata: {nome: 'Azioni in seduta (Oops!)', breve: 'Azioni', stato: 'esercitazione', chip: 'bassa'},
   tendenza: {nome: 'Crypto, tendenza come i fondi', breve: 'Tendenza crypto', stato: 'esercitazione', chip: 'media'},
+  faber: {nome: 'ETF, media di 10 mesi (Faber)', breve: 'ETF Faber', stato: 'esercitazione', chip: 'media'},
   segnali: {nome: 'Crypto, ordini sui segnali', breve: 'Segnali crypto', stato: 'esercitazione', chip: 'bassa'},
   crypto: {nome: 'Crypto, ordini ogni ora (ritirata)', breve: 'Crypto ogni ora', stato: 'ritirata', chip: 'bassa', ritirata: true},
   rete: {nome: 'Crypto, rete neurale', breve: 'Rete crypto', stato: 'esercitazione', chip: 'bassa'},
@@ -2210,10 +2230,17 @@ function oraItaliana(mer, k, d) {
 // le strategie ritirate non comprano più: restano solo per chiudere quello che hanno ancora
 function senzaRitirate(R) { for (const k of Object.keys(STRATEGIE)) if (STRATEGIE[k].ritirata && R.conti[k]) R.conti[k].attiva = false; return R; }
 
+// i conti che ribilanciano verso dei pesi (la tendenza delle crypto ogni giorno, Faber sugli ETF ogni mese)
+const PORTAFOGLI = {
+  tendenza: {dati: () => D.crypto_tendenza && D.crypto_tendenza.oggi, costo: ROBOT_COSTO_CRYPTO, fonte: 'chiusura del giorno',
+    giu: 'tendenza girata: momento a 1, 3 e 12 mesi non più positivo', meno: 'peso ridotto: volatilità salita o tendenza più debole', su: w => `tendenza positiva, peso ${p100(w)} del conto (dalla volatilità)`},
+  faber: {dati: () => D.strategie_lungo && D.strategie_lungo.mercati && D.strategie_lungo.mercati.etf && D.strategie_lungo.mercati.etf.oggi && D.strategie_lungo.mercati.etf.oggi.faber, costo: 0.001, fonte: 'fine del mese',
+    giu: 'sotto la media di 10 mesi (regola di Faber)', meno: 'peso ricalcolato a fine mese', su: w => `sopra la media di 10 mesi (Faber), peso ${p100(w)} del conto`},
+};
 const RETI_NOMI = ['rete', 'rete_ita', 'rete_usa', 'segnali'];
 const contoVuoto = (k, attiva) => k === 'crypto' ? {attiva, cassa: ROBOT_CAPITALE, piani: {}, ops: [], n: 0, vinte: 0}
   : RETI_NOMI.includes(k) ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
-  : k === 'tendenza' ? {attiva, cassa: ROBOT_CAPITALE, pos: {}, giorno: null, n: 0, vinte: 0}
+  : PORTAFOGLI[k] ? {attiva, cassa: ROBOT_CAPITALE, pos: {}, giorno: null, n: 0, vinte: 0}
   : k === 'giornata' ? {attiva, cassa: ROBOT_CAPITALE, posizioni: {}, fatte: {}, n: 0, vinte: 0}
   : {attiva, capitale: ROBOT_CAPITALE, fatte: {}, aperta: null, ops: [], n: 0, vinte: 0};
 function robotNuovo(inizio, costo, scelte) {
@@ -2227,7 +2254,7 @@ function robotMigra(v) {                                                        
     v.crypto_ripresa = 1;
     if (v.sessione && v.sessione.aperta) v.conti.crypto.attiva = true;
   }
-  if (v && v.versione === 2 && v.conti) for (const k of [...RETI_NOMI, 'tendenza']) if (!v.conti[k]) v.conti[k] = contoVuoto(k, !!(v.sessione && v.sessione.aperta));
+  if (v && v.versione === 2 && v.conti) for (const k of [...RETI_NOMI, ...Object.keys(PORTAFOGLI)]) if (!v.conti[k]) v.conti[k] = contoVuoto(k, !!(v.sessione && v.sessione.aperta));
   if (!v || v.versione === 2) return v && v.conti ? senzaRitirate(v) : v;
   const R = robotNuovo(v.inizio, (v.notte && v.notte.costo) || 0.0002, {});
   if (v.notte) { R.conti.usa_notte = Object.assign(contoVuoto('usa_notte', false), v.notte); delete R.conti.usa_notte.costo; }
@@ -2255,6 +2282,7 @@ function perchePerdita(e) {
   const quanto = `Ha perso ${pc(-e.r, 2, false)}, costi compresi. `;
   let perche;
   if (n.includes('protezione')) perche = `Il prezzo è sceso fino alla <b>protezione</b> (lo stop-loss fissato al momento dell'acquisto). Tenere voleva dire lasciare aperta una perdita senza limite: la protezione la ferma a quella messa in conto prima di comprare (come nelle skill trader-exit e trader-risk, al massimo lo 0,5 % del capitale per operazione). Nelle verifiche, togliere la protezione non ha migliorato i risultati e ha reso le perdite peggiori molto più grandi.`;
+  else if (n.includes('media di 10 mesi') || n.includes('ricalcolato a fine mese')) perche = `La regola di Mebane Faber tiene un ETF solo finché il suo prezzo è sopra la media degli ultimi 10 mesi, e lo vende quando ci scende sotto: serve a stare fuori dai ribassi lunghi (dal 2017 ha ridotto il calo massimo da -34 % a -14 %). Uscendo si accetta una piccola perdita per evitarne una grande; a volte il prezzo poi risale, è il prezzo dell'assicurazione.`;
   else if (n.includes('tendenza girata') || n.includes('peso ridotto')) perche = `Come fanno i fondi di tendenza (Hurst, Ooi e Pedersen, AQR) si tiene una crypto solo finché il suo momento a 1, 3 e 12 mesi è positivo, e meno quando oscilla di più (Moreira e Muir). ${n.includes('girata') ? 'La tendenza si è girata: tenere voleva dire restare dentro un ribasso, che è proprio quello che la strategia evita (nel 2022 le crypto hanno perso fino all\'80 %).' : 'La volatilità è salita o la tendenza si è indebolita: si riduce la posizione per tenere costante il rischio.'} Ogni singola vendita può essere in perdita: conta il conto nel suo insieme.`;
   else if (n.includes('durata del segnale')) perche = `Ogni segnale ha la sua <b>durata</b>, quella con cui è stato studiato (per esempio un'ora per il flusso degli ordini, 4 ore per il ribasso). Allo scadere vende sempre, anche in perdita: oltre quella durata il segnale non dice più niente, e tenere sarebbe una scommessa senza motivo.`;
   else if (n.includes('fine della durata')) perche = `La rete aveva scelto <b>quanto tenere</b> al momento dell'acquisto: la durata in cui stimava più probabile chiudere in guadagno. Allo scadere vende sempre, anche in perdita, perché la sua previsione vale solo per quella durata: oltre non ha nessun segnale, e tenere di più sarebbe una scommessa che non è stata verificata.`;
@@ -2501,7 +2529,7 @@ function valoreConto(R, k) {
   if (k === 'crypto') return c.cassa + Object.values(c.piani).filter(r => r.fase === 'dentro').reduce((t, r) => t + r.qty * prezzoOra(r.sym, r.prezzo_entrata) * (1 - ROBOT_COSTO_CRYPTO), 0);
   if (k === 'giornata') return c.cassa + Object.values(c.posizioni).reduce((t, p) => t + p.quota * prezzoOra(p.sym, p.entrata) / p.entrata, 0);
   if (RETI[k]) return c.cassa + Object.values(c.posizioni).reduce((t, p) => t + p.qty * prezzoOra(p.sym, p.entrata) * (1 - RETI[k].costo()), 0);
-  if (k === 'tendenza') return c.cassa + Object.values(c.pos).reduce((t, p) => t + p.qty * prezzoOra(p.sym, p.entrata) * (1 - ROBOT_COSTO_CRYPTO), 0);
+  if (PORTAFOGLI[k]) return c.cassa + Object.values(c.pos).reduce((t, p) => t + p.qty * prezzoOra(p.sym, p.entrata) * (1 - PORTAFOGLI[k].costo), 0);
   const A = c.aperta;
   if (!A || A.stato !== 'in mano') return c.capitale;
   return A.capitale * A.titoli.reduce((t, s, j) => t + prezzoOra(s, A.prezzi[j]) / A.prezzi[j], 0) / A.titoli.length;
@@ -2606,30 +2634,30 @@ function robotRete(R, k, adesso) {
 }
 /* la tendenza come i fondi (crypto_tendenza.py): una volta al giorno, dopo la chiusura UTC, porta ogni crypto al peso
    deciso dal momento a 1, 3 e 12 mesi e dalla volatilità (Hurst, Ooi e Pedersen; Moreira e Muir); il resto in euro */
-function robotTendenza(R, adesso) {
-  const C = R.conti.tendenza, T = D.crypto_tendenza; if (!C || !T || !T.oggi) return false;
+function robotTendenza(R, adesso, k = 'tendenza') {
+  const C = R.conti[k], cfg = PORTAFOGLI[k], T = {oggi: cfg.dati()}, costo = cfg.costo; if (!C || !T.oggi) return false;
   if (!C.attiva && !Object.keys(C.pos).length) return false;
   const giorno = T.oggi.giorno; if (C.giorno === giorno) return false;
-  const iso = adesso.toISOString(), pesi = C.attiva ? T.oggi.pesi : {}, tot = valoreConto(R, 'tendenza');
+  const iso = adesso.toISOString(), pesi = C.attiva ? T.oggi.pesi : {}, tot = valoreConto(R, k);
   const tutti = new Set([...Object.keys(C.pos), ...Object.keys(pesi)]);
   for (const s of tutti) {                                                       // prima le vendite, poi gli acquisti
     const p = C.pos[s], prezzo = prezzoOra(s, p ? p.entrata : null); if (!prezzo || !p) continue;
     const voluto = (pesi[s] || 0) * tot, ora = p.qty * prezzo;
     if (ora - voluto > Math.max(0.01 * tot, 5)) {
-      const q = Math.min(p.qty, (ora - voluto) / prezzo), incasso = q * prezzo * (1 - ROBOT_COSTO_CRYPTO), rr = prezzo * (1 - ROBOT_COSTO_CRYPTO) / (p.entrata * (1 + ROBOT_COSTO_CRYPTO)) - 1;
+      const q = Math.min(p.qty, (ora - voluto) / prezzo), incasso = q * prezzo * (1 - costo), rr = prezzo * (1 - costo) / (p.entrata * (1 + costo)) - 1;
       C.cassa += incasso; p.qty -= q; C.n++; if (rr > 0) C.vinte++;
       if (p.qty * prezzo < 1) delete C.pos[s];
-      evento(R, {t: iso, s: 'tendenza', sym: s, azione: 'vende', prezzo: r6(prezzo), r: r6(rr), importo: r6(incasso), nota: pesi[s] ? 'peso ridotto: volatilità salita o tendenza più debole' : 'tendenza girata: momento a 1, 3 e 12 mesi non più positivo', fonte: 'chiusura del giorno'});
+      evento(R, {t: iso, s: k, sym: s, azione: 'vende', prezzo: r6(prezzo), r: r6(rr), importo: r6(incasso), nota: pesi[s] ? cfg.meno : cfg.giu, fonte: cfg.fonte});
     }
   }
   for (const s of Object.keys(pesi)) {
     const p = C.pos[s], prezzo = prezzoOra(s, p ? p.entrata : null); if (!prezzo) continue;
     const voluto = pesi[s] * tot, ora = p ? p.qty * prezzo : 0, spesa = Math.min(voluto - ora, C.cassa);
     if (spesa > Math.max(0.01 * tot, 5)) {
-      const q = spesa * (1 - ROBOT_COSTO_CRYPTO) / prezzo;
+      const q = spesa * (1 - costo) / prezzo;
       C.pos[s] = p ? {sym: s, qty: p.qty + q, entrata: (p.entrata * p.qty + prezzo * q) / (p.qty + q)} : {sym: s, qty: q, entrata: prezzo};
       C.cassa -= spesa;
-      evento(R, {t: iso, s: 'tendenza', sym: s, azione: 'compra', prezzo: r6(prezzo), importo: r6(spesa), nota: `tendenza positiva, peso ${p100(pesi[s])} del conto (dalla volatilità)`, fonte: 'chiusura del giorno'});
+      evento(R, {t: iso, s: k, sym: s, azione: 'compra', prezzo: r6(prezzo), importo: r6(spesa), nota: cfg.su(pesi[s]), fonte: cfg.fonte});
     }
   }
   C.giorno = giorno;
@@ -2641,7 +2669,7 @@ function robotPasso(R, adesso) {
   cambiato = robotGiornata(R, adesso) || cambiato;
   cambiato = robotCrypto(R, adesso) || cambiato;
   for (const k of Object.keys(RETI)) if (R.conti[k]) cambiato = robotRete(R, k, adesso) || cambiato;
-  if (R.conti.tendenza) cambiato = robotTendenza(R, adesso) || cambiato;
+  for (const k of Object.keys(PORTAFOGLI)) if (R.conti[k]) cambiato = robotTendenza(R, adesso, k) || cambiato;
   const oggi = adesso.toISOString().slice(0, 10), st = R.storico || (R.storico = []);
   const v = {d: oggi}; for (const k of Object.keys(STRATEGIE)) v[k] = r4(valoreConto(R, k));
   const ultimo = st[st.length - 1];
@@ -2708,7 +2736,7 @@ async function robotAperture() {                                                
 function fermaConto(R, k, adesso, nota) {                                       // vende quello che si può vendere adesso
   const iso = adesso.toISOString(), c = R.conti[k];
   if (RETI[k]) for (const [chiave, p] of Object.entries(c.posizioni)) reteEsce(R, k, chiave, prezzoOra(p.sym, p.entrata), iso, nota, nota);
-  if (k === 'tendenza') for (const [s, p] of Object.entries(c.pos)) { const pr = prezzoOra(s, p.entrata), inc = p.qty * pr * (1 - ROBOT_COSTO_CRYPTO), rr = pr / p.entrata - 1 - 2 * ROBOT_COSTO_CRYPTO; c.cassa += inc; c.n++; if (rr > 0) c.vinte++; delete c.pos[s]; evento(R, {t: iso, s: 'tendenza', sym: s, azione: 'vende', prezzo: r6(pr), r: r6(rr), importo: r6(inc), nota, fonte: nota}); }
+  if (PORTAFOGLI[k]) for (const [s, p] of Object.entries(c.pos)) { const cs = PORTAFOGLI[k].costo, pr = prezzoOra(s, p.entrata), inc = p.qty * pr * (1 - cs), rr = pr / p.entrata - 1 - 2 * cs; c.cassa += inc; c.n++; if (rr > 0) c.vinte++; delete c.pos[s]; evento(R, {t: iso, s: k, sym: s, azione: 'vende', prezzo: r6(pr), r: r6(rr), importo: r6(inc), nota, fonte: nota}); }
   if (k === 'crypto') for (const r of Object.values(c.piani)) {
     if (r.fase === 'dentro') cryptoEsce(R, r, prezzoOra(r.sym, r.prezzo_entrata), iso, 'manuale', nota);
     else if (r.fase === 'attesa') r.fase = 'annullato';
@@ -2730,7 +2758,7 @@ function simboliAperti(R) {                                                    /
   if (C.giornata) Object.values(C.giornata.posizioni || {}).forEach(p => out.add(p.sym));
   if (C.crypto) Object.values(C.crypto.piani || {}).forEach(r => { if (r.fase === 'dentro') out.add(r.sym); });
   for (const k of Object.keys(RETI)) if (C[k]) Object.values(C[k].posizioni || {}).forEach(p => out.add(p.sym));
-  if (C.tendenza) Object.keys(C.tendenza.pos || {}).forEach(s => out.add(s));
+  for (const k of Object.keys(PORTAFOGLI)) if (C[k]) Object.keys(C[k].pos || {}).forEach(s => out.add(s));
   return out;
 }
 function robotSalva() {
@@ -2798,13 +2826,13 @@ function robotHTML() {
       return `<tr><td class="l" style="white-space:normal"><b>${esc(tk(p.sym))}</b> <span class="note">${STRATEGIE[p.k].breve} · dalle ${new Date(p.quando).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'})}</span><br><span class="note">esce ${esc(p.esce)}</span></td><td>${nf(p.entrata, dec(p.entrata))} ${p.cur}</td><td>${nf(p.ora, dec(p.ora))} ${p.cur}</td><td class="${r >= 0 ? 'pos' : 'neg'}">${pc(r, 2)}</td></tr>`; }).join('')}</tbody></table></div>
       ${pos.some(p => STRATEGIE[p.k].ritirata) ? '<p class="note" style="margin-top:4px">Le posizioni di notte rimaste da prima di questa versione si chiudono alla prossima apertura: il robot non ne apre di nuove.</p>' : ''}` : '<p class="note">Nessuna posizione aperta adesso.</p>';
   const tutte = (R.registro || []).slice().sort((a, b) => a.t < b.t ? 1 : -1);
-  if (!['tutte', 'giornata', 'tendenza', 'segnali', 'crypto', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
+  if (!['tutte', 'giornata', 'faber', 'tendenza', 'segnali', 'crypto', 'rete', 'rete_ita', 'rete_usa'].includes(robotFiltro)) robotFiltro = 'tutte';
   const filtrate = tutte.filter(e => (robotFiltro === 'tutte' || e.s === robotFiltro)       // una sezione per strategia
     && (robotVerso === 'tutte' || (robotVerso === 'entrate' ? e.azione === 'compra' : e.azione === 'vende')));
   const reg = filtrate.slice(0, robotLimite);
   const quando = e => e.circa ? new Date(e.t).toLocaleDateString('it-IT', {weekday: 'short', day: 'numeric', month: 'short', timeZone: 'Europe/Rome'}) + ', in seduta' : oraDi(e.t);
   const avvisi = typeof Notification === 'undefined' ? '' : Notification.permission === 'granted' ? '<span class="note">Avvisi sul dispositivo: attivi, anche con la pagina in un’altra scheda.</span>' : Notification.permission === 'denied' ? '<span class="note">Gli avvisi sono bloccati dal browser.</span>' : '<button type="button" class="linkb" id="rb-avvisi">Avvisami anche con la pagina in un’altra scheda</button>';
-  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['tendenza', 'Crypto, tendenza come i fondi'], ['segnali', 'Crypto, ordini sui segnali'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
+  const filtri = `<div class="seg" style="margin-top:8px" role="group" aria-label="Quali operazioni">${[['tutte', 'Tutte'], ['giornata', 'Azioni in seduta'], ['faber', 'ETF, media di 10 mesi'], ['tendenza', 'Crypto, tendenza come i fondi'], ['segnali', 'Crypto, ordini sui segnali'], ['rete', 'Crypto, rete neurale'], ['rete_ita', 'Azioni italiane, rete neurale'], ['rete_usa', 'Azioni USA, rete neurale']].map(([f, t]) => `<button type="button" data-f="${f}" aria-pressed="${robotFiltro === f}">${t}</button>`).join('')}</div>
     <div class="seg" style="margin-top:6px" role="group" aria-label="Entrate o uscite">${[['tutte', 'Entrate e uscite'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([f, t]) => `<button type="button" data-v="${f}" aria-pressed="${robotVerso === f}">${t}</button>`).join('')}</div>`;
   const righe = reg.map(e => `<li class="${fresca(e.t) ? 'nuova' : ''}"><span class="ora">${quando(e)}</span> <span class="tag ${e.azione === 'compra' ? 'in' : (e.r || 0) >= 0 ? 'ok' : 'ko'}">${e.azione}</span> <b>${e.sym.split(',').map(s => esc(tk(s))).join(', ')}</b>${e.prezzo ? ` a ${nf(e.prezzo, dec(e.prezzo))}` : ''}${e.importo ? ` · ${e.azione === 'compra' ? 'investiti' : 'incassati'} ${eur(e.importo)}` : ''}${e.r != null ? ` · <b class="${e.r >= 0 ? 'pos' : 'neg'}">${pc(e.r, 2)}</b>` : ''} <span class="note">· ${STRATEGIE[e.s] ? STRATEGIE[e.s].breve : esc(e.s)}, ${esc(e.nota || '')} (${esc(String(e.fonte || '').replace('dal vivo', 'in diretta'))})</span>${perchePerdita(e)}</li>`).join('');
   const feed = `<h3 style="margin-top:14px">Operazioni in diretta</h3>

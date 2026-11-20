@@ -237,6 +237,16 @@ def tendenza_app(log=print):
         return None
 
 
+def strategie_lungo_app(log=print):
+    """Le strategie dei libri (Antonacci, Faber, Clenow) sui mercati dell'app (strategie_lungo.py), o None."""
+    try:
+        import strategie_lungo
+        return strategie_lungo.studia(log=lambda m: None)
+    except Exception as e:
+        log("[app] strategie dei libri saltate: %s" % str(e)[:160])
+        return None
+
+
 def rete_lungo_app(log=print):
     """La rete del medio e lungo periodo (python3 rete_lungo.py), o None."""
     try:
@@ -344,6 +354,7 @@ def leggero(out, log=print):
     data["rete_lungo"] = rete_lungo_app(log) or data.get("rete_lungo")    # medio e lungo periodo
     data["segnali_robot"] = segnali_robot_app(log) or data.get("segnali_robot")   # crypto: ordini sui segnali
     data["crypto_tendenza"] = tendenza_app(log) or data.get("crypto_tendenza")    # crypto: tendenza come i fondi
+    data["strategie_lungo"] = strategie_lungo_app(log) or data.get("strategie_lungo")   # ETF e azioni: le regole dei libri
     build(data, out)
     log("[app] scritta %s (%d KB), solo crypto e reti neurali aggiornate" % (os.path.relpath(out, ROOT), os.path.getsize(out) // 1024))
     return 0
@@ -376,7 +387,7 @@ def main(argv=None):
             "calendari": calendari(), "cambio": cambio(), "intraday": crypto_intraday(), "rete": rete_per_app(), "rete_robot": rete_robot_app(),
             "rete_ita": rete_ita_app(), "rete_ita_robot": rete_ita_robot_app(),
             "rete_usa": rete_usa_app(), "rete_usa_robot": rete_usa_robot_app(), "rete_lungo": rete_lungo_app(),
-            "segnali_robot": segnali_robot_app(), "crypto_tendenza": tendenza_app(),
+            "segnali_robot": segnali_robot_app(), "crypto_tendenza": tendenza_app(), "strategie_lungo": strategie_lungo_app(),
             "sentimento": sentimento(), "segnali_fonti": fonti_segnali(),
             "regole_libri": load_json(os.path.join(ROOT, "regole_libri.json")),
             "verifica25": load_json(os.path.join(ROOT, "verifica.json")),
