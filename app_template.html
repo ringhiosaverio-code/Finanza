@@ -3289,9 +3289,12 @@ async function restartRobot(e) {
   if (!chiediConferma(b, 'Sicuro? Tocca ancora: tutti da 10.000 €')) return;
   CAPITALE_RESTART = 10000;
   const esito = $('#rb-motore-esito'); if (esito) esito.textContent = 'Restart: chiedo al motore di far ripartire tutti i conti da 10.000 €…';
-  try { await ricominciaDaCapo(); } finally { CAPITALE_RESTART = null; }
-  const r = $('#rb-reset-esito'); if (esito && r && r.textContent) esito.textContent = r.textContent;
-  else if (esito) esito.textContent = 'Fatto: entro un paio di minuti tutti i conti ripartono da 10.000 € e le operazioni ricominciano da sole.';
+  let ok = false;
+  try { ok = await ricominciaDaCapo(); } finally { CAPITALE_RESTART = null; }
+  if (esito && ok !== false) esito.textContent = 'Fatto: entro un paio di minuti tutti i conti ripartono da 10.000 € e le operazioni ricominciano da sole (se il motore nel cloud è acceso).';
+  else if (esito) esito.innerHTML = window.claude
+    ? 'Da qui (claude.ai) la pagina non può mandare il comando al motore. <a href="https://ringhiosaverio-code.github.io/Finanza/?restart=1#giornata" target="_blank" rel="noopener" style="color:var(--accent)">Apri il sito e conferma il Restart lì</a>: è gratis, senza token.'
+    : 'ntfy non ha risposto: riprova tra un minuto.';
   b.textContent = '↺ Restart da 10.000 €';
 }
 async function ricominciaDaCapo() {
@@ -3308,10 +3311,11 @@ async function ricominciaDaCapo() {
   if (N && N.argomento) {
     try {
       const r = await fetch('https://ntfy.sh/' + N.argomento + '-comandi', {method: 'POST', body: JSON.stringify({reset: capitaleScelto(), quando: ora})});
-      if (r.ok) { esito('Fatto: entro un paio di minuti il motore ricomincia da capo con ' + nf(capitaleScelto(), 0) + ' € per strategia.'); return; }
+      if (r.ok) { esito('Fatto: entro un paio di minuti il motore ricomincia da capo con ' + nf(capitaleScelto(), 0) + ' € per strategia.'); return true; }
     } catch (e) {}
   }
   esito('ntfy non ha risposto: riprova tra un minuto. (Niente Claude: il reset non consuma token.)');
+  return false;
 }
 async function sincronizzaRobot() {
   try {
@@ -3736,7 +3740,8 @@ async function caricaDaGitHub(fresco) {
 }
 async function avviaLive() {
   const bm = $('#rb-motore'); if (bm && !bm.dataset.ok) { bm.dataset.ok = 1; bm.addEventListener('click', aggiornaDalMotore); }
-  const br = $('#rb-restart'); if (br && !br.dataset.legato) { br.dataset.legato = 1; br.addEventListener('click', restartRobot); }
+  const br = $('#rb-restart'); if (br && !br.dataset.legato) { br.dataset.legato = 1; br.addEventListener('click', restartRobot);
+    if (/[?&]restart=1/.test(location.search) && !window.claude) { br.click(); br.scrollIntoView({block: 'center'}); } }   // dal link di claude.ai: un tocco per confermare
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
   if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) {                            // il resoconto del lunedì e il conto Alpaca
     caricaResoconto(); caricaAlpaca(); setInterval(() => { caricaResoconto(); caricaAlpaca(); }, 1800e3);
