@@ -307,7 +307,7 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
 <header class="top">
   <div class="wrap">
     <div class="brand"><b>Finanza</b><span id="meta"></span><span id="live"></span></div>
-    <div class="motore-top"><button type="button" id="rb-motore">⟳ Aggiorna motore</button><span class="note" id="rb-motore-esito">Le operazioni del motore nel cloud: si aggiornano anche da sole ogni minuto.</span></div>
+    <div class="motore-top"><button type="button" id="rb-motore">⟳ Aggiorna motore</button><button type="button" id="rb-restart" style="background:var(--surface2);color:var(--ink);border:1px solid var(--line)">↺ Restart da 10.000 €</button><span class="note" id="rb-motore-esito">Le operazioni del motore nel cloud: si aggiornano anche da sole ogni minuto.</span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
       <a href="#piano" data-v="piano">Il piano</a>
@@ -3281,7 +3281,19 @@ function robotDaCapo(quando, costo, rev, capitale) {
   Object.values(R.conti).forEach(c => { c.dal = quando; });
   return R;
 }
-function capitaleScelto() { const e = $('#rb-capitale'); return Number(e && e.value) || ROBOT_CAPITALE || 10000; }
+let CAPITALE_RESTART = null;                                                     // il pulsante Restart: sempre 10.000 €
+function capitaleScelto() { if (CAPITALE_RESTART) return CAPITALE_RESTART; const e = $('#rb-capitale'); return Number(e && e.value) || ROBOT_CAPITALE || 10000; }
+// Restart: tutti i conti ripartono da 10.000 € e le operazioni ricominciano da sole (lo fa il motore nel cloud)
+async function restartRobot(e) {
+  const b = e.currentTarget;
+  if (!chiediConferma(b, 'Sicuro? Tocca ancora: tutti da 10.000 €')) return;
+  CAPITALE_RESTART = 10000;
+  const esito = $('#rb-motore-esito'); if (esito) esito.textContent = 'Restart: chiedo al motore di far ripartire tutti i conti da 10.000 €…';
+  try { await ricominciaDaCapo(); } finally { CAPITALE_RESTART = null; }
+  const r = $('#rb-reset-esito'); if (esito && r && r.textContent) esito.textContent = r.textContent;
+  else if (esito) esito.textContent = 'Fatto: entro un paio di minuti tutti i conti ripartono da 10.000 € e le operazioni ricominciano da sole.';
+  b.textContent = '↺ Restart da 10.000 €';
+}
 async function ricominciaDaCapo() {
   const esito = t => { const e = $('#rb-reset-esito'); if (e) e.textContent = t; };
   const ora = new Date().toISOString();
@@ -3299,12 +3311,7 @@ async function ricominciaDaCapo() {
       if (r.ok) { esito('Fatto: entro un paio di minuti il motore ricomincia da capo con ' + nf(capitaleScelto(), 0) + ' € per strategia.'); return; }
     } catch (e) {}
   }
-  try {
-    const mcp = window.claude && claude.use ? await claude.use('mcp') : null;
-    if (!mcp) { esito('Da qui non si può: tocca "Ricomincia da capo" nell\'app su claude.ai.'); return; }
-    await mcp.callTool(CCR, 'fire_trigger', {trigger_id: MOTORE_COMPITO, text: 'RESET DEL ROBOT: richiesto con il pulsante "Ricomincia da capo" alle ' + ora + ', capitale ' + capitaleScelto() + ' euro per strategia. Esegui solo `python3 reset_robot.py --capitale ' + capitaleScelto() + '` nella cartella del progetto e rispondi in una riga.'}, {cache: false});
-    esito('Fatto: entro un paio di minuti il motore ricomincia da capo e le operazioni vecchie spariscono.');
-  } catch (e) { esito('Il cloud non ha risposto: riprova tra poco.'); }
+  esito('ntfy non ha risposto: riprova tra un minuto. (Niente Claude: il reset non consuma token.)');
 }
 async function sincronizzaRobot() {
   try {
@@ -3729,6 +3736,7 @@ async function caricaDaGitHub(fresco) {
 }
 async function avviaLive() {
   const bm = $('#rb-motore'); if (bm && !bm.dataset.ok) { bm.dataset.ok = 1; bm.addEventListener('click', aggiornaDalMotore); }
+  const br = $('#rb-restart'); if (br && !br.dataset.legato) { br.dataset.legato = 1; br.addEventListener('click', restartRobot); }
   if (SU_PAGES && !window.claude) { SPETTATORE = true; ROBOT = null; aggiornaRobot(); caricaDaGitHub(true); setInterval(() => caricaDaGitHub(false), 60e3); }
   if (!MOTORE_PAGINA && (SU_PAGES || window.claude)) {                            // il resoconto del lunedì e il conto Alpaca
     caricaResoconto(); caricaAlpaca(); setInterval(() => { caricaResoconto(); caricaAlpaca(); }, 1800e3);
