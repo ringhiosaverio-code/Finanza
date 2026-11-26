@@ -310,11 +310,8 @@ tr.clk{cursor:pointer}tr.clk:hover td{background:var(--surface2)}
     <div class="motore-top"><button type="button" id="rb-motore">⟳ Aggiorna motore</button><button type="button" id="rb-restart" style="background:var(--surface2);color:var(--ink);border:1px solid var(--line)">↺ Restart da 10.000 €</button><span class="note" id="rb-motore-esito">Le operazioni del motore nel cloud: si aggiornano anche da sole ogni minuto.</span></div>
     <nav class="tabs" aria-label="Sezioni">
       <a href="#oggi" data-v="oggi">Oggi</a>
-      <a href="#piano" data-v="piano">Il piano</a>
-      <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
       <a href="#giornata" data-v="giornata">Il robot</a>
-      <a href="#crypto" data-v="crypto">Crypto</a>
-      <a href="#simula" data-v="simula">Cerca un titolo</a>
+      <a href="#portafoglio" data-v="portafoglio">Il mio portafoglio</a>
       <a href="#altro" data-v="altro">Altro</a>
     </nav>
   </div>
@@ -399,7 +396,7 @@ function route() {
   view = v;
   const sec = v === 'italia' ? 'consigli' : v;
   ['oggi', 'piano', 'portafoglio', 'demo', 'giornata', 'crypto', 'altro', 'consigli', 'simula', 'verifica', 'daytrade', 'metodo', 'libri', 'prove'].forEach(x => { $('#v-' + x).hidden = x !== sec; });
-  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri', 'prove', 'demo'].includes(v) ? 'altro' : v;
+  const navv = ['consigli', 'italia', 'verifica', 'daytrade', 'metodo', 'libri', 'prove', 'demo', 'piano', 'crypto', 'simula'].includes(v) ? 'altro' : v;
   document.querySelectorAll('nav.tabs a').forEach(a => a.setAttribute('aria-current', a.dataset.v === navv ? 'page' : 'false'));
   if (sec === 'consigli') { setMkt(v === 'italia' ? 'italia' : 'usa'); st.vmkt = mkt; renderConsigli(); }
   else if (sec === 'verifica') { setMkt(st.vmkt || mkt); renderVerifica(); }
@@ -1445,6 +1442,42 @@ async function resocontoAdesso() {
   setTimeout(() => { if (b) b.disabled = false; }, 30e3);
 }
 
+// dove mettere ogni mese una cifra (1.000 € di partenza): il piano con la rete in euro, ETF per ETF. Cambia da solo: le
+// scelte della rete ogni lunedì, Faber a fine mese, la tendenza crypto ogni giorno, il peso della rete dal diario dal vivo
+let MESE_EURO = (() => { try { return Number(localStorage.getItem('mese-euro')) || 1000; } catch (e) { return 1000; } })();
+const NOMI_ETF = {'SMH.MI': 'VanEck Semiconductor', 'GDX.MI': 'VanEck Gold Miners', 'INRG.MI': 'iShares Global Clean Energy', 'VWCE.MI': 'Vanguard FTSE All-World (Acc)',
+  'VUSA.MI': 'Vanguard S&P 500', 'XDWD.MI': 'Xtrackers MSCI World', 'XDWT.MI': 'Xtrackers MSCI World Information Technology', 'XDWH.MI': 'Xtrackers MSCI World Health Care',
+  'XDWF.MI': 'Xtrackers MSCI World Financials', 'XDWI.MI': 'Xtrackers MSCI World Industrials', 'XDWC.MI': 'Xtrackers MSCI World Consumer Discretionary',
+  'XDWS.MI': 'Xtrackers MSCI World Consumer Staples', 'XDW0.MI': 'Xtrackers MSCI World Energy', 'XDWU.MI': 'Xtrackers MSCI World Utilities', 'XDWM.MI': 'Xtrackers MSCI World Materials',
+  'ISAC.MI': 'iShares MSCI ACWI', 'XDEV.MI': 'Xtrackers MSCI World Value', 'XDEM.MI': 'Xtrackers MSCI World Momentum', 'IWQU.MI': 'iShares Edge MSCI World Quality',
+  'IWMO.MI': 'iShares Edge MSCI World Momentum', 'MVOL.MI': 'iShares Edge MSCI World Minimum Volatility', 'EXSA.MI': 'iShares STOXX Europe 600', 'IUSA.MI': 'iShares Core S&P 500 (Dist)',
+  'CSCA.MI': 'iShares MSCI Canada', 'XMEU.MI': 'Xtrackers MSCI Europe', 'VEUR.MI': 'Vanguard FTSE Developed Europe'};
+function pianoMeseHTML() {
+  const P = pesiPiano(); if (!P) return '';
+  const V = D.portafoglio && D.portafoglio.combinazioni && D.portafoglio.combinazioni.piano_rete && D.portafoglio.combinazioni.piano_rete.tutto;
+  const L = D.rete_lungo, re = (L.robot_sezioni.etf || {}).pesi || {}, SL = D.strategie_lungo, T = D.crypto_tendenza;
+  const fab = (SL && SL.mercati && SL.mercati.etf && SL.mercati.etf.oggi && SL.mercati.etf.oggi.faber.pesi) || {};
+  const ctl = D.diario_rete && D.diario_rete.controllo, pr = ctl && ctl.peso != null ? ctl.peso : 0.2;
+  const perche = s => s === 'SWDA.MI' ? 'la base: il mondo intero, circa 1.500 aziende' : s === 'IEAG.MI' ? 'obbligazioni in euro: frenano i cali'
+    : re[s] ? 'scelto dalla rete neurale per questa settimana' : /-EUR$/.test(s) ? 'crypto in tendenza (regola dei fondi)' : fab[s] ? 'sopra la sua media di 10 mesi (Faber)' : '';
+  // i pezzi sotto 30 € al mese vanno su SWDA: su cifre così piccole le commissioni pesano troppo
+  const M = MESE_EURO, voci = Object.entries(P.pesi).map(([s, w]) => ({s, e: w * M})).sort((a, b) => b.e - a.e);
+  let piccoli = 0; const tieni = voci.filter(x => { if (x.e < 30 && x.s !== 'SWDA.MI') { piccoli += x.e; return false; } return true; });
+  const sw = tieni.find(x => x.s === 'SWDA.MI'); if (sw) sw.e += piccoli;
+  const investito = tieni.reduce((t, x) => t + x.e, 0), euro = Math.max(0, M - investito);
+  const nome = s => (SIM[s] && SIM[s].name) || NOMI_ETF[s] || tk(s), isin = s => SIM[s] && SIM[s].isin;
+  const arr = x => Math.round(x / 5) * 5;
+  const righe = tieni.map(x => `<tr><td class="l" style="white-space:normal"><b>${esc(tk(x.s))}</b> <span class="note">${esc(nome(x.s))}${isin(x.s) ? ' · ' + esc(isin(x.s)) : ''}</span><br><span class="note">${esc(perche(x.s))}</span></td><td><b>${nf(arr(x.e), 0)} €</b></td><td>${p100(x.e / M)}</td></tr>`).join('')
+    + (euro >= 5 ? `<tr><td class="l" style="white-space:normal"><b>In euro</b><br><span class="note">conto deposito o liquidità: la parte che Faber e la tendenza crypto oggi tengono fuori dal mercato</span></td><td><b>${nf(arr(euro), 0)} €</b></td><td>${p100(euro / M)}</td></tr>` : '');
+  const voci2 = (D.diario_rete && D.diario_rete.voci) || [], prima = voci2.length ? voci2[voci2.length - 1].scelte : null;
+  const ora = Object.keys(re), entra = prima ? ora.filter(s => !prima.includes(s)) : [], esce = prima ? prima.filter(s => !ora.includes(s)) : [];
+  const cambio = entra.length || esce.length ? `Rispetto alla settimana prima la rete ${entra.length ? 'aggiunge <b>' + entra.map(tk).join(', ') + '</b>' : ''}${entra.length && esce.length ? ' e ' : ''}${esce.length ? 'toglie <b>' + esce.map(tk).join(', ') + '</b>' : ''}.` : 'Le scelte della rete sono le stesse della settimana prima.';
+  return `<div class="card" id="piano-mese" style="margin-top:12px"><h2>Dove mettere ${nf(M, 0)} € al mese</h2>
+    <p class="sub" style="margin-top:4px">Il piano dell'app in euro, da comprare ogni mese (un PAC). Piano del ${esc(dt(P.giorno))}: cambia da solo quando cambiano i dati (le scelte della rete ogni lunedì, Faber a fine mese, la tendenza crypto ogni giorno). La rete pesa il ${nf(100 * pr, 0)} %${ctl && ctl.stato ? ' (' + esc(ctl.stato) + ')' : ''}.</p>
+    <p style="margin-top:8px"><label class="f" style="display:inline-flex;gap:6px;align-items:center">Ogni mese <input id="mese-euro" type="number" min="50" step="50" value="${M}" inputmode="numeric" style="width:6em"> €</label></p>
+    <div class="scroll" style="margin-top:8px"><table><thead><tr><th class="l">ETF</th><th>Ogni mese</th><th>Quota</th></tr></thead><tbody>${righe}</tbody></table></div>
+    <p class="note" style="margin-top:8px">${cambio} I pezzi sotto 30 € al mese sono sommati a SWDA, perché su cifre così piccole le commissioni pesano troppo. ${V ? `Nella verifica sugli anni mai visti questo piano ha reso ${pc(V.annuo, 1)} l'anno, con un calo massimo del ${pc(-V.calo_massimo, 0, false)}: ` : ''}il passato non garantisce il futuro: ci sono anni in perdita. Le tasse (26 %) si pagano solo quando vendi. Non è consulenza finanziaria.</p></div>`;
+}
 function renderOggi() {
   const v = $('#v-oggi'), all = oggiItems(), ref = D.mercati[CAT[0][0]];
   const filtered = all.filter(x => (oggiSt.cat === 'tutti' || x.m === oggiSt.cat) && (!oggiSt.cedola || (x.c.rendimento || 0) > 0));
@@ -1454,6 +1487,8 @@ function renderOggi() {
   v.innerHTML = `
   <div><h1>Consigli di oggi</h1>
     <p class="sub" style="margin-top:4px">${D.aggiornato ? `Aggiornato ${dt(D.aggiornato.slice(0, 10))} alle ${D.aggiornato.slice(11, 16)} (ora italiana), con i prezzi di chiusura di ${dtl(ref.asof)}.` : `Prezzi di chiusura di ${dtl(ref.asof)}.`} ${all.length} occasioni tra ETF, obbligazioni, oro e azioni, <b>dalla più probabile</b>, con quando comprare, quanto tenere e quando vendere, e il perché.</p></div>
+  ${pianoMeseHTML()}
+  <details class="card" style="margin-top:12px"><summary><b>Approfondimenti</b>: il pacchetto di oggi, scegli tu strumento per strumento, le reti neurali e le strategie dei libri</summary>
   ${pacchettoHTML()}
   <h2 style="margin-top:6px">Oppure scegli tu, strumento per strumento</h2>
   <ol class="steps">
@@ -1495,9 +1530,11 @@ function renderOggi() {
   ${sezioneReteHTML('etf')}
   ${sezioneReteHTML('obbligazioni')}
   ${strategieLibriHTML()}
+  </details>
   <div class="alert" role="note"><div class="ic">!</div><p><b>Probabilità, non certezze.</b> Sono frequenze del passato (prezzi corretti per dividendi e split, tasse escluse). Anche con il ${all.length ? p100(all[0].p) : '70 %'} di probabilità, quasi 3 operazioni su 10 finiscono in perdita: dividi il capitale su più strumenti e prova prima con un conto simulato. Non è consulenza finanziaria.</p></div>`;
   v.querySelectorAll('.filters .chipb').forEach(b => b.addEventListener('click', () => { oggiSt.cat = b.dataset.c; renderOggi(); }));
   $('#o-ced').addEventListener('change', e => { oggiSt.cedola = e.target.checked; renderOggi(); });
+  const me = $('#mese-euro'); if (me) me.addEventListener('change', () => { const x = Number(me.value); if (x >= 50) { MESE_EURO = x; try { localStorage.setItem('mese-euro', String(x)); } catch (e) {} renderOggi(); } });
   $('#o-tutti')?.addEventListener('click', () => { oggiSt.tutti = true; renderOggi(); });
   pacchettoEventi();
 }
@@ -2212,6 +2249,9 @@ function verifica25HTML() {
 function renderAltro() {
   $('#v-altro').innerHTML = `<div><h1>Altro</h1><p class="sub" style="margin-top:4px">Gli strumenti per chi vuole andare più a fondo.</p></div>
   <div class="links">
+    <a class="card lk" href="#piano"><b>Il piano</b><span>Lo studio completo: il portafoglio con la rete, costi e tasse, dove puoi arrivare, il diario della rete dal vivo, gli avvisi sul telefono e quelli sui prezzi.</span></a>
+    <a class="card lk" href="#crypto"><b>Crypto</b><span>Le crypto principali, la tendenza come i fondi, le reti neurali e il carry.</span></a>
+    <a class="card lk" href="#simula"><b>Cerca un titolo</b><span>Un'azione, un ETF o un'obbligazione dal nome o dal codice ISIN: probabilità, rischio e simulazione.</span></a>
     <a class="card lk" href="#demo"><b>Esercitati</b><span>Il tuo conto finto: compri e vendi tu, a mano, con i prezzi veri, e vedi come va.</span></a>
     <a class="card lk" href="#prove"><b>Le prove di prima</b><span>Le regole e i piani provati e messi da parte: la regola della notte, il gioco per rigiocare una giornata, le regole in giornata su 25 anni, gli ordini crypto di ogni ora.</span></a>
     <a class="card lk" href="#consigli"><b>Azioni: scegli tu la regola</b><span>Le azioni USA e italiane, con durata e protezione a tua scelta, quante azioni comprare, grafici e simulazione.</span></a>
@@ -2645,12 +2685,7 @@ let ROBOT_CAPITALE = 10000;                                                     
 const ROBOT_PIANI = 36, ROBOT_COSTO_CRYPTO = 0.002, TOBIN = 0.001;
 // Azioni: solo durante la seduta del loro mercato, mai di notte. Crypto: 24 ore su 24 (esercitazione: le verifiche corrette perdono).
 const STRATEGIE = {
-  giornata: {nome: 'Azioni in seduta (Oops!)', breve: 'Azioni', stato: 'esercitazione', chip: 'bassa'},
-  tendenza: {nome: 'Crypto, tendenza come i fondi', breve: 'Tendenza crypto', stato: 'esercitazione', chip: 'media'},
-  faber: {nome: 'ETF, media di 10 mesi (Faber)', breve: 'ETF Faber', stato: 'esercitazione', chip: 'media'},
   piano: {nome: 'Il piano con la rete (portafoglio)', breve: 'Piano', stato: 'esercitazione', chip: 'alta'},
-  rete_etf: {nome: 'ETF, rete neurale', breve: 'Rete ETF', stato: 'esercitazione', chip: 'media'},
-  rete_obbl: {nome: 'Obbligazioni, rete neurale', breve: 'Rete obbligazioni', stato: 'esercitazione', chip: 'media'},
   segnali: {nome: 'Crypto, ordini sui segnali', breve: 'Segnali crypto', stato: 'esercitazione', chip: 'bassa'},
   rete: {nome: 'Crypto, rete neurale', breve: 'Rete crypto', stato: 'esercitazione', chip: 'bassa'},
   rete_ita: {nome: 'Azioni italiane, rete neurale', breve: 'Rete Italia', stato: 'esercitazione', chip: 'bassa'},
@@ -2694,7 +2729,9 @@ function oraItaliana(mer, k, d) {
   return new Date(istanteMercato(giorno, mer, k)).toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome'});
 }
 // le strategie ritirate (azioni di notte, crypto ogni ora) si tolgono dal robot, con le loro operazioni
-const RITIRATE = ['usa_notte', 'ita_notte', 'crypto'];
+// tolti il 26 novembre 2026 (app più semplice): facevano poche o nessuna operazione, e il piano contiene già Faber,
+// la tendenza crypto e le scelte della rete su ETF e obbligazioni
+const RITIRATE = ['usa_notte', 'ita_notte', 'crypto', 'giornata', 'tendenza', 'faber', 'rete_etf', 'rete_obbl'];
 function togliRitirate(v) {
   for (const k of RITIRATE) delete v.conti[k];
   v.registro = (v.registro || []).filter(e => !RITIRATE.includes(e.s));
@@ -2706,18 +2743,10 @@ function senzaRitirate(R) { for (const k of Object.keys(STRATEGIE)) if (STRATEGI
 
 // i conti che ribilanciano verso dei pesi (la tendenza delle crypto ogni giorno, Faber sugli ETF ogni mese)
 const PORTAFOGLI = {
-  tendenza: {dati: () => D.crypto_tendenza && D.crypto_tendenza.oggi, costo: ROBOT_COSTO_CRYPTO, fonte: 'chiusura del giorno',
-    giu: 'tendenza girata: momento a 1, 3 e 12 mesi non più positivo', meno: 'peso ridotto: volatilità salita o tendenza più debole', su: w => `tendenza positiva, peso ${p100(w)} del conto (dalla volatilità)`},
   // il portafoglio del piano: 50 % SWDA, 20 % le scelte settimanali della rete sugli ETF, 10 % Faber, 10 % obbligazioni in
   // euro, 10 % crypto in tendenza (portafoglio.py: il migliore guadagno per unità di rischio, sugli anni mai visti)
   piano: {dati: () => pesiPiano(), costo: 0.001, fonte: 'piano, ogni lunedì',
     giu: 'uscito dal piano di questa settimana', meno: 'peso ricalcolato a inizio settimana', su: w => `nel piano di questa settimana, peso ${p100(w)}`},
-  rete_etf: {dati: () => D.rete_lungo && D.rete_lungo.robot_sezioni && D.rete_lungo.robot_sezioni.etf, costo: 0.001, fonte: 'rete neurale, ogni lunedì',
-    giu: 'uscito dai 3 migliori della settimana per la rete neurale', meno: 'peso ricalcolato a inizio settimana', su: w => `tra i 3 ETF più probabili in guadagno a una settimana per la rete, peso ${p100(w)}`},
-  rete_obbl: {dati: () => D.rete_lungo && D.rete_lungo.robot_sezioni && D.rete_lungo.robot_sezioni.obbligazioni, costo: 0.001, fonte: 'rete neurale, ogni lunedì',
-    giu: 'uscita dalle 4 migliori della settimana per la rete neurale', meno: 'peso ricalcolato a inizio settimana', su: w => `tra le 4 obbligazioni più probabili in guadagno a una settimana per la rete, peso ${p100(w)}`},
-  faber: {dati: () => D.strategie_lungo && D.strategie_lungo.mercati && D.strategie_lungo.mercati.etf && D.strategie_lungo.mercati.etf.oggi && D.strategie_lungo.mercati.etf.oggi.faber, costo: 0.001, fonte: 'fine del mese',
-    giu: 'sotto la media di 10 mesi (regola di Faber)', meno: 'peso ricalcolato a fine mese', su: w => `sopra la media di 10 mesi (Faber), peso ${p100(w)} del conto`},
 };
 function pesiPiano() {
   const L = D.rete_lungo, SL = D.strategie_lungo, T = D.crypto_tendenza;
@@ -2897,7 +2926,7 @@ function robotNotte(R, k) {
 
 /* in seduta (Oops!): se apre sotto il minimo di ieri, compra quando risale lì e vende in chiusura; mai di notte */
 function robotGiornata(R, adesso) {
-  const G = R.conti.giornata; if (!G.attiva && !Object.keys(G.posizioni).length) return false;
+  const G = R.conti.giornata; if (!G || (!G.attiva && !Object.keys(G.posizioni).length)) return false;
   const C = candeleGiornata(), n = Math.max(1, Object.keys(C).length);
   let cambiato = false;
   const compra = (s, d, livello, t, fonte, circa, nota) => {
@@ -3045,7 +3074,7 @@ function posizioniAperte(R) {
     const A = R.conti[k].aperta, mer = STRATEGIE[k].mercato;
     if (A && A.stato === 'in mano') A.titoli.forEach((s, j) => out.push({k, sym: s, entrata: A.prezzi[j], ora: prezzoOra(s, A.prezzi[j]), quando: istanteMercato(A.data, mer, 'chiude'), esce: `alla prossima apertura (${oraItaliana(mer, 'apre')}), strategia ritirata`, cur: mer === 'usa' ? '$' : '€'}));
   }
-  for (const p of Object.values(R.conti.giornata.posizioni)) out.push({k: 'giornata', sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `in chiusura (${oraItaliana(mercatoDi(p.sym), 'chiude', p.d)})`, cur: mercatoDi(p.sym) === 'usa' ? '$' : '€', costo: R.costo});
+  for (const p of Object.values((R.conti.giornata || {posizioni: {}}).posizioni)) out.push({k: 'giornata', sym: p.sym, entrata: p.entrata, ora: prezzoOra(p.sym, p.entrata), quando: p.t, esce: `in chiusura (${oraItaliana(mercatoDi(p.sym), 'chiude', p.d)})`, cur: mercatoDi(p.sym) === 'usa' ? '$' : '€', costo: R.costo});
   for (const r of Object.values((R.conti.crypto || {piani: {}}).piani)) if (r.fase === 'dentro') {
     const fino = new Date(isoN(r.scade || r.fino)).toLocaleString('it-IT', {weekday: 'short', hour: '2-digit', minute: '2-digit'});
     out.push({k: 'crypto', sym: r.sym, entrata: r.prezzo_entrata, ora: prezzoOra(r.sym, r.prezzo_entrata), quando: r.quando,
@@ -3059,8 +3088,8 @@ function simboliRobot() {
   if (C.crypto) for (const r of Object.values(C.crypto.piani)) if ((C.crypto.attiva && r.fase === 'attesa') || r.fase === 'dentro') out.add(r.sym);
   if (C.crypto && C.crypto.attiva) Object.keys((D.intraday && D.intraday.ore && D.intraday.ore.crypto) || {}).forEach(s => out.add(s));
   for (const k of ['usa_notte', 'ita_notte']) if (C[k] && C[k].aperta) C[k].aperta.titoli.forEach(s => out.add(s));
-  if (C.giornata.attiva) Object.keys((D.giornata && D.giornata.candele) || {}).forEach(s => out.add(s));
-  Object.values(C.giornata.posizioni).forEach(p => out.add(p.sym));
+  if (C.giornata && C.giornata.attiva) Object.keys((D.giornata && D.giornata.candele) || {}).forEach(s => out.add(s));
+  if (C.giornata) Object.values(C.giornata.posizioni).forEach(p => out.add(p.sym));
   for (const k of Object.keys(RETI)) if (C[k]) Object.values(C[k].posizioni).forEach(p => out.add(p.sym));
   return [...out];
 }
@@ -3196,7 +3225,7 @@ function daChiedere(R, adesso) {                                                
     if (!finestra(mer, p)) continue;
     if (A && A.stato === 'in mano' && A.data < p.d) A.titoli.forEach(s => { if (manca(s, p.d, 0)) out.add(s); });   // l'apertura per chiudere
   }
-  if (C.giornata.attiva || Object.keys(C.giornata.posizioni).length) for (const s of Object.keys(G)) {
+  if (C.giornata && (C.giornata.attiva || Object.keys(C.giornata.posizioni).length)) for (const s of Object.keys(G)) {
     const mer = mercatoDi(s), p = partiIn(adesso, MERCATI_ORE[mer].tz), x = G[s][p.d];
     if (!finestra(mer, p)) continue;
     const chiuso = p.hm > MERCATI_ORE[mer].chiude;
